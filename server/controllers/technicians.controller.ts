@@ -18,8 +18,10 @@ export class TechniciansController {
     let technicians;
 
     if (user.role === "supervisor") {
-      // Get only assigned technicians for supervisor
-      technicians = await storage.getSupervisorTechnicians(user.id);
+      // Get only assigned technicians for supervisor (resolve IDs to user objects)
+      const techIds = await storage.getSupervisorTechnicians(user.id);
+      const techs = await Promise.all(techIds.map(id => storage.getUser(id)));
+      technicians = techs.filter((t): t is any => !!t);
     } else {
       // Admin gets all
       const users = await storage.getUsers();
@@ -35,8 +37,9 @@ export class TechniciansController {
    */
   getSupervisorTechnicians = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
-    const technicians = await storage.getSupervisorTechnicians(user.id);
-    res.json(technicians);
+    const techIds = await storage.getSupervisorTechnicians(user.id);
+    const techs = await Promise.all(techIds.map(id => storage.getUser(id)));
+    res.json(techs.filter((t): t is any => !!t));
   });
 
   /**
@@ -180,6 +183,189 @@ export class TechniciansController {
     });
 
     res.json(result);
+  });
+
+  /**
+   * POST /api/technicians/:technicianId/withdraw-to-warehouse
+   * Withdraw stock from technician moving inventory back to warehouse
+   */
+  withdrawToWarehouse = asyncHandler(async (req: Request, res: Response) => {
+    const actor = req.user!;
+    const { technicianId } = req.params;
+
+    const schema = z.object({
+      warehouseId: z.string().min(1),
+      notes: z.string().optional(),
+      items: z.array(z.object({
+        itemTypeId: z.string().min(1),
+        packagingType: z.enum(["box", "unit"]),
+        quantity: z.number().int().positive(),
+      })).min(1),
+    });
+
+    const data = schema.parse(req.body);
+
+    const technician = await storage.getUser(technicianId);
+    if (!technician || technician.role !== "technician") {
+      throw new NotFoundError("Technician not found");
+    }
+
+    const warehouse = await storage.getWarehouse(data.warehouseId);
+    if (!warehouse) {
+      throw new NotFoundError("Warehouse not found");
+    }
+
+    if (actor.role === "supervisor") {
+      if (!actor.regionId) {
+        return res.status(400).json({ message: "المشرف يجب أن يكون مرتبط بمنطقة" });
+      }
+
+      if (technician.regionId !== actor.regionId) {
+        return res.status(403).json({ message: "لا يمكنك السحب من فني خارج منطقتك" });
+      }
+
+      if (warehouse.regionId !== actor.regionId) {
+        return res.status(403).json({ message: "لا يمكنك السحب إلى مستودع خارج منطقتك" });
+      }
+    }
+
+    const movingEntries = await storage.getTechnicianMovingInventoryEntries(technicianId);
+    const warehouseEntries = await storage.getWarehouseInventoryEntries(data.warehouseId);
+    const legacyTechnicianInventory = await storage.getTechnicianInventory(technicianId);
+    const legacyWarehouseInventory = await storage.getWarehouseInventory(data.warehouseId);
+
+    const movingMap = new Map(movingEntries.map((entry) => [entry.itemTypeId, entry]));
+    const warehouseMap = new Map(warehouseEntries.map((entry) => [entry.itemTypeId, entry]));
+
+    const legacyFieldMapping: Record<string, { boxes: string; units: string }> = {
+      n950: { boxes: "n950Boxes", units: "n950Units" },
+      i9000s: { boxes: "i9000sBoxes", units: "i9000sUnits" },
+      i9100: { boxes: "i9100Boxes", units: "i9100Units" },
+      rollPaper: { boxes: "rollPaperBoxes", units: "rollPaperUnits" },
+      stickers: { boxes: "stickersBoxes", units: "stickersUnits" },
+      newBatteries: { boxes: "newBatteriesBoxes", units: "newBatteriesUnits" },
+      mobilySim: { boxes: "mobilySimBoxes", units: "mobilySimUnits" },
+      stcSim: { boxes: "stcSimBoxes", units: "stcSimUnits" },
+      zainSim: { boxes: "zainSimBoxes", units: "zainSimUnits" },
+      lebaraSim: { boxes: "lebaraBoxes", units: "lebaraUnits" },
+      lebara: { boxes: "lebaraBoxes", units: "lebaraUnits" },
+    };
+
+    const aggregated = new Map<string, { itemTypeId: string; packagingType: "box" | "unit"; quantity: number }>();
+    for (const item of data.items) {
+      const key = `${item.itemTypeId}:${item.packagingType}`;
+      const existing = aggregated.get(key);
+      if (existing) {
+        existing.quantity += item.quantity;
+      } else {
+        aggregated.set(key, { ...item });
+      }
+    }
+
+    const touched = new Map<string, { technicianBoxes: number; technicianUnits: number; warehouseBoxes: number; warehouseUnits: number }>();
+    const technicianLegacyUpdates: Record<string, number> = {};
+    const warehouseLegacyUpdates: Record<string, number> = {};
+
+    for (const item of Array.from(aggregated.values())) {
+      const { itemTypeId, packagingType, quantity } = item;
+      const legacyFields = legacyFieldMapping[itemTypeId];
+
+      const currentTechnician = touched.get(itemTypeId) || {
+        technicianBoxes: movingMap.get(itemTypeId)?.boxes ?? (legacyFields && legacyTechnicianInventory ? ((legacyTechnicianInventory as any)[legacyFields.boxes] || 0) : 0),
+        technicianUnits: movingMap.get(itemTypeId)?.units ?? (legacyFields && legacyTechnicianInventory ? ((legacyTechnicianInventory as any)[legacyFields.units] || 0) : 0),
+        warehouseBoxes: warehouseMap.get(itemTypeId)?.boxes ?? (legacyFields && legacyWarehouseInventory ? ((legacyWarehouseInventory as any)[legacyFields.boxes] || 0) : 0),
+        warehouseUnits: warehouseMap.get(itemTypeId)?.units ?? (legacyFields && legacyWarehouseInventory ? ((legacyWarehouseInventory as any)[legacyFields.units] || 0) : 0),
+      };
+
+      if (packagingType === "box") {
+        if (currentTechnician.technicianBoxes < quantity) {
+          return res.status(400).json({
+            message: `الكمية غير كافية للصنف ${itemTypeId}. المتاح: ${currentTechnician.technicianBoxes} كرتون`,
+          });
+        }
+        currentTechnician.technicianBoxes -= quantity;
+        currentTechnician.warehouseBoxes += quantity;
+      } else {
+        if (currentTechnician.technicianUnits < quantity) {
+          return res.status(400).json({
+            message: `الكمية غير كافية للصنف ${itemTypeId}. المتاح: ${currentTechnician.technicianUnits} وحدة`,
+          });
+        }
+        currentTechnician.technicianUnits -= quantity;
+        currentTechnician.warehouseUnits += quantity;
+      }
+
+      touched.set(itemTypeId, currentTechnician);
+
+      if (legacyFields && legacyTechnicianInventory && legacyWarehouseInventory) {
+        if (packagingType === "box") {
+          const currentTechLegacy = Number((legacyTechnicianInventory as any)[legacyFields.boxes] || 0);
+          const currentWarehouseLegacy = Number((legacyWarehouseInventory as any)[legacyFields.boxes] || 0);
+          technicianLegacyUpdates[legacyFields.boxes] = Math.max(0, currentTechLegacy - quantity);
+          warehouseLegacyUpdates[legacyFields.boxes] = currentWarehouseLegacy + quantity;
+        } else {
+          const currentTechLegacy = Number((legacyTechnicianInventory as any)[legacyFields.units] || 0);
+          const currentWarehouseLegacy = Number((legacyWarehouseInventory as any)[legacyFields.units] || 0);
+          technicianLegacyUpdates[legacyFields.units] = Math.max(0, currentTechLegacy - quantity);
+          warehouseLegacyUpdates[legacyFields.units] = currentWarehouseLegacy + quantity;
+        }
+      }
+    }
+
+    for (const [itemTypeId, values] of Array.from(touched.entries())) {
+      await storage.upsertTechnicianMovingInventoryEntry(
+        technicianId,
+        itemTypeId,
+        values.technicianBoxes,
+        values.technicianUnits
+      );
+
+      await storage.upsertWarehouseInventoryEntry(
+        data.warehouseId,
+        itemTypeId,
+        values.warehouseBoxes,
+        values.warehouseUnits
+      );
+    }
+
+    if (legacyTechnicianInventory && Object.keys(technicianLegacyUpdates).length > 0) {
+      await storage.updateTechnicianInventory(technicianId, technicianLegacyUpdates as any);
+    }
+
+    if (legacyWarehouseInventory && Object.keys(warehouseLegacyUpdates).length > 0) {
+      await storage.updateWarehouseInventory(data.warehouseId, warehouseLegacyUpdates as any);
+    }
+
+    const totalQuantity = Array.from(aggregated.values()).reduce((sum, item) => sum + item.quantity, 0);
+
+    await storage.logSystemActivity({
+      userId: actor.id,
+      userName: actor.username,
+      userRole: actor.role,
+      regionId: actor.regionId || null,
+      action: "transfer",
+      entityType: "warehouse",
+      entityId: data.warehouseId,
+      entityName: warehouse.name,
+      description: `تم سحب ${totalQuantity} من مخزون الفني ${technician.fullName} إلى المستودع ${warehouse.name}`,
+      details: JSON.stringify({
+        technicianId,
+        technicianName: technician.fullName,
+        warehouseId: data.warehouseId,
+        warehouseName: warehouse.name,
+        items: Array.from(aggregated.values()),
+        notes: data.notes || null,
+      }),
+      severity: "info",
+      success: true,
+    });
+
+    res.json({
+      success: true,
+      message: "تم سحب المخزون إلى المستودع بنجاح",
+      itemsCount: aggregated.size,
+      totalQuantity,
+    });
   });
 
   /**

@@ -1,0 +1,96 @@
+import type { Express } from "express";
+import { z } from "zod";
+import { storage } from "../storage";
+import { requireAuth } from "../middleware/auth";
+
+/**
+ * Technician Inventory Entries Routes - مدخلات مخزون الفنيين (< 100 lines)
+ * مجال المسؤولية: إدارة قيود المخزون الثابت والمتنقل للفنيين
+ */
+export function registerTechnicianInventoryEntriesRoutes(app: Express): void {
+
+  // عرض قيود المخزون الثابت للفني
+  app.get("/api/technicians/:technicianId/fixed-inventory-entries", requireAuth, async (req, res) => {
+    try {
+      const entries = await storage.getTechnicianFixedInventoryEntries(req.params.technicianId);
+      res.json(entries);
+    } catch (error) {
+      console.error("Error fetching technician fixed inventory entries:", error);
+      res.status(500).json({ message: "Failed to fetch inventory entries" });
+    }
+  });
+
+  // إنشاء أو تحديث قيد مخزون ثابت للفني
+  app.post("/api/technicians/:technicianId/fixed-inventory-entries", requireAuth, async (req, res) => {
+    try {
+      const schema = z.object({
+        itemTypeId: z.string(),
+        boxes: z.number().min(0),
+        units: z.number().min(0)
+      });
+      const data = schema.parse(req.body);
+      const entry = await storage.upsertTechnicianFixedInventoryEntry(
+        req.params.technicianId,
+        data.itemTypeId,
+        data.boxes,
+        data.units
+      );
+      res.json(entry);
+    } catch (error) {
+      console.error("Error upserting technician fixed inventory entry:", error);
+      res.status(500).json({ message: "Failed to update inventory entry" });
+    }
+  });
+
+  // عرض قيود المخزون المتنقل للفني
+  app.get("/api/technicians/:technicianId/moving-inventory-entries", requireAuth, async (req, res) => {
+    try {
+      const entries = await storage.getTechnicianMovingInventoryEntries(req.params.technicianId);
+      res.json(entries);
+    } catch (error) {
+      console.error("Error fetching technician moving inventory entries:", error);
+      res.status(500).json({ message: "Failed to fetch inventory entries" });
+    }
+  });
+
+  // إنشاء أو تحديث قيد مخزون متنقل للفني (يدعم التحديث المجمع)
+  app.post("/api/technicians/:technicianId/moving-inventory-entries", requireAuth, async (req, res) => {
+    try {
+      const { entries } = req.body;
+      
+      // Support both single entry and array of entries
+      if (entries && Array.isArray(entries)) {
+        // Batch update multiple entries
+        const results = [];
+        for (const entry of entries) {
+          const result = await storage.upsertTechnicianMovingInventoryEntry(
+            req.params.technicianId,
+            entry.itemTypeId,
+            entry.boxes || 0,
+            entry.units || 0
+          );
+          results.push(result);
+        }
+        res.json(results);
+      } else {
+        // Single entry (backward compatible)
+        const schema = z.object({
+          itemTypeId: z.string(),
+          boxes: z.number().min(0),
+          units: z.number().min(0)
+        });
+        const data = schema.parse(req.body);
+        const entry = await storage.upsertTechnicianMovingInventoryEntry(
+          req.params.technicianId,
+          data.itemTypeId,
+          data.boxes,
+          data.units
+        );
+        res.json(entry);
+      }
+    } catch (error) {
+      console.error("Error upserting technician moving inventory entry:", error);
+      res.status(500).json({ message: "Failed to update inventory entry" });
+    }
+  });
+}

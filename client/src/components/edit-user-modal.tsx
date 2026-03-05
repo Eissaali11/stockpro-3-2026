@@ -55,7 +55,7 @@ export function EditUserModal({
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const form = useForm<EditUserFormData>({
+  const form = useForm<EditUserFormData, any, EditUserFormData>({
     resolver: zodResolver(editUserFormSchema),
     defaultValues: {
       username: "",
@@ -64,7 +64,7 @@ export function EditUserModal({
       fullName: "",
       profileImage: "",
       city: "",
-      role: "employee",
+      role: "technician",
       isActive: true,
     },
   });
@@ -78,7 +78,7 @@ export function EditUserModal({
         fullName: user.fullName,
         profileImage: user.profileImage || "",
         city: user.city || "",
-        role: user.role,
+        role: user.role === "admin" || user.role === "supervisor" ? user.role : "technician",
         isActive: user.isActive,
       });
       setProfileImage(user.profileImage || null);
@@ -338,7 +338,7 @@ export function EditUserModal({
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="admin">👑 إدمن (Admin)</SelectItem>
-                        <SelectItem value="employee">👨‍💼 فني (Employee)</SelectItem>
+                        <SelectItem value="technician">👨‍💼 فني (Technician)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

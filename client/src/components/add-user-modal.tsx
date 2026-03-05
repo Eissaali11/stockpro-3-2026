@@ -51,7 +51,7 @@ export function AddUserModal({
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const form = useForm<UserFormData>({
+  const form = useForm<UserFormData, any, UserFormData>({
     resolver: zodResolver(userFormSchema),
     defaultValues: {
       username: "",
@@ -60,7 +60,7 @@ export function AddUserModal({
       fullName: "",
       profileImage: "",
       city: "",
-      role: "employee",
+      role: "technician",
       isActive: true,
     },
   });
@@ -320,7 +320,7 @@ export function AddUserModal({
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="admin">👑 إدمن (Admin)</SelectItem>
-                        <SelectItem value="employee">👨‍💼 فني (Employee)</SelectItem>
+                        <SelectItem value="technician">👨‍💼 فني (Technician)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

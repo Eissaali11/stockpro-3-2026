@@ -107,6 +107,13 @@ interface WarehouseData {
   isActive: boolean;
   regionId: string | null;
   inventory: WarehouseInventory | null;
+  technicians?: {
+    id: string;
+    fullName: string;
+    username?: string;
+    city?: string | null;
+    profileImage?: string | null;
+  }[];
 }
 
 interface WarehouseTransferRaw {
@@ -823,6 +830,22 @@ export default function WarehouseDetailsPage() {
                   <span className="text-2xl font-black">{totalInventory}</span>
                   <span>قطعة</span>
                 </div>
+
+                {/* Technicians list if provided by the API */}
+                {warehouse.technicians && warehouse.technicians.length > 0 && (
+                  <div className="mt-4 text-right">
+                    <h3 className="text-white font-semibold mb-2">الفنيون المرتبطون</h3>
+                    <div className="flex gap-2 flex-wrap justify-center lg:justify-start">
+                      {warehouse.technicians.map((t) => (
+                        <Link key={t.id} href={`/supervisor/users/${t.id}`}>
+                          <Badge className="cursor-pointer" data-testid={`badge-tech-${t.id}`}>
+                            {t.fullName}
+                          </Badge>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1161,6 +1184,7 @@ export default function WarehouseDetailsPage() {
         warehouseName={warehouse.name}
         currentInventory={warehouse.inventory}
         currentEntries={inventoryEntriesData || []}
+        warehouseTechnicians={warehouse.technicians}
       />
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

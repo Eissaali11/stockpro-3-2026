@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "shared/**/*.ts",
+    "server/database-storage.ts",
+    "server/database-storage-split/**/*.ts",
+    "server/infrastructure/database/**/*.ts",
+    "server/infrastructure/schemas/**/*.ts",
+    "server/infrastructure/repositories/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "build",
+    "dist",
+    "client/**",
+    "server/routes.ts",
+    "server/routes-legacy.ts",
+    "server/storage.ts",
+    "server/repositories/**",
+    "server/services/**",
+    "**/*.test.ts"
+  ]
+}

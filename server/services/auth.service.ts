@@ -70,7 +70,7 @@ export class AuthService {
       expiry,
     }, expiry);
 
-    logger.info("User logged in", { source: "auth", username: user.username });
+    logger.info(`User logged in: ${user.username}`, { source: "auth" });
 
     return {
       success: true,

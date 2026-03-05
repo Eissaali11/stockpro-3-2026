@@ -1,7 +1,3 @@
-/**
- * Technicians routes
- */
-
 import type { Express } from "express";
 import { techniciansController } from "../controllers/technicians.controller";
 import { requireAuth, requireSupervisor } from "../middleware/auth";
@@ -25,21 +21,10 @@ const inventoryEntrySchema = z.object({
   units: z.number().min(0),
 });
 
-export function registerTechniciansRoutes(app: Express): void {
-  // Get all technicians
-  app.get("/api/technicians", requireAuth, techniciansController.getAll);
-
-  // Get supervisor's technicians
-  app.get(
-    "/api/supervisor/technicians",
-    requireAuth,
-    requireSupervisor,
-    techniciansController.getSupervisorTechnicians
-  );
-
-  // Get single technician
-  app.get("/api/technicians/:id", requireAuth, techniciansController.getById);
-
+/**
+ * Technicians Inventory Routes - نقاط نهاية المخزون للفنيين (<100 سطر)
+ */
+export function registerTechniciansInventoryRoutes(app: Express): void {
   // Get my fixed inventory
   app.get(
     "/api/my-fixed-inventory",
@@ -90,6 +75,14 @@ export function registerTechniciansRoutes(app: Express): void {
     techniciansController.transferStock
   );
 
+  // Withdraw from technician moving inventory to warehouse
+  app.post(
+    "/api/technicians/:technicianId/withdraw-to-warehouse",
+    requireAuth,
+    requireSupervisor,
+    techniciansController.withdrawToWarehouse
+  );
+
   // Get technician's fixed inventory entries
   app.get(
     "/api/technicians/:technicianId/fixed-inventory-entries",
@@ -119,19 +112,5 @@ export function registerTechniciansRoutes(app: Express): void {
     techniciansController.upsertMovingInventoryEntry
   );
 
-  // Get all technicians with inventories (admin)
-  app.get(
-    "/api/admin/all-technicians-inventory",
-    requireAuth,
-    requireSupervisor,
-    techniciansController.getAllTechniciansInventory
-  );
-
-  // Get supervisor's technicians with inventories
-  app.get(
-    "/api/supervisor/technicians-inventory",
-    requireAuth,
-    requireSupervisor,
-    techniciansController.getSupervisorTechniciansInventory
-  );
+  // admin/supervisor endpoints moved to technicians-admin.routes.ts to keep this file small
 }

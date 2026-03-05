@@ -83,7 +83,11 @@ export default function WithdrawalModal({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === "string" &&
+          query.queryKey[0].startsWith("/api/transactions"),
+      });
       toast({
         title: "تم السحب بنجاح",
         description: "تم سحب الكمية المطلوبة من المخزون",

@@ -70,7 +70,11 @@ export default function AddStockModal({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === "string" &&
+          query.queryKey[0].startsWith("/api/transactions"),
+      });
       toast({
         title: "تم الإضافة بنجاح",
         description: "تم إضافة الكمية المطلوبة إلى المخزون",

@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -14,6 +14,9 @@ export const regions = pgTable("regions", {
 });
 
 // Item Types table for managing inventory item categories
+export const ITEM_TYPE_CATEGORIES = ["devices", "papers", "sim", "accessories"] as const;
+export const itemTypeCategorySchema = z.enum(ITEM_TYPE_CATEGORIES);
+
 export const itemTypes = pgTable("item_types", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   nameAr: text("name_ar").notNull(),
@@ -27,11 +30,22 @@ export const itemTypes = pgTable("item_types", {
   color: text("color"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => ({
+  uniqueNameArIdx: uniqueIndex("item_types_name_ar_unique").on(table.nameAr),
+  uniqueNameEnIdx: uniqueIndex("item_types_name_en_unique").on(table.nameEn),
+}));
 
-export const insertItemTypeSchema = createInsertSchema(itemTypes).omit({
+const baseInsertItemTypeSchema = createInsertSchema(itemTypes).omit({
   createdAt: true,
   updatedAt: true,
+});
+
+export const insertItemTypeSchema = baseInsertItemTypeSchema.extend({
+  nameAr: z.string().trim().min(1),
+  nameEn: z.string().trim().min(1),
+  category: itemTypeCategorySchema,
+  unitsPerBox: z.number().int().positive(),
+  sortOrder: z.number().int().nonnegative().optional(),
 });
 
 export type InsertItemType = z.infer<typeof insertItemTypeSchema>;
@@ -462,7 +476,7 @@ export const insertWithdrawnDeviceSchema = createInsertSchema(withdrawnDevices).
 });
 
 export const insertReceivedDeviceSchema = createInsertSchema(receivedDevices, {
-  technicianId: z.string().optional(),
+  technicianId: z.string(),
   supervisorId: z.string().nullable().optional(),
   regionId: z.string().nullable().optional(),
 }).omit({
@@ -672,6 +686,7 @@ export type StockMovementWithDetails = StockMovement & {
 export type WarehouseWithInventory = Warehouse & {
   inventory: WarehouseInventory | null;
   creatorName?: string;
+  technicians?: UserSafe[];
 };
 
 export type WarehouseWithStats = Warehouse & {

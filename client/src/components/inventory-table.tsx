@@ -80,7 +80,11 @@ export default function InventoryTable({ inventory, isLoading }: InventoryTableP
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === "string" &&
+          query.queryKey[0].startsWith("/api/transactions"),
+      });
       setShowDeleteDialog(false);
       setSelectedItem(null);
       toast({ title: "تم حذف الصنف بنجاح" });

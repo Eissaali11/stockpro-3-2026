@@ -679,21 +679,18 @@ export class MemStorage implements IStorage {
       id,
       technicianId: insertDevice.technicianId,
       supervisorId: insertDevice.supervisorId ?? null,
-      city: insertDevice.city,
-      technicianName: insertDevice.technicianName,
       terminalId: insertDevice.terminalId,
       serialNumber: insertDevice.serialNumber,
-      battery: insertDevice.battery,
-      chargerCable: insertDevice.chargerCable,
-      chargerHead: insertDevice.chargerHead,
-      hasSim: insertDevice.hasSim,
+      battery: insertDevice.battery ?? false,
+      chargerCable: insertDevice.chargerCable ?? false,
+      chargerHead: insertDevice.chargerHead ?? false,
+      hasSim: insertDevice.hasSim ?? false,
       simCardType: insertDevice.simCardType ?? null,
-      damagePart: insertDevice.damagePart ?? null,
-      notes: insertDevice.notes ?? null,
+      damagePart: insertDevice.damagePart ?? "",
       status: 'pending',
       adminNotes: null,
-      respondedBy: null,
-      respondedAt: null,
+      approvedBy: null,
+      approvedAt: null,
       regionId: insertDevice.regionId ?? null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -711,9 +708,9 @@ export class MemStorage implements IStorage {
     const updatedDevice: ReceivedDevice = {
       ...existingDevice,
       status,
-      respondedBy,
+      approvedBy: respondedBy,
       adminNotes: adminNotes ?? null,
-      respondedAt: new Date(),
+      approvedAt: new Date(),
       updatedAt: new Date(),
     };
     this.receivedDevices.set(id, updatedDevice);
@@ -724,11 +721,15 @@ export class MemStorage implements IStorage {
     return this.receivedDevices.delete(id);
   }
 
-  async getPendingReceivedDevicesCount(supervisorId?: string): Promise<number> {
+  async getPendingReceivedDevicesCount(supervisorId?: string, regionId?: string | null): Promise<number> {
     let devices = Array.from(this.receivedDevices.values()).filter(d => d.status === 'pending');
     
     if (supervisorId) {
       devices = devices.filter(d => d.supervisorId === supervisorId);
+    }
+
+    if (regionId) {
+      devices = devices.filter(d => d.regionId === regionId);
     }
     
     return devices.length;
@@ -763,6 +764,8 @@ export class MemStorage implements IStorage {
       stcSimUnits: insertInventory.stcSimUnits ?? 0,
       zainSimBoxes: insertInventory.zainSimBoxes ?? 0,
       zainSimUnits: insertInventory.zainSimUnits ?? 0,
+      lebaraBoxes: insertInventory.lebaraBoxes ?? 0,
+      lebaraUnits: insertInventory.lebaraUnits ?? 0,
       lowStockThreshold: insertInventory.lowStockThreshold ?? 30,
       criticalStockThreshold: insertInventory.criticalStockThreshold ?? 70,
       createdAt: new Date(),
@@ -1048,6 +1051,26 @@ export class MemStorage implements IStorage {
 
   async getSupervisorWarehouses(supervisorId: string): Promise<string[]> {
     return [];
+  }
+
+  async getTechnicianSupervisor(technicianId: string): Promise<string | null> {
+    return null;
+  }
+
+  async getSystemLogs(filters: {
+    limit?: number;
+    offset?: number;
+    userId?: string;
+    regionId?: string;
+    action?: string;
+    entityType?: string;
+    severity?: string;
+  }): Promise<SystemLog[]> {
+    return [];
+  }
+
+  async createSystemLog(log: InsertSystemLog): Promise<SystemLog> {
+    throw new Error("MemStorage does not support system log operations. Use DatabaseStorage instead.");
   }
 
   // Item Types Management

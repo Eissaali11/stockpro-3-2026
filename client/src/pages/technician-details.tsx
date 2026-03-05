@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { motion } from "framer-motion";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,6 +40,7 @@ import { exportTechnicianToExcel } from "@/lib/exportToExcel";
 import { useToast } from "@/hooks/use-toast";
 import { useActiveItemTypes, getItemTypeVisuals, buildInventoryDisplayItems, type InventoryEntry } from "@/hooks/use-item-types";
 import type { TechnicianFixedInventoryEntry, TechnicianMovingInventoryEntry } from "@shared/schema";
+import WithdrawFromTechnicianModal from "@/components/withdraw-from-technician-modal";
 
 interface TechnicianFixedInventory {
   id: string;
@@ -112,6 +113,7 @@ export default function TechnicianDetailsPage() {
   const [match, params] = useRoute("/technician-details/:id");
   const technicianId = params?.id;
   const { toast } = useToast();
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
 
   const { data: fixedInventory, isLoading: isLoadingFixed } = useQuery<TechnicianFixedInventory>({
     queryKey: [`/api/supervisor/users/${technicianId}/fixed-inventory`],
@@ -321,82 +323,94 @@ export default function TechnicianDetailsPage() {
             </div>
           </div>
           
-          <Button
-            onClick={async () => {
-              try {
-                // Use dynamic item types if available, otherwise fallback to legacy
-                await exportTechnicianToExcel({
-                  technicianName,
-                  city,
-                  // Pass dynamic item types
-                  itemTypes: itemTypes?.map(it => ({ id: it.id, nameAr: it.nameAr, nameEn: it.nameEn })),
-                  fixedEntries: fixedEntries?.map(e => ({ itemTypeId: e.itemTypeId, boxes: e.boxes, units: e.units })),
-                  movingEntries: movingEntries?.map(e => ({ itemTypeId: e.itemTypeId, boxes: e.boxes, units: e.units })),
-                  // Also pass legacy fields for backward compatibility
-                  fixedInventory: fixedInventory ? {
-                    n950Boxes: fixedInventory.n950Boxes,
-                    n950Units: fixedInventory.n950Units,
-                    i9000sBoxes: fixedInventory.i9000sBoxes,
-                    i9000sUnits: fixedInventory.i9000sUnits,
-                    i9100Boxes: fixedInventory.i9100Boxes,
-                    i9100Units: fixedInventory.i9100Units,
-                    rollPaperBoxes: fixedInventory.rollPaperBoxes,
-                    rollPaperUnits: fixedInventory.rollPaperUnits,
-                    stickersBoxes: fixedInventory.stickersBoxes,
-                    stickersUnits: fixedInventory.stickersUnits,
-                    newBatteriesBoxes: fixedInventory.newBatteriesBoxes,
-                    newBatteriesUnits: fixedInventory.newBatteriesUnits,
-                    mobilySimBoxes: fixedInventory.mobilySimBoxes,
-                    mobilySimUnits: fixedInventory.mobilySimUnits,
-                    stcSimBoxes: fixedInventory.stcSimBoxes,
-                    stcSimUnits: fixedInventory.stcSimUnits,
-                    zainSimBoxes: fixedInventory.zainSimBoxes,
-                    zainSimUnits: fixedInventory.zainSimUnits,
-                    lebaraBoxes: fixedInventory.lebaraBoxes,
-                    lebaraUnits: fixedInventory.lebaraUnits,
-                  } : undefined,
-                  movingInventory: movingInventory ? {
-                    n950Boxes: movingInventory.n950Boxes,
-                    n950Units: movingInventory.n950Units,
-                    i9000sBoxes: movingInventory.i9000sBoxes,
-                    i9000sUnits: movingInventory.i9000sUnits,
-                    i9100Boxes: movingInventory.i9100Boxes,
-                    i9100Units: movingInventory.i9100Units,
-                    rollPaperBoxes: movingInventory.rollPaperBoxes,
-                    rollPaperUnits: movingInventory.rollPaperUnits,
-                    stickersBoxes: movingInventory.stickersBoxes,
-                    stickersUnits: movingInventory.stickersUnits,
-                    newBatteriesBoxes: movingInventory.newBatteriesBoxes,
-                    newBatteriesUnits: movingInventory.newBatteriesUnits,
-                    mobilySimBoxes: movingInventory.mobilySimBoxes,
-                    mobilySimUnits: movingInventory.mobilySimUnits,
-                    stcSimBoxes: movingInventory.stcSimBoxes,
-                    stcSimUnits: movingInventory.stcSimUnits,
-                    zainSimBoxes: movingInventory.zainSimBoxes,
-                    zainSimUnits: movingInventory.zainSimUnits,
-                    lebaraBoxes: movingInventory.lebaraBoxes,
-                    lebaraUnits: movingInventory.lebaraUnits,
-                  } : undefined
-                });
-                toast({
-                  title: "تم التصدير بنجاح",
-                  description: "تم تصدير بيانات الفني إلى ملف Excel",
-                });
-              } catch (error) {
-                toast({
-                  title: "فشل التصدير",
-                  description: "حدث خطأ أثناء تصدير البيانات",
-                  variant: "destructive",
-                });
-              }
-            }}
-            disabled={!fixedInventory || !movingInventory}
-            className="bg-gradient-to-r from-[#18B2B0] to-teal-600 hover:from-[#16a09e] hover:to-teal-700 text-white shadow-lg"
-            data-testid="button-export"
-          >
-            <Download className="ml-2 h-4 w-4" />
-            تصدير Excel
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              onClick={() => setShowWithdrawModal(true)}
+              disabled={!technicianId}
+              className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white shadow-lg"
+              data-testid="button-withdraw-to-warehouse"
+            >
+              <ArrowLeft className="ml-2 h-4 w-4" />
+              سحب من الفني إلى المستودع
+            </Button>
+
+            <Button
+              onClick={async () => {
+                try {
+                  // Use dynamic item types if available, otherwise fallback to legacy
+                  await exportTechnicianToExcel({
+                    technicianName,
+                    city,
+                    // Pass dynamic item types
+                    itemTypes: itemTypes?.map(it => ({ id: it.id, nameAr: it.nameAr, nameEn: it.nameEn })),
+                    fixedEntries: fixedEntries?.map(e => ({ itemTypeId: e.itemTypeId, boxes: e.boxes, units: e.units })),
+                    movingEntries: movingEntries?.map(e => ({ itemTypeId: e.itemTypeId, boxes: e.boxes, units: e.units })),
+                    // Also pass legacy fields for backward compatibility
+                    fixedInventory: fixedInventory ? {
+                      n950Boxes: fixedInventory.n950Boxes,
+                      n950Units: fixedInventory.n950Units,
+                      i9000sBoxes: fixedInventory.i9000sBoxes,
+                      i9000sUnits: fixedInventory.i9000sUnits,
+                      i9100Boxes: fixedInventory.i9100Boxes,
+                      i9100Units: fixedInventory.i9100Units,
+                      rollPaperBoxes: fixedInventory.rollPaperBoxes,
+                      rollPaperUnits: fixedInventory.rollPaperUnits,
+                      stickersBoxes: fixedInventory.stickersBoxes,
+                      stickersUnits: fixedInventory.stickersUnits,
+                      newBatteriesBoxes: fixedInventory.newBatteriesBoxes,
+                      newBatteriesUnits: fixedInventory.newBatteriesUnits,
+                      mobilySimBoxes: fixedInventory.mobilySimBoxes,
+                      mobilySimUnits: fixedInventory.mobilySimUnits,
+                      stcSimBoxes: fixedInventory.stcSimBoxes,
+                      stcSimUnits: fixedInventory.stcSimUnits,
+                      zainSimBoxes: fixedInventory.zainSimBoxes,
+                      zainSimUnits: fixedInventory.zainSimUnits,
+                      lebaraBoxes: fixedInventory.lebaraBoxes,
+                      lebaraUnits: fixedInventory.lebaraUnits,
+                    } : undefined,
+                    movingInventory: movingInventory ? {
+                      n950Boxes: movingInventory.n950Boxes,
+                      n950Units: movingInventory.n950Units,
+                      i9000sBoxes: movingInventory.i9000sBoxes,
+                      i9000sUnits: movingInventory.i9000sUnits,
+                      i9100Boxes: movingInventory.i9100Boxes,
+                      i9100Units: movingInventory.i9100Units,
+                      rollPaperBoxes: movingInventory.rollPaperBoxes,
+                      rollPaperUnits: movingInventory.rollPaperUnits,
+                      stickersBoxes: movingInventory.stickersBoxes,
+                      stickersUnits: movingInventory.stickersUnits,
+                      newBatteriesBoxes: movingInventory.newBatteriesBoxes,
+                      newBatteriesUnits: movingInventory.newBatteriesUnits,
+                      mobilySimBoxes: movingInventory.mobilySimBoxes,
+                      mobilySimUnits: movingInventory.mobilySimUnits,
+                      stcSimBoxes: movingInventory.stcSimBoxes,
+                      stcSimUnits: movingInventory.stcSimUnits,
+                      zainSimBoxes: movingInventory.zainSimBoxes,
+                      zainSimUnits: movingInventory.zainSimUnits,
+                      lebaraBoxes: movingInventory.lebaraBoxes,
+                      lebaraUnits: movingInventory.lebaraUnits,
+                    } : undefined
+                  });
+                  toast({
+                    title: "تم التصدير بنجاح",
+                    description: "تم تصدير بيانات الفني إلى ملف Excel",
+                  });
+                } catch (error) {
+                  toast({
+                    title: "فشل التصدير",
+                    description: "حدث خطأ أثناء تصدير البيانات",
+                    variant: "destructive",
+                  });
+                }
+              }}
+              disabled={!fixedInventory || !movingInventory}
+              className="bg-gradient-to-r from-[#18B2B0] to-teal-600 hover:from-[#16a09e] hover:to-teal-700 text-white shadow-lg"
+              data-testid="button-export"
+            >
+              <Download className="ml-2 h-4 w-4" />
+              تصدير Excel
+            </Button>
+          </div>
         </motion.div>
 
         {/* Stats Cards */}
@@ -838,6 +852,15 @@ export default function TechnicianDetailsPage() {
           </Card>
         </motion.div>
       </div>
+
+      {technicianId && (
+        <WithdrawFromTechnicianModal
+          open={showWithdrawModal}
+          onOpenChange={setShowWithdrawModal}
+          technicianId={technicianId}
+          technicianName={technicianName}
+        />
+      )}
     </div>
   );
 }

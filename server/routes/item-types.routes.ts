@@ -46,7 +46,7 @@ export function registerItemTypesRoutes(app: Express): void {
   app.get("/api/item-types", requireAuth, itemTypesController.getAll);
 
   // Get active item types only
-  app.get("/api/item-types/active", itemTypesController.getActive);
+  app.get("/api/item-types/active", requireAuth, itemTypesController.getActive);
 
   // Get single item type
   app.get("/api/item-types/:id", requireAuth, itemTypesController.getById);

@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import { InventoryItemWithStatus } from '@shared/schema';
+import { InventoryItemWithStatus, SystemLog } from '@shared/schema';
 import { legacyFieldMapping } from '@/hooks/use-item-types';
 
 interface ExportData {
@@ -47,6 +47,12 @@ interface WarehouseData {
 interface WarehouseExportData {
   warehouses: WarehouseData[];
   itemTypes?: ItemType[];
+  companyName?: string;
+  reportTitle?: string;
+}
+
+interface SystemLogsExportData {
+  logs: SystemLog[];
   companyName?: string;
   reportTitle?: string;
 }
@@ -1500,3 +1506,93 @@ export const exportSingleWarehouseToExcel = async (data: SingleWarehouseExportDa
   const fileName = `تقرير_مخزون_${data.warehouse.name}_${new Date().toISOString().split('T')[0]}.xlsx`;
   saveAs(blob, fileName);
 };
+
+  export const exportSystemLogsToExcel = async ({
+    logs,
+    companyName = 'نظام إدارة المخزون',
+    reportTitle = 'تقرير سجل عمليات النظام'
+  }: SystemLogsExportData) => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('سجل النظام');
+
+    worksheet.views = [{ rightToLeft: true }];
+
+    const currentDate = new Date().toLocaleDateString('ar-SA', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    worksheet.mergeCells('A1:I1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = companyName;
+    titleCell.font = { size: 18, bold: true, color: { argb: 'FF18B2B0' } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    worksheet.mergeCells('A2:I2');
+    const subtitleCell = worksheet.getCell('A2');
+    subtitleCell.value = reportTitle;
+    subtitleCell.font = { size: 14, bold: true };
+    subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    worksheet.mergeCells('A3:I3');
+    const dateCell = worksheet.getCell('A3');
+    dateCell.value = `تاريخ التقرير: ${currentDate}`;
+    dateCell.font = { size: 11 };
+    dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    const headerRow = worksheet.addRow([
+      '#',
+      'التاريخ',
+      'المستخدم',
+      'الدور',
+      'العملية',
+      'نوع الكيان',
+      'اسم الكيان',
+      'المستوى',
+      'الوصف'
+    ]);
+
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF18B2B0' }
+      };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+
+    logs.forEach((log, index) => {
+      worksheet.addRow([
+        index + 1,
+        log.createdAt ? new Date(log.createdAt).toLocaleString('ar-SA') : '-',
+        log.userName || '-',
+        log.userRole || '-',
+        log.action || '-',
+        log.entityType || '-',
+        log.entityName || '-',
+        log.severity || '-',
+        log.description || '-'
+      ]);
+    });
+
+    worksheet.columns = [
+      { width: 6 },
+      { width: 22 },
+      { width: 22 },
+      { width: 14 },
+      { width: 14 },
+      { width: 16 },
+      { width: 20 },
+      { width: 12 },
+      { width: 50 }
+    ];
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const fileName = `سجل_عمليات_النظام_${new Date().toISOString().split('T')[0]}.xlsx`;
+    saveAs(blob, fileName);
+  };

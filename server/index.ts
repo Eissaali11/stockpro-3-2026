@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes/index";
+import { initializeDatabase } from "./infrastructure/database/connection";
 import { setupVite, serveStatic, log } from "./vite";
 import { errorHandler } from "./middleware/errorHandler";
 import { setupSession } from "./config/session";
@@ -69,8 +70,11 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
-  const server = await registerRoutes(app);
+async function startServer() {
+  try {
+    // Initialize database connection before registering routes
+    await initializeDatabase();
+    const server = await registerRoutes(app);
 
   // Global error handler (must be last)
   app.use(errorHandler);
@@ -81,15 +85,33 @@ app.use((req, res, next) => {
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
-    serveStatic(app);
+    await serveStatic(app);
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen(port, () => {
-    log(`serving on port ${port}`);
-  });
-})();
+    const port = parseInt(process.env.PORT || '5000', 10);
+
+    server.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") {
+        log(`Port ${port} is already in use. Stop the other process or run with another port (e.g. PORT=3001).`);
+        process.exit(1);
+      }
+
+      log(`Server failed to start: ${error.message}`);
+      process.exit(1);
+    });
+
+    server.listen(port, () => {
+      log(`serving on port ${port}`);
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log(`Startup failed: ${message}`);
+    process.exit(1);
+  }
+}
+
+startServer();

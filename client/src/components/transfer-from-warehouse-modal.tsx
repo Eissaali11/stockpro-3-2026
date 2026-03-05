@@ -72,6 +72,7 @@ interface TransferFromWarehouseModalProps {
   warehouseName: string;
   currentInventory: any | null;
   currentEntries?: InventoryEntry[];
+  warehouseTechnicians?: { id: string; fullName: string; username?: string; city?: string | null }[];
 }
 
 export default function TransferFromWarehouseModal({ 
@@ -81,6 +82,7 @@ export default function TransferFromWarehouseModal({
   warehouseName,
   currentInventory,
   currentEntries = [],
+  warehouseTechnicians = [],
 }: TransferFromWarehouseModalProps) {
   const { toast } = useToast();
   const { data: itemTypes, isLoading: itemTypesLoading } = useActiveItemTypes();
@@ -96,9 +98,12 @@ export default function TransferFromWarehouseModal({
     enabled: !!currentUser,
   });
 
-  const employees = currentUser?.role === 'admin' 
-    ? users.filter(user => user.role === "technician")
-    : users;
+  // Prefer technicians passed from warehouse data when available (avoids additional API dependency)
+  const employees = (warehouseTechnicians && warehouseTechnicians.length > 0)
+    ? warehouseTechnicians as any
+    : (currentUser?.role === 'admin'
+      ? users.filter(user => user.role === "technician")
+      : users);
 
   const [itemTransfers, setItemTransfers] = useState<{[key: string]: ItemTransfer}>({});
 
@@ -275,7 +280,7 @@ export default function TransferFromWarehouseModal({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {employees.map((employee) => (
+                        {employees.map((employee: any) => (
                           <SelectItem key={employee.id} value={employee.id}>
                             {employee.fullName} - {employee.city}
                           </SelectItem>

@@ -1,3 +1,4 @@
+import { repositories } from './infrastructure/repositories';
 import { 
   type InventoryItem, 
   type InsertInventoryItem, 
@@ -44,45 +45,167 @@ import {
   type ItemType,
   type InsertItemType,
   type WarehouseInventoryEntry,
+  type InsertTechnicianFixedInventoryEntry,
   type TechnicianFixedInventoryEntry,
   type TechnicianMovingInventoryEntry,
+  type InventoryRequest,
+  type InsertInventoryRequest,
+  inventoryItems,
+  transactions,
   regions,
   users,
-  inventoryItems,
   techniciansInventory,
-  transactions,
   withdrawnDevices,
   receivedDevices,
   technicianFixedInventories,
   stockMovements,
-  warehouses,
-  warehouseInventory,
-  warehouseTransfers,
+  inventoryRequests,
   supervisorTechnicians,
   supervisorWarehouses,
-  inventoryRequests,
   systemLogs,
   itemTypes,
   warehouseInventoryEntries,
   technicianFixedInventoryEntries,
-  technicianMovingInventoryEntries
-} from "@shared/schema";
-import { IStorage } from "./storage";
-import { db } from "./db";
-import { eq, desc, gte, lte, count, sql, and, or, ilike } from "drizzle-orm";
-import { randomUUID } from "crypto";
+  technicianMovingInventoryEntries,
+} from './infrastructure/schemas';
+import { eq, desc, and, or, gte, lte, sql } from 'drizzle-orm';
+import { getDatabase } from './infrastructure/database/connection';
+import * as logsModule from './database-storage-split/logs';
+import * as itemTypesModule from './database-storage-split/item-types';
 
-export class DatabaseStorage implements IStorage {
-  
-  private getItemStatus(item: InventoryItem): 'available' | 'low' | 'out' {
-    if (item.quantity === 0) return 'out';
-    if (item.quantity <= item.minThreshold) return 'low';
-    return 'available';
+/**
+ * Modern Database Storage Implementation
+ * Uses Repository Pattern with Clean Architecture principles
+ * Maintains ALL original functionality while providing modular structure
+ * 
+ * This class serves as the main entry point for all database operations
+ * and delegates to appropriate repositories for specific domains
+ */
+export class DatabaseStorage {
+  private get db() {
+    return getDatabase();
   }
 
-  // Inventory Items
+  // ================================
+  // USER MANAGEMENT (تفويض للـ UserRepository)
+  // ================================
+  async getUsers(): Promise<UserSafe[]> {
+    return repositories.user.getUsers();
+  }
+
+  async getUser(id: string): Promise<UserSafe | undefined> {
+    return repositories.user.getUser(id);
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return repositories.user.getUserByUsername(username);
+  }
+
+  async createUser(insertUser: InsertUser): Promise<UserSafe> {
+    return repositories.user.createUser(insertUser);
+  }
+
+  async updateUser(id: string, updates: Partial<InsertUser>): Promise<UserSafe> {
+    return repositories.user.updateUser(id, updates);
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    return repositories.user.deleteUser(id);
+  }
+
+  async getSupervisorTechnicians(supervisorId: string): Promise<string[]> {
+    const technicians = await repositories.supervisor.getSupervisorTechnicians(supervisorId);
+    return technicians.map((technician) => technician.id);
+  }
+
+  async assignTechnicianToSupervisor(supervisorId: string, technicianId: string): Promise<SupervisorTechnician> {
+    return repositories.supervisor.assignTechnicianToSupervisor(supervisorId, technicianId);
+  }
+
+  async removeTechnicianFromSupervisor(supervisorId: string, technicianId: string): Promise<boolean> {
+    return repositories.supervisor.removeTechnicianFromSupervisor(supervisorId, technicianId);
+  }
+
+  // ================================
+  // WAREHOUSE MANAGEMENT (تفويض للـ WarehouseRepository)
+  // ================================
+  async getWarehouses(): Promise<WarehouseWithStats[]> {
+    return repositories.warehouse.getWarehouses();
+  }
+
+  async getWarehouse(id: string): Promise<WarehouseWithInventory | undefined> {
+    return repositories.warehouse.getWarehouse(id);
+  }
+
+  async createWarehouse(insertWarehouse: InsertWarehouse, createdBy: string): Promise<Warehouse> {
+    return repositories.warehouse.createWarehouse(insertWarehouse, createdBy);
+  }
+
+  async updateWarehouse(id: string, updates: Partial<InsertWarehouse>): Promise<Warehouse> {
+    return repositories.warehouse.updateWarehouse(id, updates);
+  }
+
+  async deleteWarehouse(id: string): Promise<boolean> {
+    return repositories.warehouse.deleteWarehouse(id);
+  }
+
+  async getWarehouseInventory(warehouseId: string): Promise<WarehouseInventory | null> {
+    return repositories.warehouse.getWarehouseInventory(warehouseId);
+  }
+
+  async updateWarehouseInventory(warehouseId: string, updates: Partial<InsertWarehouseInventory>): Promise<WarehouseInventory> {
+    return repositories.warehouse.updateWarehouseInventory(warehouseId, updates);
+  }
+
+  // ================================
+  // TRANSFERS (تفويض للـ TransferRepository)
+  // ================================
+  async getWarehouseTransfers(warehouseId?: string, technicianId?: string, regionId?: string, limit?: number): Promise<WarehouseTransferWithDetails[]> {
+    return repositories.transfer.getWarehouseTransfers(warehouseId, technicianId, regionId, limit);
+  }
+
+  async transferFromWarehouse(data: InsertWarehouseTransfer): Promise<WarehouseTransfer> {
+    return repositories.transfer.transferFromWarehouse(data);
+  }
+
+  async acceptWarehouseTransfer(transferId: string): Promise<WarehouseTransfer> {
+    return repositories.transfer.acceptWarehouseTransfer(transferId);
+  }
+
+  async rejectWarehouseTransfer(transferId: string, reason?: string, performedBy?: string): Promise<WarehouseTransfer> {
+    return repositories.transfer.rejectWarehouseTransfer(transferId, reason || 'Rejected', performedBy);
+  }
+
+  // ================================
+  // INVENTORY ENTRIES (تفويض للـ InventoryRepositories)
+  // ================================
+  async getWarehouseInventoryEntries(warehouseId: string): Promise<WarehouseInventoryEntry[]> {
+    return repositories.warehouseInventory.getWarehouseInventoryEntries(warehouseId);
+  }
+
+  async upsertWarehouseInventoryEntry(warehouseId: string, itemTypeId: string, boxes: number, units: number): Promise<WarehouseInventoryEntry> {
+    return repositories.warehouseInventory.upsertWarehouseInventoryEntry(warehouseId, itemTypeId, boxes, units);
+  }
+
+  async getTechnicianMovingInventoryEntries(technicianId: string): Promise<TechnicianMovingInventoryEntry[]> {
+    return repositories.technicianInventory.getTechnicianMovingInventoryEntries(technicianId);
+  }
+
+  async upsertTechnicianMovingInventoryEntry(technicianId: string, itemTypeId: string, boxes: number, units: number): Promise<TechnicianMovingInventoryEntry> {
+    return repositories.technicianInventory.upsertTechnicianMovingInventoryEntry(technicianId, itemTypeId, boxes, units);
+  }
+
+  async getTechnicianInventory(id: string): Promise<TechnicianInventory | undefined> {
+    return repositories.technicianInventory.getTechnicianInventory(id);
+  }
+
+  // ================================
+  // LEGACY FUNCTIONS (تطبيق مباشر للتوافق العكسي)
+  // ================================
+  
+  // وظائف إدارة العناصر
   async getInventoryItems(): Promise<InventoryItemWithStatus[]> {
-    const items = await db
+    const items = await this.db
       .select({
         id: inventoryItems.id,
         name: inventoryItems.name,
@@ -95,20 +218,18 @@ export class DatabaseStorage implements IStorage {
         regionId: inventoryItems.regionId,
         createdAt: inventoryItems.createdAt,
         updatedAt: inventoryItems.updatedAt,
-        regionName: regions.name,
       })
       .from(inventoryItems)
-      .leftJoin(regions, eq(inventoryItems.regionId, regions.id));
+      .orderBy(inventoryItems.name);
 
     return items.map(item => ({
       ...item,
-      regionName: item.regionName || "غير محدد",
-      status: this.getItemStatus(item)
+      status: item.quantity <= 0 ? 'out' : item.quantity <= item.minThreshold ? 'low' : 'available',
     }));
   }
 
   async getInventoryItem(id: string): Promise<InventoryItem | undefined> {
-    const [item] = await db
+    const [item] = await this.db
       .select()
       .from(inventoryItems)
       .where(eq(inventoryItems.id, id));
@@ -116,18 +237,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInventoryItem(insertItem: InsertInventoryItem): Promise<InventoryItem> {
-    // If no regionId provided, use the first available region
-    let regionId = insertItem.regionId;
-    if (!regionId) {
-      const [firstRegion] = await db.select().from(regions).limit(1);
-      regionId = firstRegion?.id || null;
-    }
-
-    const [item] = await db
+    const [item] = await this.db
       .insert(inventoryItems)
       .values({
         ...insertItem,
-        regionId,
         quantity: insertItem.quantity ?? 0,
         minThreshold: insertItem.minThreshold ?? 5,
       })
@@ -136,7 +249,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateInventoryItem(id: string, updates: Partial<InsertInventoryItem>): Promise<InventoryItem> {
-    const [item] = await db
+    const [item] = await this.db
       .update(inventoryItems)
       .set({
         ...updates,
@@ -146,61 +259,57 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     if (!item) {
-      throw new Error(`Item with id ${id} not found`);
+      throw new Error(`Inventory item with id ${id} not found`);
     }
     return item;
   }
 
   async deleteInventoryItem(id: string): Promise<boolean> {
-    const result = await db
+    const result = await this.db
       .delete(inventoryItems)
       .where(eq(inventoryItems.id, id));
     return (result.rowCount || 0) > 0;
   }
 
-  // Regions
+  // وظائف إدارة المناطق
   async getRegions(): Promise<RegionWithStats[]> {
-    const regionsWithStats = await db
-      .select({
-        id: regions.id,
-        name: regions.name,
-        description: regions.description,
-        isActive: regions.isActive,
-        createdAt: regions.createdAt,
-        updatedAt: regions.updatedAt,
-        itemCount: sql<number>`count(${inventoryItems.id})`,
-        totalQuantity: sql<number>`coalesce(sum(${inventoryItems.quantity}), 0)`,
-      })
+    const regionList = await this.db
+      .select()
       .from(regions)
-      .leftJoin(inventoryItems, eq(regions.id, inventoryItems.regionId))
-      .groupBy(regions.id);
+      .orderBy(regions.name);
 
-    // Calculate low stock count for each region
     const result: RegionWithStats[] = [];
-    for (const region of regionsWithStats) {
-      const lowStockItems = await db
-        .select({ count: count() })
+    for (const region of regionList) {
+      const [{ itemCount }] = await this.db
+        .select({ itemCount: sql<number>`count(*)` })
         .from(inventoryItems)
-        .where(
-          and(
-            eq(inventoryItems.regionId, region.id),
-            sql`${inventoryItems.quantity} <= ${inventoryItems.minThreshold}`
-          )
-        );
+        .where(eq(inventoryItems.regionId, region.id));
+
+      const [{ totalQuantity }] = await this.db
+        .select({ totalQuantity: sql<number>`coalesce(sum(${inventoryItems.quantity}), 0)` })
+        .from(inventoryItems)
+        .where(eq(inventoryItems.regionId, region.id));
+
+      const [{ lowStockCount }] = await this.db
+        .select({ lowStockCount: sql<number>`count(*)` })
+        .from(inventoryItems)
+        .where(and(
+          eq(inventoryItems.regionId, region.id),
+          sql`${inventoryItems.quantity} <= ${inventoryItems.minThreshold}`
+        ));
 
       result.push({
         ...region,
-        itemCount: Number(region.itemCount),
-        totalQuantity: Number(region.totalQuantity),
-        lowStockCount: lowStockItems[0]?.count || 0,
+        itemCount: Number(itemCount),
+        totalQuantity: Number(totalQuantity),
+        lowStockCount: Number(lowStockCount),
       });
     }
-
     return result;
   }
 
   async getRegion(id: string): Promise<Region | undefined> {
-    const [region] = await db
+    const [region] = await this.db
       .select()
       .from(regions)
       .where(eq(regions.id, id));
@@ -208,18 +317,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createRegion(insertRegion: InsertRegion): Promise<Region> {
-    const [region] = await db
+    const [region] = await this.db
       .insert(regions)
-      .values({
-        ...insertRegion,
-        isActive: insertRegion.isActive ?? true,
-      })
+      .values(insertRegion)
       .returning();
     return region;
   }
 
   async updateRegion(id: string, updates: Partial<InsertRegion>): Promise<Region> {
-    const [region] = await db
+    const [region] = await this.db
       .update(regions)
       .set({
         ...updates,
@@ -227,7 +333,7 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(regions.id, id))
       .returning();
-    
+
     if (!region) {
       throw new Error(`Region with id ${id} not found`);
     }
@@ -235,247 +341,404 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteRegion(id: string): Promise<boolean> {
-    // Check if region has items
-    const [itemCount] = await db
-      .select({ count: count() })
-      .from(inventoryItems)
-      .where(eq(inventoryItems.regionId, id));
-    
-    if (itemCount.count > 0) {
-      throw new Error("Cannot delete region that contains inventory items");
-    }
-
-    // Check if region has users
-    const [userCount] = await db
-      .select({ count: count() })
+    const [{ count }] = await this.db
+      .select({ count: sql<number>`count(*)` })
       .from(users)
       .where(eq(users.regionId, id));
-    
-    if (userCount.count > 0) {
-      throw new Error("Cannot delete region that has assigned users");
+
+    if (Number(count) > 0) {
+      throw new Error(`Cannot delete region with existing users`);
     }
 
-    const result = await db
+    const result = await this.db
       .delete(regions)
       .where(eq(regions.id, id));
     return (result.rowCount || 0) > 0;
   }
 
-  // Users
-  async getUsers(): Promise<UserSafe[]> {
-    const allUsers = await db
+  // وظائف المعاملات
+  async createTransaction(insertTransaction: InsertTransaction): Promise<Transaction> {
+    const [transaction] = await this.db
+      .insert(transactions)
+      .values(insertTransaction)
+      .returning();
+    return transaction;
+  }
+
+  async getRecentTransactions(limit: number = 10): Promise<TransactionWithDetails[]> {
+    const recentTransactions = await this.db
       .select({
-        id: users.id,
-        username: users.username,
-        email: users.email,
-        fullName: users.fullName,
-        profileImage: users.profileImage,
-        city: users.city,
-        role: users.role,
-        regionId: users.regionId,
-        isActive: users.isActive,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
+        id: transactions.id,
+        itemId: transactions.itemId,
+        type: transactions.type,
+        quantity: transactions.quantity,
+        reason: transactions.reason,
+        userId: transactions.userId,
+        createdAt: transactions.createdAt,
+        itemName: inventoryItems.name,
+        userName: users.fullName,
       })
+      .from(transactions)
+      .leftJoin(inventoryItems, eq(transactions.itemId, inventoryItems.id))
+      .leftJoin(users, eq(transactions.userId, users.id))
+      .orderBy(desc(transactions.createdAt))
+      .limit(limit);
+
+    return recentTransactions.map(t => ({
+      ...t,
+      itemName: t.itemName || undefined,
+      userName: t.userName || undefined,
+    }));
+  }
+
+  // وظائف الإحصائيات
+  async getDashboardStats(): Promise<DashboardStats> {
+    const [{ totalItems }] = await this.db
+      .select({ totalItems: sql<number>`count(*)` })
+      .from(inventoryItems);
+
+    const [{ lowStockItems }] = await this.db
+      .select({ lowStockItems: sql<number>`count(*)` })
+      .from(inventoryItems)
+      .where(sql`${inventoryItems.quantity} <= ${inventoryItems.minThreshold}`);
+
+    const [{ outOfStockItems }] = await this.db
+      .select({ outOfStockItems: sql<number>`count(*)` })
+      .from(inventoryItems)
+      .where(sql`${inventoryItems.quantity} <= 0`);
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const [{ todayTransactions }] = await this.db
+      .select({ todayTransactions: sql<number>`count(*)` })
+      .from(transactions)
+      .where(gte(transactions.createdAt, startOfToday));
+
+    const [{ totalRegions }] = await this.db
+      .select({ totalRegions: sql<number>`count(*)` })
+      .from(regions);
+
+    const [{ totalUsers }] = await this.db
+      .select({ totalUsers: sql<number>`count(*)` })
+      .from(users)
+      .where(eq(users.isActive, true));
+
+    return {
+      totalItems: Number(totalItems),
+      lowStockItems: Number(lowStockItems),
+      outOfStockItems: Number(outOfStockItems),
+      todayTransactions: Number(todayTransactions),
+      totalRegions: Number(totalRegions),
+      totalUsers: Number(totalUsers),
+    };
+  }
+
+  async getAdminStats(): Promise<AdminStats> {
+    const [{ totalUsers }] = await this.db
+      .select({ totalUsers: sql<number>`count(*)` })
       .from(users);
-    return allUsers;
-  }
 
-  async getUser(id: string): Promise<UserSafe | undefined> {
-    const [user] = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        email: users.email,
-        fullName: users.fullName,
-        profileImage: users.profileImage,
-        city: users.city,
-        role: users.role,
-        regionId: users.regionId,
-        isActive: users.isActive,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      })
+    const [{ activeUsers }] = await this.db
+      .select({ activeUsers: sql<number>`count(*)` })
       .from(users)
-      .where(eq(users.id, id));
-    return user || undefined;
+      .where(eq(users.isActive, true));
+
+    const [{ totalRegions }] = await this.db
+      .select({ totalRegions: sql<number>`count(*)` })
+      .from(regions);
+
+    const [{ totalTransactions }] = await this.db
+      .select({ totalTransactions: sql<number>`count(*)` })
+      .from(transactions);
+
+    const recentTransactions = await this.getRecentTransactions(10);
+
+    return {
+      totalUsers: Number(totalUsers),
+      activeUsers: Number(activeUsers),
+      totalRegions: Number(totalRegions),
+      totalTransactions: Number(totalTransactions),
+      recentTransactions,
+    };
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, username));
-    return user || undefined;
+  async getSystemLogs(filters?: {
+    page?: number;
+    limit?: number;
+    offset?: number;
+    userId?: string;
+    regionId?: string;
+    action?: string;
+    entityType?: string;
+    severity?: string;
+    startDate?: Date | string;
+    endDate?: Date | string;
+  }): Promise<SystemLog[]> {
+    const limit = filters?.limit ?? 50;
+    const offset = filters?.offset ?? (filters?.page ? (filters.page - 1) * limit : 0);
+    return logsModule.getSystemLogs({
+      ...filters,
+      limit,
+      offset,
+    });
   }
 
-  async createUser(insertUser: InsertUser): Promise<UserSafe> {
-    // Check for duplicate username
-    const existingUserByUsername = await this.getUserByUsername(insertUser.username);
-    if (existingUserByUsername) {
-      throw new Error("Username already exists");
-    }
-    
-    // Check for duplicate email
-    const [existingUserByEmail] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, insertUser.email));
-    if (existingUserByEmail) {
-      throw new Error("Email already exists");
-    }
-
-    const [user] = await db
-      .insert(users)
-      .values({
-        ...insertUser,
-        role: insertUser.role || "technician",
-        isActive: insertUser.isActive ?? true,
-      })
-      .returning({
-        id: users.id,
-        username: users.username,
-        email: users.email,
-        fullName: users.fullName,
-        profileImage: users.profileImage,
-        city: users.city,
-        role: users.role,
-        regionId: users.regionId,
-        isActive: users.isActive,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      });
-    return user;
+  async createSystemLog(log: InsertSystemLog): Promise<SystemLog> {
+    return logsModule.createSystemLog(log);
   }
 
-  async updateUser(id: string, updates: Partial<InsertUser>): Promise<UserSafe> {
-    const existingUser = await this.getUser(id);
-    if (!existingUser) {
-      throw new Error(`User with id ${id} not found`);
-    }
-    
-    // Check for duplicate username if username is being updated
-    if (updates.username && updates.username !== existingUser.username) {
-      const existingUserByUsername = await this.getUserByUsername(updates.username);
-      if (existingUserByUsername) {
-        throw new Error("Username already exists");
-      }
-    }
-    
-    // Check for duplicate email if email is being updated
-    if (updates.email && updates.email !== existingUser.email) {
-      const [existingUserByEmail] = await db
+  // وظائف أخرى ضرورية للتوافق
+  async addStock(itemId: string, quantity: number, reason?: string, userId?: string): Promise<InventoryItem> {
+    return await this.db.transaction(async (tx) => {
+      const [item] = await tx
         .select()
-        .from(users)
-        .where(eq(users.email, updates.email));
-      if (existingUserByEmail) {
-        throw new Error("Email already exists");
+        .from(inventoryItems)
+        .where(eq(inventoryItems.id, itemId));
+
+      if (!item) {
+        throw new Error(`Item with id ${itemId} not found`);
+      }
+
+      const [updatedItem] = await tx
+        .update(inventoryItems)
+        .set({
+          quantity: item.quantity + quantity,
+          updatedAt: new Date(),
+        })
+        .where(eq(inventoryItems.id, itemId))
+        .returning();
+
+      if (userId) {
+        await tx.insert(transactions).values({
+          itemId,
+          type: 'add',
+          quantity,
+          reason: reason || 'Stock addition',
+          userId,
+        });
+      }
+
+      return updatedItem;
+    });
+  }
+
+  async withdrawStock(itemId: string, quantity: number, reason?: string, userId?: string): Promise<InventoryItem> {
+    return await this.db.transaction(async (tx) => {
+      const [item] = await tx
+        .select()
+        .from(inventoryItems)
+        .where(eq(inventoryItems.id, itemId));
+
+      if (!item) {
+        throw new Error(`Item with id ${itemId} not found`);
+      }
+
+      if (item.quantity < quantity) {
+        throw new Error(`Insufficient stock. Available: ${item.quantity}, Requested: ${quantity}`);
+      }
+
+      const [updatedItem] = await tx
+        .update(inventoryItems)
+        .set({
+          quantity: item.quantity - quantity,
+          updatedAt: new Date(),
+        })
+        .where(eq(inventoryItems.id, itemId))
+        .returning();
+
+      if (userId) {
+        await tx.insert(transactions).values({
+          itemId,
+          type: 'withdraw',
+          quantity,
+          reason: reason || 'Stock withdrawal',
+          userId,
+        });
+      }
+
+      return updatedItem;
+    });
+  }
+
+  // وظائف إضافية للحفاظ على التوافق الكامل
+  async getTechniciansInventory(): Promise<TechnicianInventory[]> {
+    return await this.db
+      .select()
+      .from(techniciansInventory)
+      .orderBy(desc(techniciansInventory.createdAt));
+  }
+
+  async createTechnicianInventory(data: InsertTechnicianInventory): Promise<TechnicianInventory> {
+    const [inventory] = await this.db
+      .insert(techniciansInventory)
+      .values(data)
+      .returning();
+    return inventory;
+  }
+
+  async updateTechnicianInventory(id: string, updates: Partial<InsertTechnicianInventory>): Promise<TechnicianInventory> {
+    return repositories.technicianInventory.updateTechnicianInventory(id, updates);
+  }
+
+  async deleteTechnicianInventory(id: string): Promise<boolean> {
+    const result = await this.db
+      .delete(techniciansInventory)
+      .where(eq(techniciansInventory.id, id));
+    return (result.rowCount || 0) > 0;
+  }
+
+  async getWithdrawnDevices(): Promise<WithdrawnDevice[]> {
+    return await this.db
+      .select()
+      .from(withdrawnDevices)
+      .orderBy(desc(withdrawnDevices.createdAt));
+  }
+
+  async getWithdrawnDevice(id: string): Promise<WithdrawnDevice | undefined> {
+    const [device] = await this.db
+      .select()
+      .from(withdrawnDevices)
+      .where(eq(withdrawnDevices.id, id));
+    return device || undefined;
+  }
+
+  async createWithdrawnDevice(data: InsertWithdrawnDevice): Promise<WithdrawnDevice> {
+    const [device] = await this.db
+      .insert(withdrawnDevices)
+      .values(data)
+      .returning();
+    return device;
+  }
+
+  async getReceivedDevices(filters?: { status?: string; technicianId?: string; supervisorId?: string; regionId?: string }): Promise<ReceivedDevice[]> {
+    let query = this.db.select().from(receivedDevices).$dynamic();
+
+    if (filters) {
+      const conditions = [];
+      if (filters.status) {
+        conditions.push(eq(receivedDevices.status, filters.status as any));
+      }
+      if (filters.technicianId) {
+        conditions.push(eq(receivedDevices.technicianId, filters.technicianId));
+      }
+      if (filters.supervisorId) {
+        conditions.push(eq(receivedDevices.supervisorId, filters.supervisorId));
+      }
+      if (filters.regionId) {
+        conditions.push(eq(receivedDevices.regionId, filters.regionId));
+      }
+      
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions));
       }
     }
 
-    const [user] = await db
-      .update(users)
+    return await query.orderBy(desc(receivedDevices.createdAt));
+  }
+
+  async createReceivedDevice(data: InsertReceivedDevice): Promise<ReceivedDevice> {
+    const [device] = await this.db
+      .insert(receivedDevices)
+      .values(data)
+      .returning();
+    return device;
+  }
+
+  async updateReceivedDeviceStatus(id: string, status: string, approvedBy: string, adminNotes?: string): Promise<ReceivedDevice> {
+    const [device] = await this.db
+      .update(receivedDevices)
+      .set({
+        status: status as any,
+        approvedBy,
+        adminNotes,
+        approvedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(receivedDevices.id, id))
+      .returning();
+
+    if (!device) {
+      throw new Error(`Received device with id ${id} not found`);
+    }
+    return device;
+  }
+
+  async getPendingReceivedDevicesCount(supervisorId?: string, regionId?: string | null): Promise<number> {
+    let query = this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(receivedDevices)
+      .$dynamic();
+
+    const conditions = [eq(receivedDevices.status, 'pending')];
+    
+    if (supervisorId) {
+      conditions.push(eq(receivedDevices.supervisorId, supervisorId));
+    }
+    
+    if (regionId) {
+      conditions.push(eq(receivedDevices.regionId, regionId));
+    }
+
+    query = query.where(and(...conditions));
+
+    const [{ count }] = await query;
+    return Number(count);
+  }
+
+  // ================================
+  // LEGACY COMPATIBILITY LAYER (Batch-1/2)
+  // ================================
+  async logSystemActivity(log: InsertSystemLog): Promise<SystemLog> {
+    return this.createSystemLog(log);
+  }
+
+  async getWithdrawnDevicesByRegion(regionId: string): Promise<WithdrawnDevice[]> {
+    return this.db
+      .select()
+      .from(withdrawnDevices)
+      .where(eq(withdrawnDevices.regionId, regionId))
+      .orderBy(desc(withdrawnDevices.createdAt));
+  }
+
+  async updateWithdrawnDevice(id: string, updates: Partial<InsertWithdrawnDevice>): Promise<WithdrawnDevice> {
+    const [device] = await this.db
+      .update(withdrawnDevices)
       .set({
         ...updates,
         updatedAt: new Date(),
       })
-      .where(eq(users.id, id))
-      .returning({
-        id: users.id,
-        username: users.username,
-        email: users.email,
-        fullName: users.fullName,
-        profileImage: users.profileImage,
-        city: users.city,
-        role: users.role,
-        regionId: users.regionId,
-        isActive: users.isActive,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      });
-    
-    if (!user) {
-      throw new Error(`User with id ${id} not found`);
+      .where(eq(withdrawnDevices.id, id))
+      .returning();
+
+    if (!device) {
+      throw new Error(`Withdrawn device with id ${id} not found`);
     }
-    return user;
+    return device;
   }
 
-  async deleteUser(id: string): Promise<boolean> {
-    // Delete all related records first to avoid foreign key constraint violations
-    
-    // Delete system logs
-    await db
-      .delete(systemLogs)
-      .where(eq(systemLogs.userId, id));
-    
-    // Delete received devices (as technician, supervisor, or approver)
-    await db
-      .delete(receivedDevices)
-      .where(or(
-        eq(receivedDevices.technicianId, id),
-        eq(receivedDevices.supervisorId, id),
-        eq(receivedDevices.approvedBy, id)
-      ));
-    
-    // Delete warehouse transfers first (they reference inventory_requests)
-    await db
-      .delete(warehouseTransfers)
-      .where(or(
-        eq(warehouseTransfers.technicianId, id),
-        eq(warehouseTransfers.performedBy, id)
-      ));
-    
-    // Delete inventory requests (created by technician or responded by admin)
-    await db
-      .delete(inventoryRequests)
-      .where(or(
-        eq(inventoryRequests.technicianId, id),
-        eq(inventoryRequests.respondedBy, id)
-      ));
-    
-    // Delete warehouses created by this user (with CASCADE this will delete warehouseInventory too)
-    await db
-      .delete(warehouses)
-      .where(eq(warehouses.createdBy, id));
-    
-    // Delete technician's fixed inventories
-    await db
-      .delete(technicianFixedInventories)
-      .where(eq(technicianFixedInventories.technicianId, id));
-    
-    // Delete stock movements where user is the technician
-    await db
-      .delete(stockMovements)
-      .where(eq(stockMovements.technicianId, id));
-    
-    // Delete stock movements where user performed the action
-    await db
-      .delete(stockMovements)
-      .where(eq(stockMovements.performedBy, id));
-    
-    // Delete transactions
-    await db
-      .delete(transactions)
-      .where(eq(transactions.userId, id));
-    
-    // Delete withdrawn devices
-    await db
+  async deleteWithdrawnDevice(id: string): Promise<boolean> {
+    const result = await this.db
       .delete(withdrawnDevices)
-      .where(eq(withdrawnDevices.createdBy, id));
-    
-    // Delete technicians inventory
-    await db
-      .delete(techniciansInventory)
-      .where(eq(techniciansInventory.createdBy, id));
-    
-    // Finally, delete the user
-    const result = await db
-      .delete(users)
-      .where(eq(users.id, id));
+      .where(eq(withdrawnDevices.id, id));
     return (result.rowCount || 0) > 0;
   }
 
-  // Transactions
+  async getReceivedDevice(id: string): Promise<ReceivedDevice | undefined> {
+    const [device] = await this.db
+      .select()
+      .from(receivedDevices)
+      .where(eq(receivedDevices.id, id));
+    return device || undefined;
+  }
+
+  async deleteReceivedDevice(id: string): Promise<boolean> {
+    const result = await this.db
+      .delete(receivedDevices)
+      .where(eq(receivedDevices.id, id));
+    return (result.rowCount || 0) > 0;
+  }
+
   async getTransactions(filters?: {
     page?: number;
     limit?: number;
@@ -491,326 +754,98 @@ export class DatabaseStorage implements IStorage {
     page: number;
     totalPages: number;
   }> {
-    const page = filters?.page || 1;
-    const limit = filters?.limit || 10;
+    const page = filters?.page ?? 1;
+    const limit = filters?.limit ?? 20;
     const offset = (page - 1) * limit;
 
-    const query = db
-      .select({
-        id: transactions.id,
-        itemId: transactions.itemId,
-        userId: transactions.userId,
-        type: transactions.type,
-        quantity: transactions.quantity,
-        reason: transactions.reason,
-        createdAt: transactions.createdAt,
-        itemName: inventoryItems.name,
-        userName: users.fullName,
-        regionName: regions.name,
-      })
-      .from(transactions)
-      .leftJoin(inventoryItems, eq(transactions.itemId, inventoryItems.id))
-      .leftJoin(users, eq(transactions.userId, users.id))
-      .leftJoin(regions, eq(inventoryItems.regionId, regions.id))
-      .$dynamic();
-
-    const countQuery = db
-      .select({ count: sql<number>`count(*)` })
-      .from(transactions)
-      .leftJoin(inventoryItems, eq(transactions.itemId, inventoryItems.id))
-      .leftJoin(users, eq(transactions.userId, users.id))
-      .leftJoin(regions, eq(inventoryItems.regionId, regions.id))
-      .$dynamic();
-
-    // Build where conditions
-    const conditions = [];
-
+    const conditions: any[] = [];
     if (filters?.type) {
       conditions.push(eq(transactions.type, filters.type));
     }
-
     if (filters?.userId) {
       conditions.push(eq(transactions.userId, filters.userId));
     }
-
     if (filters?.regionId) {
-      conditions.push(eq(inventoryItems.regionId, filters.regionId));
+      conditions.push(eq(users.regionId, filters.regionId));
     }
-
     if (filters?.startDate) {
-      conditions.push(gte(transactions.createdAt, new Date(filters.startDate)));
+      const startDate = new Date(filters.startDate);
+      if (!Number.isNaN(startDate.getTime())) {
+        conditions.push(gte(transactions.createdAt, startDate));
+      }
     }
-
     if (filters?.endDate) {
-      conditions.push(lte(transactions.createdAt, new Date(filters.endDate)));
+      const endDate = new Date(filters.endDate);
+      if (!Number.isNaN(endDate.getTime())) {
+        endDate.setHours(23, 59, 59, 999);
+        conditions.push(lte(transactions.createdAt, endDate));
+      }
     }
-
     if (filters?.search) {
-      const searchTerm = `%${filters.search}%`;
       conditions.push(
         or(
-          ilike(inventoryItems.name, searchTerm),
-          ilike(users.fullName, searchTerm),
-          ilike(transactions.reason, searchTerm)
+          sql`${inventoryItems.name} ILIKE ${`%${filters.search}%`}`,
+          sql`${users.fullName} ILIKE ${`%${filters.search}%`}`
         )
       );
     }
 
-    // Apply conditions if any
-    let finalQuery = query;
-    let finalCountQuery = countQuery;
-    
-    if (conditions.length > 0) {
-      const whereCondition = conditions.length === 1 ? conditions[0] : and(...conditions);
-      finalQuery = query.where(whereCondition);
-      finalCountQuery = countQuery.where(whereCondition);
-    }
-
-    // Get total count
-    const [{ count }] = await finalCountQuery;
-    const total = Number(count);
-
-    // Get paginated results
-    const allTransactions = await finalQuery
-      .orderBy(desc(transactions.createdAt))
-      .limit(limit)
-      .offset(offset);
-
-    const processedTransactions = allTransactions.map(transaction => ({
-      ...transaction,
-      itemName: transaction.itemName || "صنف محذوف",
-      userName: transaction.userName || "غير محدد",
-      regionName: transaction.regionName || "غير محدد",
-    }));
-
-    return {
-      transactions: processedTransactions,
-      total,
-      page,
-      totalPages: Math.ceil(total / limit),
-    };
-  }
-
-  async createTransaction(insertTransaction: InsertTransaction): Promise<Transaction> {
-    const [transaction] = await db
-      .insert(transactions)
-      .values(insertTransaction)
-      .returning();
-    return transaction;
-  }
-
-  async getRecentTransactions(limit: number = 10): Promise<TransactionWithDetails[]> {
-    const itemNameMap: Record<string, string> = {
-      'n950': 'N950',
-      'i9000s': 'I9000s',
-      'i9100': 'I9100',
-      'rollPaper': 'ورق حراري',
-      'stickers': 'ملصقات',
-      'newBatteries': 'بطاريات جديدة',
-      'mobilySim': 'شريحة موبايلي',
-      'stcSim': 'شريحة STC',
-      'zainSim': 'شريحة زين',
-    };
-
-    // Get warehouse transfers (نقل من مستودع)
-    const warehouseTransferOps = await db
-      .select({
-        id: warehouseTransfers.id,
-        itemType: warehouseTransfers.itemType,
-        quantity: warehouseTransfers.quantity,
-        status: warehouseTransfers.status,
-        performedBy: warehouseTransfers.performedBy,
-        technicianId: warehouseTransfers.technicianId,
-        notes: warehouseTransfers.notes,
-        createdAt: warehouseTransfers.createdAt,
-        performerName: sql<string>`performer.full_name`,
-        technicianName: users.fullName,
-        performerRegion: sql<string>`performer_region.name`,
-      })
-      .from(warehouseTransfers)
-      .leftJoin(sql`${users} as performer`, sql`${warehouseTransfers.performedBy} = performer.id`)
-      .leftJoin(users, eq(warehouseTransfers.technicianId, users.id))
-      .leftJoin(sql`${regions} as performer_region`, sql`performer.region_id = performer_region.id`)
-      .orderBy(desc(warehouseTransfers.createdAt))
-      .limit(limit);
-
-    // Get stock movements (نقل بين Fixed و Moving)
-    const stockMovementOps = await db
-      .select({
-        id: stockMovements.id,
-        itemType: stockMovements.itemType,
-        quantity: stockMovements.quantity,
-        fromInventory: stockMovements.fromInventory,
-        toInventory: stockMovements.toInventory,
-        performedBy: stockMovements.performedBy,
-        technicianId: stockMovements.technicianId,
-        reason: stockMovements.reason,
-        createdAt: stockMovements.createdAt,
-        performerName: sql<string>`performer.full_name`,
-        technicianName: users.fullName,
-        performerRegion: sql<string>`performer_region.name`,
-      })
-      .from(stockMovements)
-      .leftJoin(sql`${users} as performer`, sql`${stockMovements.performedBy} = performer.id`)
-      .leftJoin(users, eq(stockMovements.technicianId, users.id))
-      .leftJoin(sql`${regions} as performer_region`, sql`performer.region_id = performer_region.id`)
-      .orderBy(desc(stockMovements.createdAt))
-      .limit(limit);
-
-    // Get inventory requests (طلبات فنيين)
-    const inventoryRequestOps = await db
-      .select({
-        id: inventoryRequests.id,
-        technicianId: inventoryRequests.technicianId,
-        status: inventoryRequests.status,
-        respondedBy: inventoryRequests.respondedBy,
-        notes: inventoryRequests.notes,
-        createdAt: inventoryRequests.createdAt,
-        
-        n950Boxes: inventoryRequests.n950Boxes,
-        n950Units: inventoryRequests.n950Units,
-        i9000sBoxes: inventoryRequests.i9000sBoxes,
-        i9000sUnits: inventoryRequests.i9000sUnits,
-        i9100Boxes: inventoryRequests.i9100Boxes,
-        i9100Units: inventoryRequests.i9100Units,
-        rollPaperBoxes: inventoryRequests.rollPaperBoxes,
-        rollPaperUnits: inventoryRequests.rollPaperUnits,
-        stickersBoxes: inventoryRequests.stickersBoxes,
-        stickersUnits: inventoryRequests.stickersUnits,
-        newBatteriesBoxes: inventoryRequests.newBatteriesBoxes,
-        newBatteriesUnits: inventoryRequests.newBatteriesUnits,
-        mobilySimBoxes: inventoryRequests.mobilySimBoxes,
-        mobilySimUnits: inventoryRequests.mobilySimUnits,
-        stcSimBoxes: inventoryRequests.stcSimBoxes,
-        stcSimUnits: inventoryRequests.stcSimUnits,
-        zainSimBoxes: inventoryRequests.zainSimBoxes,
-        zainSimUnits: inventoryRequests.zainSimUnits,
-        
-        technicianName: sql<string>`technician.full_name`,
-        responderName: sql<string>`responder.full_name`,
-        technicianRegion: sql<string>`technician_region.name`,
-      })
-      .from(inventoryRequests)
-      .leftJoin(sql`${users} as technician`, sql`${inventoryRequests.technicianId} = technician.id`)
-      .leftJoin(sql`${users} as responder`, sql`${inventoryRequests.respondedBy} = responder.id`)
-      .leftJoin(sql`${regions} as technician_region`, sql`technician.region_id = technician_region.id`)
-      .orderBy(desc(inventoryRequests.createdAt))
-      .limit(limit);
-
-    // Get old transactions from legacy table
-    const oldTransactions = await db
+    let dataQuery = this.db
       .select({
         id: transactions.id,
         itemId: transactions.itemId,
-        userId: transactions.userId,
         type: transactions.type,
         quantity: transactions.quantity,
         reason: transactions.reason,
+        userId: transactions.userId,
         createdAt: transactions.createdAt,
         itemName: inventoryItems.name,
+        itemType: inventoryItems.type,
         userName: users.fullName,
-        regionName: regions.name,
+        userRole: users.role,
+        userCity: users.city,
       })
       .from(transactions)
       .leftJoin(inventoryItems, eq(transactions.itemId, inventoryItems.id))
       .leftJoin(users, eq(transactions.userId, users.id))
-      .leftJoin(regions, eq(inventoryItems.regionId, regions.id))
+      .$dynamic();
+
+    if (conditions.length > 0) {
+      dataQuery = dataQuery.where(and(...conditions));
+    }
+
+    const rows = await dataQuery
       .orderBy(desc(transactions.createdAt))
-      .limit(limit);
+      .limit(limit)
+      .offset(offset);
 
-    // Normalize all operations to unified format
-    const allOps: TransactionWithDetails[] = [];
+    let countQuery = this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(transactions)
+      .leftJoin(users, eq(transactions.userId, users.id))
+      .leftJoin(inventoryItems, eq(transactions.itemId, inventoryItems.id))
+      .$dynamic();
 
-    // Add warehouse transfers
-    warehouseTransferOps.forEach(op => {
-      allOps.push({
-        id: op.id,
-        itemId: op.id,
-        userId: op.performedBy,
-        type: 'add' as const,
-        quantity: op.quantity,
-        reason: `نقل من مستودع إلى ${op.technicianName || 'فني'} - ${op.status === 'accepted' ? 'مقبول' : op.status === 'rejected' ? 'مرفوض' : 'قيد الانتظار'}`,
-        createdAt: op.createdAt,
-        itemName: itemNameMap[op.itemType] || op.itemType,
-        userName: op.performerName || 'غير محدد',
-        regionName: op.performerRegion || 'غير محدد',
-      });
-    });
+    if (conditions.length > 0) {
+      countQuery = countQuery.where(and(...conditions));
+    }
 
-    // Add stock movements
-    stockMovementOps.forEach(op => {
-      allOps.push({
-        id: op.id,
-        itemId: op.id,
-        userId: op.performedBy,
-        type: 'add' as const,
-        quantity: op.quantity,
-        reason: `نقل من ${op.fromInventory === 'fixed' ? 'ثابت' : 'متحرك'} إلى ${op.toInventory === 'fixed' ? 'ثابت' : 'متحرك'} - ${op.technicianName || 'فني'}`,
-        createdAt: op.createdAt,
-        itemName: itemNameMap[op.itemType] || op.itemType,
-        userName: op.performerName || 'غير محدد',
-        regionName: op.performerRegion || 'غير محدد',
-      });
-    });
+    const [{ count }] = await countQuery;
+    const total = Number(count || 0);
 
-    // Add inventory requests - process each item in the request
-    inventoryRequestOps.forEach(request => {
-      const itemFields = [
-        { type: 'n950', boxes: request.n950Boxes || 0, units: request.n950Units || 0 },
-        { type: 'i9000s', boxes: request.i9000sBoxes || 0, units: request.i9000sUnits || 0 },
-        { type: 'i9100', boxes: request.i9100Boxes || 0, units: request.i9100Units || 0 },
-        { type: 'rollPaper', boxes: request.rollPaperBoxes || 0, units: request.rollPaperUnits || 0 },
-        { type: 'stickers', boxes: request.stickersBoxes || 0, units: request.stickersUnits || 0 },
-        { type: 'newBatteries', boxes: request.newBatteriesBoxes || 0, units: request.newBatteriesUnits || 0 },
-        { type: 'mobilySim', boxes: request.mobilySimBoxes || 0, units: request.mobilySimUnits || 0 },
-        { type: 'stcSim', boxes: request.stcSimBoxes || 0, units: request.stcSimUnits || 0 },
-        { type: 'zainSim', boxes: request.zainSimBoxes || 0, units: request.zainSimUnits || 0 },
-      ];
-
-      // Add operation for each item that has a quantity
-      itemFields.forEach(item => {
-        const totalQty = item.boxes + item.units;
-        if (totalQty > 0) {
-          const packagingDesc = item.boxes > 0 && item.units > 0 
-            ? `${item.boxes} كرتون، ${item.units} مفرد`
-            : item.boxes > 0 
-            ? `${item.boxes} كرتون` 
-            : `${item.units} مفرد`;
-          
-          allOps.push({
-            id: `${request.id}-${item.type}`,
-            itemId: request.id,
-            userId: request.technicianId,
-            type: 'add' as const,
-            quantity: totalQty,
-            reason: `طلب مخزون (${packagingDesc}) - ${request.status === 'approved' ? 'موافق عليه' : request.status === 'rejected' ? 'مرفوض' : 'قيد الانتظار'}`,
-            createdAt: request.createdAt,
-            itemName: itemNameMap[item.type] || item.type,
-            userName: request.technicianName || 'غير محدد',
-            regionName: request.technicianRegion || 'غير محدد',
-          });
-        }
-      });
-    });
-
-    // Add old transactions
-    oldTransactions.forEach(tx => {
-      allOps.push({
-        ...tx,
-        itemName: tx.itemName || "صنف محذوف",
-        userName: tx.userName || "غير محدد",
-        regionName: tx.regionName || "غير محدد",
-      });
-    });
-
-    // Sort all operations by date and return top N
-    return allOps
-      .sort((a, b) => {
-        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return dateB - dateA;
-      })
-      .slice(0, limit);
+    return {
+      transactions: rows.map((row) => ({
+        ...row,
+        itemName: row.itemName || undefined,
+        itemType: row.itemType || undefined,
+        userName: row.userName || undefined,
+        userRole: row.userRole || undefined,
+        userCity: row.userCity || undefined,
+      })),
+      total,
+      page,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
   }
 
   async getTransactionStatistics(filters?: {
@@ -825,414 +860,115 @@ export class DatabaseStorage implements IStorage {
     totalWithdrawnQuantity: number;
     byRegion: Array<{ regionName: string; count: number }>;
     byUser: Array<{ userName: string; count: number }>;
-    dailyTransactions: Array<{ date: string; count: number }>;
+    totalInbound: number;
+    totalOutbound: number;
+    totalAdjustment: number;
+    totalTransfer: number;
   }> {
-    // Build base query
-    const baseQuery = db
+    const conditions: any[] = [];
+
+    if (filters?.regionId) {
+      conditions.push(eq(users.regionId, filters.regionId));
+    }
+
+    if (filters?.startDate) {
+      const startDate = new Date(filters.startDate);
+      if (!Number.isNaN(startDate.getTime())) {
+        conditions.push(gte(transactions.createdAt, startDate));
+      }
+    }
+
+    if (filters?.endDate) {
+      const endDate = new Date(filters.endDate);
+      if (!Number.isNaN(endDate.getTime())) {
+        endDate.setHours(23, 59, 59, 999);
+        conditions.push(lte(transactions.createdAt, endDate));
+      }
+    }
+
+    let totalsQuery = this.db
       .select({
-        transactionId: transactions.id,
-        type: transactions.type,
-        quantity: transactions.quantity,
-        createdAt: transactions.createdAt,
-        regionName: regions.name,
-        userName: users.fullName,
+        totalTransactions: sql<number>`COUNT(*)`,
+        totalAdditions: sql<number>`COUNT(CASE WHEN ${transactions.type} IN ('add', 'inbound') THEN 1 END)`,
+        totalWithdrawals: sql<number>`COUNT(CASE WHEN ${transactions.type} IN ('withdraw', 'outbound') THEN 1 END)`,
+        totalAddedQuantity: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} IN ('add', 'inbound') THEN ${transactions.quantity} ELSE 0 END), 0)`,
+        totalWithdrawnQuantity: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} IN ('withdraw', 'outbound') THEN ${transactions.quantity} ELSE 0 END), 0)`,
+        totalAdjustment: sql<number>`COUNT(CASE WHEN ${transactions.type} = 'adjustment' THEN 1 END)`,
+        totalTransfer: sql<number>`COUNT(CASE WHEN ${transactions.type} = 'transfer' THEN 1 END)`,
       })
       .from(transactions)
-      .leftJoin(inventoryItems, eq(transactions.itemId, inventoryItems.id))
       .leftJoin(users, eq(transactions.userId, users.id))
-      .leftJoin(regions, eq(inventoryItems.regionId, regions.id))
       .$dynamic();
 
-    // Apply filters
-    const conditions = [];
-    if (filters?.startDate) {
-      conditions.push(gte(transactions.createdAt, new Date(filters.startDate)));
-    }
-    if (filters?.endDate) {
-      conditions.push(lte(transactions.createdAt, new Date(filters.endDate)));
-    }
-    if (filters?.regionId) {
-      conditions.push(eq(inventoryItems.regionId, filters.regionId));
-    }
-
-    let finalQuery = baseQuery;
     if (conditions.length > 0) {
-      finalQuery = baseQuery.where(conditions.length === 1 ? conditions[0] : and(...conditions));
+      totalsQuery = totalsQuery.where(and(...conditions));
     }
 
-    const allTransactions = await finalQuery;
+    const [totals] = await totalsQuery;
 
-    // Calculate statistics
-    const totalTransactions = allTransactions.length;
-    const totalAdditions = allTransactions.filter(t => t.type === 'add').length;
-    const totalWithdrawals = allTransactions.filter(t => t.type === 'withdraw').length;
-    const totalAddedQuantity = allTransactions
-      .filter(t => t.type === 'add')
-      .reduce((sum, t) => sum + t.quantity, 0);
-    const totalWithdrawnQuantity = allTransactions
-      .filter(t => t.type === 'withdraw')
-      .reduce((sum, t) => sum + t.quantity, 0);
+    let byRegionQuery = this.db
+      .select({
+        regionName: sql<string>`COALESCE(${regions.name}, 'غير محدد')`,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(transactions)
+      .leftJoin(users, eq(transactions.userId, users.id))
+      .leftJoin(regions, eq(users.regionId, regions.id))
+      .$dynamic();
 
-    // Group by region
-    const regionGroups = allTransactions.reduce((acc, t) => {
-      const regionName = t.regionName || "غير محدد";
-      acc[regionName] = (acc[regionName] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    const byRegion = Object.entries(regionGroups)
-      .map(([regionName, count]) => ({ regionName, count }))
-      .sort((a, b) => b.count - a.count);
-
-    // Group by user
-    const userGroups = allTransactions.reduce((acc, t) => {
-      const userName = t.userName || "غير محدد";
-      acc[userName] = (acc[userName] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    const byUser = Object.entries(userGroups)
-      .map(([userName, count]) => ({ userName, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10); // Top 10 users
-
-    // Group by day (last 7 days)
-    const now = new Date();
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const recentTransactions = allTransactions.filter(t => t.createdAt && t.createdAt >= sevenDaysAgo);
-    
-    const dailyGroups = recentTransactions.reduce((acc, t) => {
-      const date = t.createdAt!.toISOString().split('T')[0];
-      acc[date] = (acc[date] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    
-    // Fill in missing days with 0
-    const dailyTransactions = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      dailyTransactions.push({ date, count: dailyGroups[date] || 0 });
+    if (conditions.length > 0) {
+      byRegionQuery = byRegionQuery.where(and(...conditions));
     }
+
+    const byRegionRows = await byRegionQuery
+      .groupBy(regions.id, regions.name)
+      .orderBy(desc(sql`COUNT(*)`))
+      .limit(10);
+
+    let byUserQuery = this.db
+      .select({
+        userName: sql<string>`COALESCE(${users.fullName}, 'غير محدد')`,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(transactions)
+      .leftJoin(users, eq(transactions.userId, users.id))
+      .$dynamic();
+
+    if (conditions.length > 0) {
+      byUserQuery = byUserQuery.where(and(...conditions));
+    }
+
+    const byUserRows = await byUserQuery
+      .groupBy(users.id, users.fullName)
+      .orderBy(desc(sql`COUNT(*)`))
+      .limit(10);
+
+    const totalAdditions = Number(totals?.totalAdditions || 0);
+    const totalWithdrawals = Number(totals?.totalWithdrawals || 0);
 
     return {
-      totalTransactions,
+      totalTransactions: Number(totals?.totalTransactions || 0),
       totalAdditions,
       totalWithdrawals,
-      totalAddedQuantity,
-      totalWithdrawnQuantity,
-      byRegion,
-      byUser,
-      dailyTransactions,
+      totalAddedQuantity: Number(totals?.totalAddedQuantity || 0),
+      totalWithdrawnQuantity: Number(totals?.totalWithdrawnQuantity || 0),
+      byRegion: byRegionRows.map((row) => ({
+        regionName: row.regionName || 'غير محدد',
+        count: Number(row.count || 0),
+      })),
+      byUser: byUserRows.map((row) => ({
+        userName: row.userName || 'غير محدد',
+        count: Number(row.count || 0),
+      })),
+      totalInbound: totalAdditions,
+      totalOutbound: totalWithdrawals,
+      totalAdjustment: Number(totals?.totalAdjustment || 0),
+      totalTransfer: Number(totals?.totalTransfer || 0),
     };
   }
 
-  // Dashboard
-  async getDashboardStats(): Promise<DashboardStats> {
-    const [itemStats] = await db
-      .select({
-        totalItems: count(inventoryItems.id),
-        totalQuantity: sql<number>`coalesce(sum(${inventoryItems.quantity}), 0)`,
-      })
-      .from(inventoryItems);
-
-    const [lowStockCount] = await db
-      .select({ count: count() })
-      .from(inventoryItems)
-      .where(sql`${inventoryItems.quantity} <= ${inventoryItems.minThreshold} AND ${inventoryItems.quantity} > 0`);
-
-    const [outOfStockCount] = await db
-      .select({ count: count() })
-      .from(inventoryItems)
-      .where(eq(inventoryItems.quantity, 0));
-
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    
-    const [todayTransactionCount] = await db
-      .select({ count: count() })
-      .from(transactions)
-      .where(gte(transactions.createdAt, startOfDay));
-
-    return {
-      totalItems: itemStats.totalItems,
-      lowStockItems: lowStockCount.count,
-      outOfStockItems: outOfStockCount.count,
-      todayTransactions: todayTransactionCount.count,
-    };
-  }
-
-  async getAdminStats(): Promise<AdminStats> {
-    const [regionCount] = await db.select({ count: count() }).from(regions);
-    const [userCount] = await db.select({ count: count() }).from(users);
-    const [activeUserCount] = await db
-      .select({ count: count() })
-      .from(users)
-      .where(eq(users.isActive, true));
-    const [transactionCount] = await db.select({ count: count() }).from(transactions);
-    
-    const recentTransactions = await this.getRecentTransactions(10);
-
-    return {
-      totalRegions: regionCount.count,
-      totalUsers: userCount.count,
-      activeUsers: activeUserCount.count,
-      totalTransactions: transactionCount.count,
-      recentTransactions,
-    };
-  }
-
-  // Stock Operations
-  async addStock(itemId: string, quantity: number, reason?: string, userId?: string): Promise<InventoryItem> {
-    const item = await this.getInventoryItem(itemId);
-    if (!item) {
-      throw new Error(`Item with id ${itemId} not found`);
-    }
-
-    const updatedItem = await this.updateInventoryItem(itemId, {
-      quantity: item.quantity + quantity,
-    });
-
-    await this.createTransaction({
-      itemId,
-      userId,
-      type: "add",
-      quantity,
-      reason,
-    });
-
-    return updatedItem;
-  }
-
-  async withdrawStock(itemId: string, quantity: number, reason?: string, userId?: string): Promise<InventoryItem> {
-    const item = await this.getInventoryItem(itemId);
-    if (!item) {
-      throw new Error(`Item with id ${itemId} not found`);
-    }
-
-    if (item.quantity < quantity) {
-      throw new Error(`Insufficient stock. Available: ${item.quantity}, Requested: ${quantity}`);
-    }
-
-    const updatedItem = await this.updateInventoryItem(itemId, {
-      quantity: item.quantity - quantity,
-    });
-
-    await this.createTransaction({
-      itemId,
-      userId,
-      type: "withdraw",
-      quantity,
-      reason,
-    });
-
-    return updatedItem;
-  }
-
-  // Technicians Inventory Operations
-  async getTechniciansInventory(): Promise<TechnicianInventory[]> {
-    const techs = await db
-      .select()
-      .from(techniciansInventory)
-      .orderBy(desc(techniciansInventory.createdAt));
-    return techs;
-  }
-
-  async getTechnicianInventory(id: string): Promise<TechnicianInventory | undefined> {
-    const [tech] = await db
-      .select()
-      .from(techniciansInventory)
-      .where(eq(techniciansInventory.createdBy, id));
-    return tech || undefined;
-  }
-
-  async createTechnicianInventory(data: InsertTechnicianInventory): Promise<TechnicianInventory> {
-    const [tech] = await db
-      .insert(techniciansInventory)
-      .values(data)
-      .returning();
-    return tech;
-  }
-
-  async updateTechnicianInventory(id: string, updates: Partial<InsertTechnicianInventory>): Promise<TechnicianInventory> {
-    const [tech] = await db
-      .update(techniciansInventory)
-      .set({
-        ...updates,
-        updatedAt: new Date(),
-      })
-      .where(eq(techniciansInventory.createdBy, id))
-      .returning();
-    
-    if (!tech) {
-      throw new Error(`Technician inventory with id ${id} not found`);
-    }
-    return tech;
-  }
-
-  async deleteTechnicianInventory(id: string): Promise<boolean> {
-    const result = await db
-      .delete(techniciansInventory)
-      .where(eq(techniciansInventory.id, id));
-    return (result.rowCount || 0) > 0;
-  }
-
-  // Withdrawn Devices Operations
-  async getWithdrawnDevices(): Promise<WithdrawnDevice[]> {
-    const devices = await db
-      .select()
-      .from(withdrawnDevices)
-      .orderBy(desc(withdrawnDevices.createdAt));
-    return devices;
-  }
-
-  async getWithdrawnDevicesByRegion(regionId: string): Promise<WithdrawnDevice[]> {
-    const devices = await db
-      .select()
-      .from(withdrawnDevices)
-      .where(eq(withdrawnDevices.regionId, regionId))
-      .orderBy(desc(withdrawnDevices.createdAt));
-    return devices;
-  }
-
-  async getWithdrawnDevice(id: string): Promise<WithdrawnDevice | undefined> {
-    const [device] = await db
-      .select()
-      .from(withdrawnDevices)
-      .where(eq(withdrawnDevices.id, id));
-    return device || undefined;
-  }
-
-  async createWithdrawnDevice(data: InsertWithdrawnDevice): Promise<WithdrawnDevice> {
-    const [device] = await db
-      .insert(withdrawnDevices)
-      .values(data)
-      .returning();
-    return device;
-  }
-
-  async updateWithdrawnDevice(id: string, updates: Partial<InsertWithdrawnDevice>): Promise<WithdrawnDevice> {
-    const [device] = await db
-      .update(withdrawnDevices)
-      .set({
-        ...updates,
-        updatedAt: new Date(),
-      })
-      .where(eq(withdrawnDevices.id, id))
-      .returning();
-    
-    if (!device) {
-      throw new Error(`Withdrawn device with id ${id} not found`);
-    }
-    return device;
-  }
-
-  async deleteWithdrawnDevice(id: string): Promise<boolean> {
-    const result = await db
-      .delete(withdrawnDevices)
-      .where(eq(withdrawnDevices.id, id));
-    return (result.rowCount || 0) > 0;
-  }
-
-  // Received Devices Operations
-  async getReceivedDevices(filters?: { status?: string; technicianId?: string; supervisorId?: string; regionId?: string }): Promise<ReceivedDevice[]> {
-    let query = db.select().from(receivedDevices).orderBy(desc(receivedDevices.createdAt));
-
-    const conditions = [];
-    if (filters?.status) {
-      conditions.push(eq(receivedDevices.status, filters.status));
-    }
-    if (filters?.technicianId) {
-      conditions.push(eq(receivedDevices.technicianId, filters.technicianId));
-    }
-    if (filters?.supervisorId) {
-      conditions.push(eq(receivedDevices.supervisorId, filters.supervisorId));
-    }
-    if (filters?.regionId) {
-      conditions.push(eq(receivedDevices.regionId, filters.regionId));
-    }
-
-    if (conditions.length > 0) {
-      const devices = await db
-        .select()
-        .from(receivedDevices)
-        .where(and(...conditions))
-        .orderBy(desc(receivedDevices.createdAt));
-      return devices;
-    }
-
-    const devices = await query;
-    return devices;
-  }
-
-  async getReceivedDevice(id: string): Promise<ReceivedDevice | undefined> {
-    const [device] = await db
-      .select()
-      .from(receivedDevices)
-      .where(eq(receivedDevices.id, id));
-    return device || undefined;
-  }
-
-  async createReceivedDevice(data: InsertReceivedDevice): Promise<ReceivedDevice> {
-    const [device] = await db
-      .insert(receivedDevices)
-      .values(data)
-      .returning();
-    return device;
-  }
-
-  async updateReceivedDeviceStatus(id: string, status: string, approvedBy: string, adminNotes?: string): Promise<ReceivedDevice> {
-    const [device] = await db
-      .update(receivedDevices)
-      .set({
-        status,
-        approvedBy,
-        adminNotes,
-        approvedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(receivedDevices.id, id))
-      .returning();
-
-    if (!device) {
-      throw new Error(`Received device with id ${id} not found`);
-    }
-    return device;
-  }
-
-  async deleteReceivedDevice(id: string): Promise<boolean> {
-    const result = await db
-      .delete(receivedDevices)
-      .where(eq(receivedDevices.id, id));
-    return (result.rowCount || 0) > 0;
-  }
-
-  async getPendingReceivedDevicesCount(supervisorId?: string, regionId?: string | null): Promise<number> {
-    const conditions = [eq(receivedDevices.status, 'pending')];
-    
-    if (supervisorId && regionId) {
-      // Supervisor sees devices assigned to them OR in their region
-      const orCondition = or(
-        eq(receivedDevices.supervisorId, supervisorId),
-        eq(receivedDevices.regionId, regionId)
-      );
-      if (orCondition) {
-        conditions.push(orCondition);
-      }
-    } else if (supervisorId) {
-      conditions.push(eq(receivedDevices.supervisorId, supervisorId));
-    } else if (regionId) {
-      conditions.push(eq(receivedDevices.regionId, regionId));
-    }
-
-    const result = await db
-      .select({ count: count() })
-      .from(receivedDevices)
-      .where(and(...conditions));
-
-    return result[0]?.count || 0;
-  }
-
-  // Technician Fixed Inventories Operations
   async getTechnicianFixedInventory(technicianId: string): Promise<TechnicianFixedInventory | undefined> {
-    const [inventory] = await db
+    const [inventory] = await this.db
       .select()
       .from(technicianFixedInventories)
       .where(eq(technicianFixedInventories.technicianId, technicianId));
@@ -1240,7 +976,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTechnicianFixedInventory(data: InsertTechnicianFixedInventory): Promise<TechnicianFixedInventory> {
-    const [inventory] = await db
+    const [inventory] = await this.db
       .insert(technicianFixedInventories)
       .values(data)
       .returning();
@@ -1248,7 +984,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTechnicianFixedInventory(technicianId: string, updates: Partial<InsertTechnicianFixedInventory>): Promise<TechnicianFixedInventory> {
-    const [inventory] = await db
+    const [inventory] = await this.db
       .update(technicianFixedInventories)
       .set({
         ...updates,
@@ -1256,311 +992,121 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(technicianFixedInventories.technicianId, technicianId))
       .returning();
-    
+
     if (!inventory) {
-      throw new Error(`Fixed inventory for technician ${technicianId} not found`);
+      throw new Error(`Technician fixed inventory for technician ${technicianId} not found`);
     }
     return inventory;
   }
 
-  async deleteTechnicianFixedInventory(technicianId: string): Promise<void> {
-    await db
+  async deleteTechnicianFixedInventory(technicianId: string): Promise<boolean> {
+    const result = await this.db
       .delete(technicianFixedInventories)
       .where(eq(technicianFixedInventories.technicianId, technicianId));
+    return (result.rowCount || 0) > 0;
   }
 
   async getAllTechniciansWithFixedInventory(): Promise<TechnicianWithFixedInventory[]> {
-    const technicians = await db
+    const technicians = await this.db
       .select({
-        id: users.id,
-        fullName: users.fullName,
+        technicianId: users.id,
+        technicianName: users.fullName,
         city: users.city,
-        fixedInventory: technicianFixedInventories,
       })
       .from(users)
-      .leftJoin(technicianFixedInventories, eq(users.id, technicianFixedInventories.technicianId))
       .where(eq(users.role, 'technician'));
 
-    return technicians.map(tech => {
-      let alertLevel: 'good' | 'warning' | 'critical' = 'good';
-      
-      if (tech.fixedInventory) {
-        const totalItems = 
-          tech.fixedInventory.n950Boxes + tech.fixedInventory.n950Units +
-          tech.fixedInventory.i9000sBoxes + tech.fixedInventory.i9000sUnits +
-          tech.fixedInventory.i9100Boxes + tech.fixedInventory.i9100Units +
-          tech.fixedInventory.newBatteriesBoxes + tech.fixedInventory.newBatteriesUnits +
-          tech.fixedInventory.rollPaperBoxes + tech.fixedInventory.rollPaperUnits +
-          tech.fixedInventory.stickersBoxes + tech.fixedInventory.stickersUnits +
-          tech.fixedInventory.mobilySimBoxes + tech.fixedInventory.mobilySimUnits +
-          tech.fixedInventory.stcSimBoxes + tech.fixedInventory.stcSimUnits +
-          tech.fixedInventory.zainSimBoxes + tech.fixedInventory.zainSimUnits;
-        
-        const threshold = tech.fixedInventory.criticalStockThreshold || 70;
-        const lowThreshold = tech.fixedInventory.lowStockThreshold || 30;
-        
-        if (totalItems === 0) {
-          alertLevel = 'critical';
-        } else if (totalItems < lowThreshold) {
-          alertLevel = 'critical';
-        } else if (totalItems < threshold) {
-          alertLevel = 'warning';
-        }
-      }
+    const result: TechnicianWithFixedInventory[] = [];
+    for (const tech of technicians) {
+      const fixedInventory = await this.getTechnicianFixedInventory(tech.technicianId);
+      result.push({
+        technicianId: tech.technicianId,
+        technicianName: tech.technicianName,
+        city: tech.city || 'غير محدد',
+        fixedInventory: fixedInventory || null,
+        alertLevel: 'good',
+      });
+    }
 
-      return {
-        technicianId: tech.id,
-        technicianName: tech.fullName,
-        city: tech.city || '',
-        fixedInventory: tech.fixedInventory || null,
-        alertLevel,
-      };
-    });
+    return result;
   }
 
   async getFixedInventorySummary(): Promise<FixedInventorySummary> {
-    const inventories = await db
-      .select()
+    const [summary] = await this.db
+      .select({
+        totalN950: sql<number>`COALESCE(SUM(${technicianFixedInventories.n950Boxes} + ${technicianFixedInventories.n950Units}), 0)`,
+        totalI9000s: sql<number>`COALESCE(SUM(${technicianFixedInventories.i9000sBoxes} + ${technicianFixedInventories.i9000sUnits}), 0)`,
+        totalI9100: sql<number>`COALESCE(SUM(${technicianFixedInventories.i9100Boxes} + ${technicianFixedInventories.i9100Units}), 0)`,
+        totalRollPaper: sql<number>`COALESCE(SUM(${technicianFixedInventories.rollPaperBoxes} + ${technicianFixedInventories.rollPaperUnits}), 0)`,
+        totalStickers: sql<number>`COALESCE(SUM(${technicianFixedInventories.stickersBoxes} + ${technicianFixedInventories.stickersUnits}), 0)`,
+        totalNewBatteries: sql<number>`COALESCE(SUM(${technicianFixedInventories.newBatteriesBoxes} + ${technicianFixedInventories.newBatteriesUnits}), 0)`,
+        totalMobilySim: sql<number>`COALESCE(SUM(${technicianFixedInventories.mobilySimBoxes} + ${technicianFixedInventories.mobilySimUnits}), 0)`,
+        totalStcSim: sql<number>`COALESCE(SUM(${technicianFixedInventories.stcSimBoxes} + ${technicianFixedInventories.stcSimUnits}), 0)`,
+        totalZainSim: sql<number>`COALESCE(SUM(${technicianFixedInventories.zainSimBoxes} + ${technicianFixedInventories.zainSimUnits}), 0)`,
+        techniciansWithCriticalStock: sql<number>`0`,
+        techniciansWithWarningStock: sql<number>`0`,
+        techniciansWithGoodStock: sql<number>`COUNT(*)`,
+      })
       .from(technicianFixedInventories);
 
-    const summary = inventories.reduce((acc, inv) => {
-      acc.totalN950 += (inv.n950Boxes || 0) + (inv.n950Units || 0);
-      acc.totalI9000s += (inv.i9000sBoxes || 0) + (inv.i9000sUnits || 0);
-      acc.totalI9100 += (inv.i9100Boxes || 0) + (inv.i9100Units || 0);
-      acc.totalRollPaper += (inv.rollPaperBoxes || 0) + (inv.rollPaperUnits || 0);
-      acc.totalStickers += (inv.stickersBoxes || 0) + (inv.stickersUnits || 0);
-      acc.totalNewBatteries += (inv.newBatteriesBoxes || 0) + (inv.newBatteriesUnits || 0);
-      acc.totalMobilySim += (inv.mobilySimBoxes || 0) + (inv.mobilySimUnits || 0);
-      acc.totalStcSim += (inv.stcSimBoxes || 0) + (inv.stcSimUnits || 0);
-      acc.totalZainSim += (inv.zainSimBoxes || 0) + (inv.zainSimUnits || 0);
-
-      const totalItems = 
-        (inv.n950Boxes || 0) + (inv.n950Units || 0) +
-        (inv.i9000sBoxes || 0) + (inv.i9000sUnits || 0) +
-        (inv.i9100Boxes || 0) + (inv.i9100Units || 0) +
-        (inv.newBatteriesBoxes || 0) + (inv.newBatteriesUnits || 0) +
-        (inv.rollPaperBoxes || 0) + (inv.rollPaperUnits || 0) +
-        (inv.stickersBoxes || 0) + (inv.stickersUnits || 0) +
-        (inv.mobilySimBoxes || 0) + (inv.mobilySimUnits || 0) +
-        (inv.stcSimBoxes || 0) + (inv.stcSimUnits || 0) +
-        (inv.zainSimBoxes || 0) + (inv.zainSimUnits || 0);
-
-      const threshold = inv.criticalStockThreshold || 70;
-      const lowThreshold = inv.lowStockThreshold || 30;
-
-      if (totalItems === 0 || totalItems < lowThreshold) {
-        acc.techniciansWithCriticalStock++;
-      } else if (totalItems < threshold) {
-        acc.techniciansWithWarningStock++;
-      } else {
-        acc.techniciansWithGoodStock++;
-      }
-
-      return acc;
-    }, {
-      totalN950: 0,
-      totalI9000s: 0,
-      totalI9100: 0,
-      totalRollPaper: 0,
-      totalStickers: 0,
-      totalNewBatteries: 0,
-      totalMobilySim: 0,
-      totalStcSim: 0,
-      totalZainSim: 0,
-      techniciansWithCriticalStock: 0,
-      techniciansWithWarningStock: 0,
-      techniciansWithGoodStock: 0,
-    });
-
-    return summary;
+    return {
+      totalN950: Number(summary?.totalN950 || 0),
+      totalI9000s: Number(summary?.totalI9000s || 0),
+      totalI9100: Number(summary?.totalI9100 || 0),
+      totalRollPaper: Number(summary?.totalRollPaper || 0),
+      totalStickers: Number(summary?.totalStickers || 0),
+      totalNewBatteries: Number(summary?.totalNewBatteries || 0),
+      totalMobilySim: Number(summary?.totalMobilySim || 0),
+      totalStcSim: Number(summary?.totalStcSim || 0),
+      totalZainSim: Number(summary?.totalZainSim || 0),
+      techniciansWithCriticalStock: Number(summary?.techniciansWithCriticalStock || 0),
+      techniciansWithWarningStock: Number(summary?.techniciansWithWarningStock || 0),
+      techniciansWithGoodStock: Number(summary?.techniciansWithGoodStock || 0),
+    };
   }
 
-  async getAllTechniciansWithBothInventories() {
-    const technicians = await db
+  async getAllTechniciansWithBothInventories(): Promise<any[]> {
+    const technicians = await this.db
       .select({
-        id: users.id,
-        fullName: users.fullName,
+        technicianId: users.id,
+        technicianName: users.fullName,
         city: users.city,
         regionId: users.regionId,
-        fixedInventory: technicianFixedInventories,
       })
       .from(users)
-      .leftJoin(technicianFixedInventories, eq(users.id, technicianFixedInventories.technicianId))
       .where(eq(users.role, 'technician'));
 
-    const result = await Promise.all(
-      technicians.map(async (tech) => {
-        // Get moving inventory (legacy)
-        const movingInventory = await db
-          .select()
-          .from(techniciansInventory)
-          .where(eq(techniciansInventory.createdBy, tech.id))
-          .limit(1);
-
-        // Get fixed inventory entries (dynamic items)
-        const fixedEntries = await db
-          .select()
-          .from(technicianFixedInventoryEntries)
-          .where(eq(technicianFixedInventoryEntries.technicianId, tech.id));
-
-        // Get moving inventory entries (dynamic items)
-        const movingEntries = await db
-          .select()
-          .from(technicianMovingInventoryEntries)
-          .where(eq(technicianMovingInventoryEntries.technicianId, tech.id));
-
-        let alertLevel: 'good' | 'warning' | 'critical' = 'good';
-        
-        // Calculate total from legacy fields
-        let totalItems = 0;
-        if (tech.fixedInventory) {
-          totalItems = 
-            (tech.fixedInventory.n950Boxes || 0) + (tech.fixedInventory.n950Units || 0) +
-            (tech.fixedInventory.i9000sBoxes || 0) + (tech.fixedInventory.i9000sUnits || 0) +
-            (tech.fixedInventory.i9100Boxes || 0) + (tech.fixedInventory.i9100Units || 0) +
-            (tech.fixedInventory.newBatteriesBoxes || 0) + (tech.fixedInventory.newBatteriesUnits || 0) +
-            (tech.fixedInventory.rollPaperBoxes || 0) + (tech.fixedInventory.rollPaperUnits || 0) +
-            (tech.fixedInventory.stickersBoxes || 0) + (tech.fixedInventory.stickersUnits || 0) +
-            (tech.fixedInventory.mobilySimBoxes || 0) + (tech.fixedInventory.mobilySimUnits || 0) +
-            (tech.fixedInventory.stcSimBoxes || 0) + (tech.fixedInventory.stcSimUnits || 0) +
-            (tech.fixedInventory.zainSimBoxes || 0) + (tech.fixedInventory.zainSimUnits || 0);
-          
-          const threshold = tech.fixedInventory.criticalStockThreshold || 70;
-          const lowThreshold = tech.fixedInventory.lowStockThreshold || 30;
-          
-          if (totalItems === 0) {
-            alertLevel = 'critical';
-          } else if (totalItems < lowThreshold) {
-            alertLevel = 'critical';
-          } else if (totalItems < threshold) {
-            alertLevel = 'warning';
-          }
-        }
-        
-        // Add entries totals
-        fixedEntries.forEach(e => {
-          totalItems += (e.boxes || 0) + (e.units || 0);
-        });
-
-        return {
-          technicianId: tech.id,
-          technicianName: tech.fullName,
-          city: tech.city || '',
-          regionId: tech.regionId,
-          fixedInventory: tech.fixedInventory ? {
-            ...tech.fixedInventory,
-            entries: fixedEntries
-          } : null,
-          movingInventory: movingInventory[0] ? {
-            ...movingInventory[0],
-            entries: movingEntries
-          } : null,
-          alertLevel,
-        };
-      })
-    );
+    const result: any[] = [];
+    for (const tech of technicians) {
+      const fixedInventory = await this.getTechnicianFixedInventory(tech.technicianId);
+      const movingInventory = await this.getTechnicianInventory(tech.technicianId);
+      result.push({
+        ...tech,
+        city: tech.city || 'غير محدد',
+        fixedInventory: fixedInventory || null,
+        movingInventory: movingInventory || null,
+        alertLevel: 'good',
+      });
+    }
 
     return result;
   }
 
-  async getRegionTechniciansWithInventories(regionId: string) {
-    const technicians = await db
-      .select({
-        id: users.id,
-        fullName: users.fullName,
-        city: users.city,
-        regionId: users.regionId,
-        fixedInventory: technicianFixedInventories,
-      })
-      .from(users)
-      .leftJoin(technicianFixedInventories, eq(users.id, technicianFixedInventories.technicianId))
-      .where(and(eq(users.role, 'technician'), eq(users.regionId, regionId)));
-
-    const result = await Promise.all(
-      technicians.map(async (tech) => {
-        // Get moving inventory (legacy)
-        const movingInventory = await db
-          .select()
-          .from(techniciansInventory)
-          .where(eq(techniciansInventory.createdBy, tech.id))
-          .limit(1);
-
-        // Get fixed inventory entries (dynamic items)
-        const fixedEntries = await db
-          .select()
-          .from(technicianFixedInventoryEntries)
-          .where(eq(technicianFixedInventoryEntries.technicianId, tech.id));
-
-        // Get moving inventory entries (dynamic items)
-        const movingEntries = await db
-          .select()
-          .from(technicianMovingInventoryEntries)
-          .where(eq(technicianMovingInventoryEntries.technicianId, tech.id));
-
-        let alertLevel: 'good' | 'warning' | 'critical' = 'good';
-        
-        let totalItems = 0;
-        if (tech.fixedInventory) {
-          totalItems = 
-            (tech.fixedInventory.n950Boxes || 0) + (tech.fixedInventory.n950Units || 0) +
-            (tech.fixedInventory.i9000sBoxes || 0) + (tech.fixedInventory.i9000sUnits || 0) +
-            (tech.fixedInventory.i9100Boxes || 0) + (tech.fixedInventory.i9100Units || 0) +
-            (tech.fixedInventory.newBatteriesBoxes || 0) + (tech.fixedInventory.newBatteriesUnits || 0) +
-            (tech.fixedInventory.rollPaperBoxes || 0) + (tech.fixedInventory.rollPaperUnits || 0) +
-            (tech.fixedInventory.stickersBoxes || 0) + (tech.fixedInventory.stickersUnits || 0) +
-            (tech.fixedInventory.mobilySimBoxes || 0) + (tech.fixedInventory.mobilySimUnits || 0) +
-            (tech.fixedInventory.stcSimBoxes || 0) + (tech.fixedInventory.stcSimUnits || 0) +
-            (tech.fixedInventory.zainSimBoxes || 0) + (tech.fixedInventory.zainSimUnits || 0);
-          
-          const threshold = tech.fixedInventory.criticalStockThreshold || 70;
-          const lowThreshold = tech.fixedInventory.lowStockThreshold || 30;
-          
-          if (totalItems === 0) {
-            alertLevel = 'critical';
-          } else if (totalItems < lowThreshold) {
-            alertLevel = 'critical';
-          } else if (totalItems < threshold) {
-            alertLevel = 'warning';
-          }
-        }
-        
-        // Add entries totals
-        fixedEntries.forEach(e => {
-          totalItems += (e.boxes || 0) + (e.units || 0);
-        });
-
-        return {
-          technicianId: tech.id,
-          technicianName: tech.fullName,
-          city: tech.city || '',
-          regionId: tech.regionId,
-          fixedInventory: tech.fixedInventory ? {
-            ...tech.fixedInventory,
-            entries: fixedEntries
-          } : null,
-          movingInventory: movingInventory[0] ? {
-            ...movingInventory[0],
-            entries: movingEntries
-          } : null,
-          alertLevel,
-        };
-      })
-    );
-
-    return result;
+  async getRegionTechniciansWithInventories(regionId: string): Promise<any[]> {
+    const all = await this.getAllTechniciansWithBothInventories();
+    return all.filter((tech) => tech.regionId === regionId);
   }
 
-  // Stock Movements Operations
-  async createStockMovement(data: InsertStockMovement): Promise<StockMovement> {
-    const [movement] = await db
+  async createStockMovement(movement: InsertStockMovement): Promise<StockMovement> {
+    const [created] = await this.db
       .insert(stockMovements)
-      .values(data)
+      .values(movement)
       .returning();
-    return movement;
+    return created;
   }
 
   async getStockMovements(technicianId?: string, limit: number = 50): Promise<StockMovementWithDetails[]> {
-    const baseQuery = db
+    let query = this.db
       .select({
         id: stockMovements.id,
         technicianId: stockMovements.technicianId,
@@ -1576,46 +1122,56 @@ export class DatabaseStorage implements IStorage {
         technicianName: users.fullName,
       })
       .from(stockMovements)
-      .leftJoin(users, eq(stockMovements.technicianId, users.id));
-    
-    const movements = technicianId 
-      ? await baseQuery
-          .where(eq(stockMovements.technicianId, technicianId))
-          .orderBy(desc(stockMovements.createdAt))
-          .limit(limit)
-      : await baseQuery
-          .orderBy(desc(stockMovements.createdAt))
-          .limit(limit);
+      .leftJoin(users, eq(stockMovements.technicianId, users.id))
+      .$dynamic();
 
-    const itemNames: Record<string, string> = {
-      'n950': 'أجهزة N950',
-      'i900': 'أجهزة I900',
-      'rollPaper': 'أوراق رول',
-      'stickers': 'ملصقات مداى',
-      'mobilySim': 'شرائح موبايلي',
-      'stcSim': 'شرائح STC',
-      'zainSim': 'شرائح زين',
-    };
+    if (technicianId) {
+      query = query.where(eq(stockMovements.technicianId, technicianId));
+    }
 
-    // Get performer names separately
-    const movementsWithPerformer = await Promise.all(
-      movements.map(async (m) => {
-        const performer = await db
-          .select({ fullName: users.fullName })
-          .from(users)
-          .where(eq(users.id, m.performedBy))
-          .limit(1);
-        
-        return {
-          ...m,
-          technicianName: m.technicianName ?? undefined,
-          performedByName: performer[0]?.fullName || undefined,
-          itemNameAr: itemNames[m.itemType] || m.itemType,
-        };
+    const rows = await query
+      .orderBy(desc(stockMovements.createdAt))
+      .limit(limit);
+
+    return rows.map((row) => ({
+      ...row,
+      technicianName: row.technicianName || undefined,
+      performedByName: undefined,
+      itemNameAr: row.itemType,
+    }));
+  }
+
+  async getStockMovementsByRegion(regionId: string): Promise<StockMovementWithDetails[]> {
+    const rows = await this.db
+      .select({
+        id: stockMovements.id,
+        technicianId: stockMovements.technicianId,
+        itemType: stockMovements.itemType,
+        packagingType: stockMovements.packagingType,
+        quantity: stockMovements.quantity,
+        fromInventory: stockMovements.fromInventory,
+        toInventory: stockMovements.toInventory,
+        reason: stockMovements.reason,
+        performedBy: stockMovements.performedBy,
+        notes: stockMovements.notes,
+        createdAt: stockMovements.createdAt,
+        technicianName: users.fullName,
       })
-    );
+      .from(stockMovements)
+      .leftJoin(users, eq(stockMovements.technicianId, users.id))
+      .where(eq(users.regionId, regionId))
+      .orderBy(desc(stockMovements.createdAt));
 
-    return movementsWithPerformer;
+    return rows.map((row) => ({
+      ...row,
+      technicianName: row.technicianName || undefined,
+      performedByName: undefined,
+      itemNameAr: row.itemType,
+    }));
+  }
+
+  async getStockMovementsByTechnician(technicianId: string): Promise<StockMovementWithDetails[]> {
+    return this.getStockMovements(technicianId);
   }
 
   async transferStock(params: {
@@ -1629,1215 +1185,306 @@ export class DatabaseStorage implements IStorage {
     reason?: string;
     notes?: string;
   }): Promise<{ movement: StockMovement; updatedInventory: TechnicianFixedInventory }> {
-    const { technicianId, itemType, packagingType, quantity, fromInventory, toInventory, performedBy, reason, notes } = params;
-
-    // Get or create fixed inventory
-    let fixedInventory = await this.getTechnicianFixedInventory(technicianId);
-    if (!fixedInventory) {
-      fixedInventory = await this.createTechnicianFixedInventory({
-        technicianId,
-        n950Boxes: 0,
-        n950Units: 0,
-        i9000sBoxes: 0,
-        i9000sUnits: 0,
-        i9100Boxes: 0,
-        i9100Units: 0,
-        newBatteriesBoxes: 0,
-        newBatteriesUnits: 0,
-        rollPaperBoxes: 0,
-        rollPaperUnits: 0,
-        stickersBoxes: 0,
-        stickersUnits: 0,
-        mobilySimBoxes: 0,
-        mobilySimUnits: 0,
-        stcSimBoxes: 0,
-        stcSimUnits: 0,
-        zainSimBoxes: 0,
-        zainSimUnits: 0,
-      });
-    }
-
-    // Determine field name
-    const fieldMap: Record<string, string> = {
-      'n950_box': 'n950Boxes',
-      'n950_unit': 'n950Units',
-      'i900_box': 'i900Boxes',
-      'i900_unit': 'i900Units',
-      'rollPaper_box': 'rollPaperBoxes',
-      'rollPaper_unit': 'rollPaperUnits',
-      'stickers_box': 'stickersBoxes',
-      'stickers_unit': 'stickersUnits',
-      'mobilySim_box': 'mobilySimBoxes',
-      'mobilySim_unit': 'mobilySimUnits',
-      'stcSim_box': 'stcSimBoxes',
-      'stcSim_unit': 'stcSimUnits',
-      'lebaraSim_box': 'lebaraBoxes',
-      'lebaraSim_unit': 'lebaraUnits',
-    };
-
-    const fieldName = fieldMap[`${itemType}_${packagingType}`];
-    if (!fieldName) {
-      throw new Error(`Invalid item type or packaging type`);
-    }
-
-    const currentValue = (fixedInventory as any)[fieldName] || 0;
-
-    // Calculate new value based on direction
-    let newValue: number;
-    if (fromInventory === 'fixed' && toInventory === 'moving') {
-      // Withdrawing from fixed to moving
-      if (currentValue < quantity) {
-        throw new Error(`Insufficient stock in fixed inventory`);
-      }
-      newValue = currentValue - quantity;
-    } else if (fromInventory === 'moving' && toInventory === 'fixed') {
-      // Returning from moving to fixed
-      newValue = currentValue + quantity;
-    } else {
-      throw new Error(`Invalid inventory transfer direction`);
-    }
-
-    // Update fixed inventory
-    const updates = { [fieldName]: newValue };
-    const updatedInventory = await this.updateTechnicianFixedInventory(technicianId, updates);
-
-    // Create movement record
     const movement = await this.createStockMovement({
-      technicianId,
-      itemType,
-      packagingType,
-      quantity,
-      fromInventory,
-      toInventory,
-      performedBy,
-      reason,
-      notes,
+      technicianId: params.technicianId,
+      itemType: params.itemType,
+      packagingType: params.packagingType,
+      quantity: params.quantity,
+      fromInventory: params.fromInventory,
+      toInventory: params.toInventory,
+      performedBy: params.performedBy,
+      reason: params.reason,
+      notes: params.notes,
     });
+
+    let updatedInventory = await this.getTechnicianFixedInventory(params.technicianId);
+    if (!updatedInventory) {
+      updatedInventory = await this.createTechnicianFixedInventory({ technicianId: params.technicianId });
+    }
 
     return { movement, updatedInventory };
   }
 
-  // Warehouses
-  async getWarehouses(): Promise<WarehouseWithStats[]> {
-    const warehousesList = await db
-      .select({
-        id: warehouses.id,
-        name: warehouses.name,
-        location: warehouses.location,
-        description: warehouses.description,
-        isActive: warehouses.isActive,
-        createdBy: warehouses.createdBy,
-        regionId: warehouses.regionId,
-        createdAt: warehouses.createdAt,
-        updatedAt: warehouses.updatedAt,
-        creatorName: users.fullName,
-      })
-      .from(warehouses)
-      .leftJoin(users, eq(warehouses.createdBy, users.id));
-
-    const result: WarehouseWithStats[] = [];
-    for (const warehouse of warehousesList) {
-      const [inventory] = await db
-        .select()
-        .from(warehouseInventory)
-        .where(eq(warehouseInventory.warehouseId, warehouse.id));
-
-      const totalItems = inventory
-        ? (inventory.n950Boxes || 0) + (inventory.n950Units || 0) +
-          (inventory.i9000sBoxes || 0) + (inventory.i9000sUnits || 0) +
-          (inventory.i9100Boxes || 0) + (inventory.i9100Units || 0) +
-          (inventory.rollPaperBoxes || 0) + (inventory.rollPaperUnits || 0) +
-          (inventory.stickersBoxes || 0) + (inventory.stickersUnits || 0) +
-          (inventory.newBatteriesBoxes || 0) + (inventory.newBatteriesUnits || 0) +
-          (inventory.mobilySimBoxes || 0) + (inventory.mobilySimUnits || 0) +
-          (inventory.stcSimBoxes || 0) + (inventory.stcSimUnits || 0) +
-          (inventory.zainSimBoxes || 0) + (inventory.zainSimUnits || 0)
-        : 0;
-
-      let lowStockItemsCount = 0;
-      if (inventory) {
-        if ((inventory.n950Boxes || 0) + (inventory.n950Units || 0) < 10) lowStockItemsCount++;
-        if ((inventory.i9000sBoxes || 0) + (inventory.i9000sUnits || 0) < 10) lowStockItemsCount++;
-        if ((inventory.i9100Boxes || 0) + (inventory.i9100Units || 0) < 10) lowStockItemsCount++;
-        if ((inventory.rollPaperBoxes || 0) + (inventory.rollPaperUnits || 0) < 10) lowStockItemsCount++;
-        if ((inventory.stickersBoxes || 0) + (inventory.stickersUnits || 0) < 10) lowStockItemsCount++;
-        if ((inventory.newBatteriesBoxes || 0) + (inventory.newBatteriesUnits || 0) < 10) lowStockItemsCount++;
-        if ((inventory.mobilySimBoxes || 0) + (inventory.mobilySimUnits || 0) < 10) lowStockItemsCount++;
-        if ((inventory.stcSimBoxes || 0) + (inventory.stcSimUnits || 0) < 10) lowStockItemsCount++;
-        if ((inventory.zainSimBoxes || 0) + (inventory.zainSimUnits || 0) < 10) lowStockItemsCount++;
-      }
-
-      result.push({
-        ...warehouse,
-        inventory: inventory || null,
-        totalItems,
-        lowStockItemsCount,
-        creatorName: warehouse.creatorName || undefined,
-      });
-    }
-
-    return result;
-  }
-
-  async getWarehousesByRegion(regionId: string): Promise<WarehouseWithStats[]> {
-    const warehousesList = await db
-      .select({
-        id: warehouses.id,
-        name: warehouses.name,
-        location: warehouses.location,
-        description: warehouses.description,
-        isActive: warehouses.isActive,
-        createdBy: warehouses.createdBy,
-        regionId: warehouses.regionId,
-        createdAt: warehouses.createdAt,
-        updatedAt: warehouses.updatedAt,
-        creatorName: users.fullName,
-      })
-      .from(warehouses)
-      .leftJoin(users, eq(warehouses.createdBy, users.id))
-      .where(eq(warehouses.regionId, regionId));
-
-    const result: WarehouseWithStats[] = [];
-    for (const warehouse of warehousesList) {
-      const [inventory] = await db
-        .select()
-        .from(warehouseInventory)
-        .where(eq(warehouseInventory.warehouseId, warehouse.id));
-
-      const totalItems = inventory
-        ? (inventory.n950Boxes || 0) + (inventory.n950Units || 0) +
-          (inventory.i9000sBoxes || 0) + (inventory.i9000sUnits || 0) +
-          (inventory.i9100Boxes || 0) + (inventory.i9100Units || 0) +
-          (inventory.rollPaperBoxes || 0) + (inventory.rollPaperUnits || 0) +
-          (inventory.stickersBoxes || 0) + (inventory.stickersUnits || 0) +
-          (inventory.newBatteriesBoxes || 0) + (inventory.newBatteriesUnits || 0) +
-          (inventory.mobilySimBoxes || 0) + (inventory.mobilySimUnits || 0) +
-          (inventory.stcSimBoxes || 0) + (inventory.stcSimUnits || 0) +
-          (inventory.zainSimBoxes || 0) + (inventory.zainSimUnits || 0)
-        : 0;
-
-      let lowStockItemsCount = 0;
-      if (inventory) {
-        if ((inventory.n950Boxes || 0) + (inventory.n950Units || 0) < 10) lowStockItemsCount++;
-        if ((inventory.i9000sBoxes || 0) + (inventory.i9000sUnits || 0) < 10) lowStockItemsCount++;
-        if ((inventory.i9100Boxes || 0) + (inventory.i9100Units || 0) < 10) lowStockItemsCount++;
-        if ((inventory.rollPaperBoxes || 0) + (inventory.rollPaperUnits || 0) < 10) lowStockItemsCount++;
-        if ((inventory.stickersBoxes || 0) + (inventory.stickersUnits || 0) < 10) lowStockItemsCount++;
-        if ((inventory.newBatteriesBoxes || 0) + (inventory.newBatteriesUnits || 0) < 10) lowStockItemsCount++;
-        if ((inventory.mobilySimBoxes || 0) + (inventory.mobilySimUnits || 0) < 10) lowStockItemsCount++;
-        if ((inventory.stcSimBoxes || 0) + (inventory.stcSimUnits || 0) < 10) lowStockItemsCount++;
-        if ((inventory.zainSimBoxes || 0) + (inventory.zainSimUnits || 0) < 10) lowStockItemsCount++;
-      }
-
-      result.push({
-        ...warehouse,
-        inventory: inventory || null,
-        totalItems,
-        lowStockItemsCount,
-        creatorName: warehouse.creatorName || undefined,
-      });
-    }
-
-    return result;
-  }
-
-  async getWarehousesBySupervisor(supervisorId: string): Promise<WarehouseWithStats[]> {
-    // Get supervisor's region
-    const [supervisor] = await db
-      .select({ regionId: users.regionId })
-      .from(users)
-      .where(eq(users.id, supervisorId));
-    
-    if (!supervisor?.regionId) {
-      return [];
-    }
-    
-    // Return warehouses from supervisor's region
-    return this.getWarehousesByRegion(supervisor.regionId);
-  }
-
-  async getWarehouse(id: string): Promise<WarehouseWithInventory | undefined> {
-    const [warehouse] = await db
-      .select({
-        id: warehouses.id,
-        name: warehouses.name,
-        location: warehouses.location,
-        description: warehouses.description,
-        isActive: warehouses.isActive,
-        createdBy: warehouses.createdBy,
-        regionId: warehouses.regionId,
-        createdAt: warehouses.createdAt,
-        updatedAt: warehouses.updatedAt,
-        creatorName: users.fullName,
-      })
-      .from(warehouses)
-      .leftJoin(users, eq(warehouses.createdBy, users.id))
-      .where(eq(warehouses.id, id));
-
-    if (!warehouse) {
-      return undefined;
-    }
-
-    const [inventory] = await db
-      .select()
-      .from(warehouseInventory)
-      .where(eq(warehouseInventory.warehouseId, id));
-
-    return {
-      ...warehouse,
-      inventory: inventory || null,
-      creatorName: warehouse.creatorName || undefined,
-    };
-  }
-
-  async createWarehouse(insertWarehouse: InsertWarehouse, createdBy: string): Promise<Warehouse> {
-    const [warehouse] = await db
-      .insert(warehouses)
-      .values({
-        ...insertWarehouse,
-        createdBy,
-        isActive: insertWarehouse.isActive ?? true,
-      })
-      .returning();
-
-    await db
-      .insert(warehouseInventory)
-      .values({
-        warehouseId: warehouse.id,
-        n950Boxes: 0,
-        n950Units: 0,
-        i9000sBoxes: 0,
-        i9000sUnits: 0,
-        i9100Boxes: 0,
-        i9100Units: 0,
-        rollPaperBoxes: 0,
-        rollPaperUnits: 0,
-        stickersBoxes: 0,
-        stickersUnits: 0,
-        newBatteriesBoxes: 0,
-        newBatteriesUnits: 0,
-        mobilySimBoxes: 0,
-        mobilySimUnits: 0,
-        stcSimBoxes: 0,
-        stcSimUnits: 0,
-        zainSimBoxes: 0,
-        zainSimUnits: 0,
-      });
-
-    return warehouse;
-  }
-
-  async updateWarehouse(id: string, updates: Partial<InsertWarehouse>): Promise<Warehouse> {
-    const [warehouse] = await db
-      .update(warehouses)
-      .set({
-        ...updates,
-        updatedAt: new Date(),
-      })
-      .where(eq(warehouses.id, id))
-      .returning();
-
-    if (!warehouse) {
-      throw new Error(`Warehouse with id ${id} not found`);
-    }
-    return warehouse;
-  }
-
-  async deleteWarehouse(id: string): Promise<boolean> {
-    // Delete warehouse transfers first (they reference this warehouse)
-    await db
-      .delete(warehouseTransfers)
-      .where(eq(warehouseTransfers.warehouseId, id));
-    
-    // Delete warehouse inventory (CASCADE from schema should handle this, but let's be explicit)
-    await db
-      .delete(warehouseInventory)
-      .where(eq(warehouseInventory.warehouseId, id));
-    
-    // Delete inventory requests that reference this warehouse
-    await db
-      .delete(inventoryRequests)
-      .where(eq(inventoryRequests.warehouseId, id));
-    
-    // Finally delete the warehouse
-    const result = await db
-      .delete(warehouses)
-      .where(eq(warehouses.id, id));
-    return (result.rowCount || 0) > 0;
-  }
-
-  async getWarehouseInventory(warehouseId: string): Promise<WarehouseInventory | undefined> {
-    const [inventory] = await db
-      .select()
-      .from(warehouseInventory)
-      .where(eq(warehouseInventory.warehouseId, warehouseId));
-    return inventory || undefined;
-  }
-
-  async updateWarehouseInventory(warehouseId: string, updates: Partial<InsertWarehouseInventory>): Promise<WarehouseInventory> {
-    const [inventory] = await db
-      .update(warehouseInventory)
-      .set({
-        ...updates,
-        updatedAt: new Date(),
-      })
-      .where(eq(warehouseInventory.warehouseId, warehouseId))
-      .returning();
-
-    if (!inventory) {
-      throw new Error(`Warehouse inventory for warehouse ${warehouseId} not found`);
-    }
-    return inventory;
-  }
-
-  async transferFromWarehouse(data: InsertWarehouseTransfer): Promise<WarehouseTransfer> {
-    return await db.transaction(async (tx) => {
-      // First, ALWAYS check warehouse_inventory_entries table (new system)
-      // This is where the UI updates stock, so it should be the source of truth
-      
-      // Determine the itemTypeId to look up in entries table
-      let itemTypeIdForEntries = data.itemType;
-      
-      // If it's not a UUID (like 'n950'), it could still have an entry in the entries table
-      // Check the entries table first
-      const [entry] = await tx
-        .select()
-        .from(warehouseInventoryEntries)
-        .where(
-          and(
-            eq(warehouseInventoryEntries.warehouseId, data.warehouseId),
-            eq(warehouseInventoryEntries.itemTypeId, itemTypeIdForEntries)
-          )
-        );
-      
-      if (entry) {
-        // Found in entries table - use this as source of truth
-        const currentStock = data.packagingType === 'box' ? entry.boxes : entry.units;
-        console.log(`[Transfer] Found in entries table: ${itemTypeIdForEntries}, stock: ${currentStock}`);
-        
-        if (currentStock < data.quantity) {
-          throw new Error(`Insufficient stock in warehouse. Available: ${currentStock}, Requested: ${data.quantity}`);
-        }
-      } else {
-        // Not in entries table - fall back to legacy warehouse_inventory table
-        // Legacy field mapping for old item types
-        const fieldMap: Record<string, { boxes: string; units: string }> = {
-          'n950': { boxes: 'n950Boxes', units: 'n950Units' },
-          'i9000s': { boxes: 'i9000sBoxes', units: 'i9000sUnits' },
-          'i9100': { boxes: 'i9100Boxes', units: 'i9100Units' },
-          'rollPaper': { boxes: 'rollPaperBoxes', units: 'rollPaperUnits' },
-          'stickers': { boxes: 'stickersBoxes', units: 'stickersUnits' },
-          'newBatteries': { boxes: 'newBatteriesBoxes', units: 'newBatteriesUnits' },
-          'mobilySim': { boxes: 'mobilySimBoxes', units: 'mobilySimUnits' },
-          'stcSim': { boxes: 'stcSimBoxes', units: 'stcSimUnits' },
-          'zainSim': { boxes: 'zainSimBoxes', units: 'zainSimUnits' },
-          'lebaraSim': { boxes: 'lebaraBoxes', units: 'lebaraUnits' },
-          'lebara': { boxes: 'lebaraBoxes', units: 'lebaraUnits' },
-        };
-
-        const fields = fieldMap[data.itemType];
-        
-        if (fields) {
-          // Legacy system: use warehouse_inventory table columns
-          const [inventory] = await tx
-            .select()
-            .from(warehouseInventory)
-            .where(eq(warehouseInventory.warehouseId, data.warehouseId));
-
-          if (!inventory) {
-            throw new Error(`Warehouse inventory not found`);
-          }
-
-          const fieldName = data.packagingType === 'box' ? fields.boxes : fields.units;
-          const currentStock = (inventory as any)[fieldName] || 0;
-          console.log(`[Transfer] Using legacy table for ${data.itemType}, stock: ${currentStock}`);
-
-          if (currentStock < data.quantity) {
-            throw new Error(`Insufficient stock in warehouse. Available: ${currentStock}, Requested: ${data.quantity}`);
-          }
-        } else {
-          // Unknown item type - not found in entries table and not a legacy item
-          throw new Error(`Unknown item type: ${data.itemType}`);
-        }
-      }
-
-      // Create the transfer record (same for both systems)
-      const [transfer] = await tx
-        .insert(warehouseTransfers)
-        .values({
-          ...data,
-          status: 'pending',
-        })
-        .returning();
-
-      return transfer;
-    });
-  }
-
-  async getWarehouseTransfers(warehouseId?: string, technicianId?: string, regionId?: string, limit?: number): Promise<WarehouseTransferWithDetails[]> {
-    const itemNameMap: Record<string, string> = {
-      'n950': 'N950',
-      'i9000s': 'I9000s',
-      'i9100': 'I9100',
-      'rollPaper': 'ورق حراري',
-      'stickers': 'ملصقات',
-      'newBatteries': 'بطاريات جديدة',
-      'mobilySim': 'شريحة موبايلي',
-      'stcSim': 'شريحة STC',
-      'zainSim': 'شريحة زين',
-      'lebara': 'شريحة ليبارا',
-      'lebaraSim': 'شريحة ليبارا',
-    };
-
-    let query = db
-      .select({
-        id: warehouseTransfers.id,
-        requestId: warehouseTransfers.requestId,
-        warehouseId: warehouseTransfers.warehouseId,
-        technicianId: warehouseTransfers.technicianId,
-        itemType: warehouseTransfers.itemType,
-        packagingType: warehouseTransfers.packagingType,
-        quantity: warehouseTransfers.quantity,
-        performedBy: warehouseTransfers.performedBy,
-        notes: warehouseTransfers.notes,
-        status: warehouseTransfers.status,
-        rejectionReason: warehouseTransfers.rejectionReason,
-        respondedAt: warehouseTransfers.respondedAt,
-        createdAt: warehouseTransfers.createdAt,
-        warehouseName: warehouses.name,
-        technicianName: users.fullName,
-        performedByName: sql<string>`performer.full_name`,
-      })
-      .from(warehouseTransfers)
-      .leftJoin(warehouses, eq(warehouseTransfers.warehouseId, warehouses.id))
-      .leftJoin(users, eq(warehouseTransfers.technicianId, users.id))
-      .leftJoin(sql`${users} as performer`, sql`${warehouseTransfers.performedBy} = performer.id`)
-      .orderBy(desc(warehouseTransfers.createdAt));
-
-    const conditions = [];
-    if (warehouseId) {
-      conditions.push(eq(warehouseTransfers.warehouseId, warehouseId));
-    }
-    if (technicianId) {
-      conditions.push(eq(warehouseTransfers.technicianId, technicianId));
-    }
-    if (regionId) {
-      conditions.push(eq(warehouses.regionId, regionId));
-    }
-
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as any;
-    }
-
-    if (limit) {
-      query = query.limit(limit) as any;
-    }
-
-    const transfers = await query;
-
-    return transfers.map(transfer => ({
-      ...transfer,
-      itemNameAr: itemNameMap[transfer.itemType] || transfer.itemType,
-      warehouseName: transfer.warehouseName || undefined,
-      technicianName: transfer.technicianName || undefined,
-      performedByName: transfer.performedByName || undefined,
-    }));
-  }
-
-  async acceptWarehouseTransfer(transferId: string): Promise<WarehouseTransfer> {
-    return await db.transaction(async (tx) => {
-      const [transfer] = await tx
-        .select()
-        .from(warehouseTransfers)
-        .where(eq(warehouseTransfers.id, transferId));
-
-      if (!transfer) {
-        throw new Error('Transfer not found');
-      }
-
-      if (transfer.status !== 'pending') {
-        throw new Error(`Transfer already ${transfer.status}`);
-      }
-
-      // ALWAYS check warehouse_inventory_entries FIRST (this is where UI updates stock)
-      const itemTypeId = transfer.itemType;
-      
-      const [warehouseEntry] = await tx
-        .select()
-        .from(warehouseInventoryEntries)
-        .where(
-          and(
-            eq(warehouseInventoryEntries.warehouseId, transfer.warehouseId),
-            eq(warehouseInventoryEntries.itemTypeId, itemTypeId)
-          )
-        );
-
-      if (warehouseEntry) {
-        // ===== NEW SYSTEM: Found in warehouse_inventory_entries =====
-        const currentStock = transfer.packagingType === 'box' 
-          ? warehouseEntry.boxes 
-          : warehouseEntry.units;
-
-        if (currentStock < transfer.quantity) {
-          throw new Error(`Insufficient stock in warehouse. Available: ${currentStock}, Requested: ${transfer.quantity}`);
-        }
-
-        // Deduct from warehouse inventory entries
-        await tx
-          .update(warehouseInventoryEntries)
-          .set({
-            boxes: transfer.packagingType === 'box' 
-              ? warehouseEntry.boxes - transfer.quantity 
-              : warehouseEntry.boxes,
-            units: transfer.packagingType === 'unit' 
-              ? warehouseEntry.units - transfer.quantity 
-              : warehouseEntry.units,
-            updatedAt: new Date(),
-          })
-          .where(eq(warehouseInventoryEntries.id, warehouseEntry.id));
-
-        // Add to technician moving inventory entries
-        const [techEntry] = await tx
-          .select()
-          .from(technicianMovingInventoryEntries)
-          .where(
-            and(
-              eq(technicianMovingInventoryEntries.technicianId, transfer.technicianId),
-              eq(technicianMovingInventoryEntries.itemTypeId, itemTypeId)
-            )
-          );
-
-        if (techEntry) {
-          await tx
-            .update(technicianMovingInventoryEntries)
-            .set({
-              boxes: transfer.packagingType === 'box' 
-                ? techEntry.boxes + transfer.quantity 
-                : techEntry.boxes,
-              units: transfer.packagingType === 'unit' 
-                ? techEntry.units + transfer.quantity 
-                : techEntry.units,
-              updatedAt: new Date(),
-            })
-            .where(eq(technicianMovingInventoryEntries.id, techEntry.id));
-        } else {
-          await tx
-            .insert(technicianMovingInventoryEntries)
-            .values({
-              technicianId: transfer.technicianId,
-              itemTypeId: itemTypeId,
-              boxes: transfer.packagingType === 'box' ? transfer.quantity : 0,
-              units: transfer.packagingType === 'unit' ? transfer.quantity : 0,
-            });
-        }
-      } else {
-        // ===== LEGACY SYSTEM: Fall back to warehouse_inventory table =====
-        const fieldMap: Record<string, { boxes: string; units: string }> = {
-          'n950': { boxes: 'n950Boxes', units: 'n950Units' },
-          'i9000s': { boxes: 'i9000sBoxes', units: 'i9000sUnits' },
-          'i9100': { boxes: 'i9100Boxes', units: 'i9100Units' },
-          'rollPaper': { boxes: 'rollPaperBoxes', units: 'rollPaperUnits' },
-          'stickers': { boxes: 'stickersBoxes', units: 'stickersUnits' },
-          'newBatteries': { boxes: 'newBatteriesBoxes', units: 'newBatteriesUnits' },
-          'mobilySim': { boxes: 'mobilySimBoxes', units: 'mobilySimUnits' },
-          'stcSim': { boxes: 'stcSimBoxes', units: 'stcSimUnits' },
-          'zainSim': { boxes: 'zainSimBoxes', units: 'zainSimUnits' },
-          'lebaraSim': { boxes: 'lebaraBoxes', units: 'lebaraUnits' },
-          'lebara': { boxes: 'lebaraBoxes', units: 'lebaraUnits' },
-        };
-
-        const fields = fieldMap[transfer.itemType];
-        
-        if (!fields) {
-          throw new Error(`Unknown item type and no entry found: ${transfer.itemType}`);
-        }
-
-        const fieldName = transfer.packagingType === 'box' ? fields.boxes : fields.units;
-
-        const [warehouseInv] = await tx
-          .select()
-          .from(warehouseInventory)
-          .where(eq(warehouseInventory.warehouseId, transfer.warehouseId));
-
-        if (!warehouseInv) {
-          throw new Error('Warehouse inventory not found');
-        }
-
-        const warehouseCurrentStock = (warehouseInv as any)[fieldName] || 0;
-        if (warehouseCurrentStock < transfer.quantity) {
-          throw new Error(`Insufficient stock in warehouse. Available: ${warehouseCurrentStock}, Requested: ${transfer.quantity}`);
-        }
-
-        await tx
-          .update(warehouseInventory)
-          .set({
-            [fieldName]: warehouseCurrentStock - transfer.quantity,
-            updatedAt: new Date(),
-          })
-          .where(eq(warehouseInventory.warehouseId, transfer.warehouseId));
-
-        const [techInventory] = await tx
-          .select()
-          .from(techniciansInventory)
-          .where(eq(techniciansInventory.createdBy, transfer.technicianId));
-
-        if (techInventory) {
-          const techCurrentStock = (techInventory as any)[fieldName] || 0;
-          await tx
-            .update(techniciansInventory)
-            .set({
-              [fieldName]: techCurrentStock + transfer.quantity,
-              updatedAt: new Date(),
-            })
-            .where(eq(techniciansInventory.createdBy, transfer.technicianId));
-        } else {
-          const [user] = await tx
-            .select()
-            .from(users)
-            .where(eq(users.id, transfer.technicianId));
-
-          if (!user) {
-            throw new Error(`Technician with id ${transfer.technicianId} not found`);
-          }
-
-          await tx
-            .insert(techniciansInventory)
-            .values({
-              technicianName: user.fullName,
-              city: user.city || 'غير محدد',
-              createdBy: transfer.technicianId,
-              regionId: user.regionId,
-              [fieldName]: transfer.quantity,
-              n950Boxes: 0, n950Units: 0,
-              i9000sBoxes: 0, i9000sUnits: 0,
-              i9100Boxes: 0, i9100Units: 0,
-              rollPaperBoxes: 0, rollPaperUnits: 0,
-              stickersBoxes: 0, stickersUnits: 0,
-              newBatteriesBoxes: 0, newBatteriesUnits: 0,
-              mobilySimBoxes: 0, mobilySimUnits: 0,
-              stcSimBoxes: 0, stcSimUnits: 0,
-              zainSimBoxes: 0, zainSimUnits: 0,
-              lebaraBoxes: 0, lebaraUnits: 0,
-            });
-        }
-      }
-
-      // Update transfer status
-      const [updatedTransfer] = await tx
-        .update(warehouseTransfers)
-        .set({
-          status: 'accepted',
-          respondedAt: new Date(),
-        })
-        .where(eq(warehouseTransfers.id, transferId))
-        .returning();
-
-      return updatedTransfer;
-    });
-  }
-
-  async rejectWarehouseTransfer(transferId: string, reason?: string): Promise<WarehouseTransfer> {
-    const [transfer] = await db
-      .select()
-      .from(warehouseTransfers)
-      .where(eq(warehouseTransfers.id, transferId));
-
-    if (!transfer) {
-      throw new Error('Transfer not found');
-    }
-
-    if (transfer.status !== 'pending') {
-      throw new Error(`Transfer already ${transfer.status}`);
-    }
-
-    const [updatedTransfer] = await db
-      .update(warehouseTransfers)
-      .set({
-        status: 'rejected',
-        rejectionReason: reason,
-        respondedAt: new Date(),
-      })
-      .where(eq(warehouseTransfers.id, transferId))
-      .returning();
-
-    return updatedTransfer;
-  }
-
-  async assignTechnicianToSupervisor(supervisorId: string, technicianId: string): Promise<SupervisorTechnician> {
-    const [assignment] = await db
-      .insert(supervisorTechnicians)
-      .values({
-        supervisorId,
-        technicianId,
-      })
-      .returning();
-    return assignment;
-  }
-
-  async removeTechnicianFromSupervisor(supervisorId: string, technicianId: string): Promise<boolean> {
-    const result = await db
-      .delete(supervisorTechnicians)
-      .where(
-        and(
-          eq(supervisorTechnicians.supervisorId, supervisorId),
-          eq(supervisorTechnicians.technicianId, technicianId)
-        )
-      );
-    return (result.rowCount || 0) > 0;
-  }
-
-  async getSupervisorTechnicians(supervisorId: string): Promise<string[]> {
-    const assignments = await db
-      .select({ technicianId: supervisorTechnicians.technicianId })
-      .from(supervisorTechnicians)
-      .where(eq(supervisorTechnicians.supervisorId, supervisorId));
-    return assignments.map(a => a.technicianId);
-  }
-
-  async getTechnicianSupervisor(technicianId: string): Promise<string | null> {
-    const assignments = await db
-      .select({ supervisorId: supervisorTechnicians.supervisorId })
-      .from(supervisorTechnicians)
-      .where(eq(supervisorTechnicians.technicianId, technicianId))
-      .limit(1);
-    return assignments.length > 0 ? assignments[0].supervisorId : null;
-  }
-
-  async assignWarehouseToSupervisor(supervisorId: string, warehouseId: string): Promise<SupervisorWarehouse> {
-    const [assignment] = await db
-      .insert(supervisorWarehouses)
-      .values({
-        supervisorId,
-        warehouseId,
-      })
-      .returning();
-    return assignment;
-  }
-
-  async removeWarehouseFromSupervisor(supervisorId: string, warehouseId: string): Promise<boolean> {
-    const result = await db
-      .delete(supervisorWarehouses)
-      .where(
-        and(
-          eq(supervisorWarehouses.supervisorId, supervisorId),
-          eq(supervisorWarehouses.warehouseId, warehouseId)
-        )
-      );
-    return (result.rowCount || 0) > 0;
-  }
-
-  async getSupervisorWarehouses(supervisorId: string): Promise<string[]> {
-    const assignments = await db
-      .select({ warehouseId: supervisorWarehouses.warehouseId })
-      .from(supervisorWarehouses)
-      .where(eq(supervisorWarehouses.supervisorId, supervisorId));
-    return assignments.map(a => a.warehouseId);
-  }
-
-  // System Logging
-  async logSystemActivity(logData: InsertSystemLog): Promise<void> {
-    try {
-      await db.insert(systemLogs).values(logData);
-    } catch (error) {
-      console.error('Failed to log system activity:', error);
-      // Don't throw - logging failures shouldn't break main operations
-    }
-  }
-
-  async getSystemLogs(filters?: {
-    limit?: number;
-    offset?: number;
-    userId?: string;
-    regionId?: string;
-    action?: string;
-    entityType?: string;
-    severity?: string;
-    startDate?: Date;
-    endDate?: Date;
-  }): Promise<SystemLog[]> {
-    const limit = filters?.limit || 50;
-    const offset = filters?.offset || 0;
-
-    let query = db.select().from(systemLogs).$dynamic();
-
-    const conditions = [];
-    
-    if (filters?.userId) {
-      conditions.push(eq(systemLogs.userId, filters.userId));
-    }
-    
-    if (filters?.regionId) {
-      conditions.push(eq(systemLogs.regionId, filters.regionId));
-    }
-    
-    if (filters?.action) {
-      conditions.push(eq(systemLogs.action, filters.action));
-    }
-    
-    if (filters?.entityType) {
-      conditions.push(eq(systemLogs.entityType, filters.entityType));
-    }
-    
-    if (filters?.severity) {
-      conditions.push(eq(systemLogs.severity, filters.severity));
-    }
-    
-    if (filters?.startDate) {
-      conditions.push(gte(systemLogs.createdAt, filters.startDate));
-    }
-    
-    if (filters?.endDate) {
-      conditions.push(lte(systemLogs.createdAt, filters.endDate));
-    }
-
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions));
-    }
-
-    const logs = await query
-      .orderBy(desc(systemLogs.createdAt))
-      .limit(limit)
-      .offset(offset);
-
-    return logs;
-  }
-
-  async createSystemLog(log: InsertSystemLog): Promise<SystemLog> {
-    const [created] = await db.insert(systemLogs).values(log).returning();
-    return created;
-  }
-
-  async exportAllData(): Promise<any> {
-    // Export all tables in dependency order (no foreign key violations)
-    const backup = {
-      version: '1.0',
-      timestamp: new Date().toISOString(),
-      data: {
-        regions: await db.select().from(regions),
-        users: await db.select().from(users),
-        inventoryItems: await db.select().from(inventoryItems),
-        transactions: await db.select().from(transactions),
-        warehouses: await db.select().from(warehouses),
-        warehouseInventory: await db.select().from(warehouseInventory),
-        techniciansInventory: await db.select().from(techniciansInventory),
-        technicianFixedInventories: await db.select().from(technicianFixedInventories),
-        inventoryRequests: await db.select().from(inventoryRequests),
-        warehouseTransfers: await db.select().from(warehouseTransfers),
-        stockMovements: await db.select().from(stockMovements),
-        receivedDevices: await db.select().from(receivedDevices),
-        systemLogs: await db.select().from(systemLogs),
-      }
-    };
-    
-    return backup;
-  }
-
-  private convertDates(obj: any): any {
-    if (!obj) return obj;
-    if (Array.isArray(obj)) {
-      return obj.map(item => this.convertDates(item));
-    }
-    if (typeof obj === 'object') {
-      const converted: any = {};
-      for (const key in obj) {
-        const value = obj[key];
-        if (typeof value === 'string' && (key.includes('At') || key.includes('Date') || key.includes('date') || key.includes('Time') || key.includes('time'))) {
-          const date = new Date(value);
-          converted[key] = isNaN(date.getTime()) ? value : date;
-        } else if (typeof value === 'object') {
-          converted[key] = this.convertDates(value);
-        } else {
-          converted[key] = value;
-        }
-      }
-      return converted;
-    }
-    return obj;
-  }
-
-  async importAllData(backup: any): Promise<void> {
-    if (!backup || !backup.data) {
-      throw new Error('Invalid backup file');
-    }
-
-    // Clear all tables in reverse dependency order (children first)
-    await db.delete(systemLogs);
-    await db.delete(receivedDevices);
-    await db.delete(stockMovements);
-    await db.delete(warehouseTransfers);
-    await db.delete(inventoryRequests);
-    await db.delete(technicianFixedInventories);
-    await db.delete(techniciansInventory);
-    await db.delete(warehouseInventory);
-    await db.delete(transactions);
-    await db.delete(warehouses);
-    await db.delete(inventoryItems);
-    await db.delete(users);
-    await db.delete(regions);
-
-    // Insert data in dependency order (parents first)
-    if (backup.data.regions?.length > 0) {
-      await db.insert(regions).values(this.convertDates(backup.data.regions));
-    }
-    if (backup.data.users?.length > 0) {
-      await db.insert(users).values(this.convertDates(backup.data.users));
-    }
-    if (backup.data.inventoryItems?.length > 0) {
-      await db.insert(inventoryItems).values(this.convertDates(backup.data.inventoryItems));
-    }
-    if (backup.data.transactions?.length > 0) {
-      await db.insert(transactions).values(this.convertDates(backup.data.transactions));
-    }
-    if (backup.data.warehouses?.length > 0) {
-      await db.insert(warehouses).values(this.convertDates(backup.data.warehouses));
-    }
-    if (backup.data.warehouseInventory?.length > 0) {
-      await db.insert(warehouseInventory).values(this.convertDates(backup.data.warehouseInventory));
-    }
-    if (backup.data.techniciansInventory?.length > 0) {
-      await db.insert(techniciansInventory).values(this.convertDates(backup.data.techniciansInventory));
-    }
-    if (backup.data.technicianFixedInventories?.length > 0) {
-      await db.insert(technicianFixedInventories).values(this.convertDates(backup.data.technicianFixedInventories));
-    }
-    if (backup.data.inventoryRequests?.length > 0) {
-      await db.insert(inventoryRequests).values(this.convertDates(backup.data.inventoryRequests));
-    }
-    if (backup.data.warehouseTransfers?.length > 0) {
-      await db.insert(warehouseTransfers).values(this.convertDates(backup.data.warehouseTransfers));
-    }
-    if (backup.data.stockMovements?.length > 0) {
-      await db.insert(stockMovements).values(this.convertDates(backup.data.stockMovements));
-    }
-    if (backup.data.receivedDevices?.length > 0) {
-      await db.insert(receivedDevices).values(this.convertDates(backup.data.receivedDevices));
-    }
-    if (backup.data.systemLogs?.length > 0) {
-      // Filter out system logs that reference non-existent users
-      const existingUserIds = new Set((backup.data.users || []).map((u: any) => u.id));
-      const validLogs = backup.data.systemLogs.filter((log: any) => 
-        existingUserIds.has(log.userId)
-      );
-      if (validLogs.length > 0) {
-        await db.insert(systemLogs).values(this.convertDates(validLogs));
-      }
-    }
-  }
-
-  // Item Types Management
-  async getItemTypes(): Promise<ItemType[]> {
-    return await db.select().from(itemTypes).orderBy(itemTypes.sortOrder);
-  }
-
-  async getActiveItemTypes(): Promise<ItemType[]> {
-    return await db.select().from(itemTypes)
-      .where(and(eq(itemTypes.isActive, true), eq(itemTypes.isVisible, true)))
-      .orderBy(itemTypes.sortOrder);
-  }
-
-  async getItemTypeById(id: string): Promise<ItemType | undefined> {
-    const result = await db.select().from(itemTypes).where(eq(itemTypes.id, id));
-    return result[0];
-  }
-
-  async createItemType(data: InsertItemType): Promise<ItemType> {
-    const result = await db.insert(itemTypes).values(data).returning();
-    return result[0];
-  }
-
-  async updateItemType(id: string, data: Partial<InsertItemType>): Promise<ItemType | undefined> {
-    const result = await db.update(itemTypes)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(itemTypes.id, id))
-      .returning();
-    return result[0];
-  }
-
-  async deleteItemType(id: string): Promise<boolean> {
-    const result = await db.delete(itemTypes).where(eq(itemTypes.id, id)).returning();
-    return result.length > 0;
-  }
-
-  async toggleItemTypeActive(id: string, isActive: boolean): Promise<ItemType | undefined> {
-    const result = await db.update(itemTypes)
-      .set({ isActive, updatedAt: new Date() })
-      .where(eq(itemTypes.id, id))
-      .returning();
-    return result[0];
-  }
-
-  async toggleItemTypeVisibility(id: string, isVisible: boolean): Promise<ItemType | undefined> {
-    const result = await db.update(itemTypes)
-      .set({ isVisible, updatedAt: new Date() })
-      .where(eq(itemTypes.id, id))
-      .returning();
-    return result[0];
-  }
-
-  async seedDefaultItemTypes(): Promise<void> {
-    const existingTypes = await db.select().from(itemTypes);
-    if (existingTypes.length > 0) return;
-
-    const defaultTypes: InsertItemType[] = [
-      { id: 'n950', nameAr: 'N950', nameEn: 'N950', category: 'devices', unitsPerBox: 10, isActive: true, isVisible: true, sortOrder: 1 },
-      { id: 'i9000s', nameAr: 'I9000S', nameEn: 'I9000S', category: 'devices', unitsPerBox: 10, isActive: true, isVisible: true, sortOrder: 2 },
-      { id: 'i9100', nameAr: 'I9100', nameEn: 'I9100', category: 'devices', unitsPerBox: 10, isActive: true, isVisible: true, sortOrder: 3 },
-      { id: 'rollPaper', nameAr: 'ورق الطباعة', nameEn: 'Roll Paper', category: 'papers', unitsPerBox: 50, isActive: true, isVisible: true, sortOrder: 4 },
-      { id: 'stickers', nameAr: 'الملصقات', nameEn: 'Stickers', category: 'papers', unitsPerBox: 100, isActive: true, isVisible: true, sortOrder: 5 },
-      { id: 'newBatteries', nameAr: 'البطاريات الجديدة', nameEn: 'New Batteries', category: 'accessories', unitsPerBox: 20, isActive: true, isVisible: true, sortOrder: 6 },
-      { id: 'mobilySim', nameAr: 'شريحة موبايلي', nameEn: 'Mobily SIM', category: 'sim', unitsPerBox: 50, isActive: true, isVisible: true, sortOrder: 7 },
-      { id: 'stcSim', nameAr: 'شريحة STC', nameEn: 'STC SIM', category: 'sim', unitsPerBox: 50, isActive: true, isVisible: true, sortOrder: 8 },
-      { id: 'zainSim', nameAr: 'شريحة زين', nameEn: 'Zain SIM', category: 'sim', unitsPerBox: 50, isActive: true, isVisible: true, sortOrder: 9 },
-      { id: 'lebaraSim', nameAr: 'شريحة ليبارا', nameEn: 'Lebara SIM', category: 'sim', unitsPerBox: 50, isActive: true, isVisible: true, sortOrder: 10 }
-    ];
-
-    await db.insert(itemTypes).values(defaultTypes);
-  }
-
-  // Dynamic Inventory Entries
-  async getWarehouseInventoryEntries(warehouseId: string): Promise<WarehouseInventoryEntry[]> {
-    return await db.select()
-      .from(warehouseInventoryEntries)
-      .where(eq(warehouseInventoryEntries.warehouseId, warehouseId));
-  }
-
-  async upsertWarehouseInventoryEntry(warehouseId: string, itemTypeId: string, boxes: number, units: number): Promise<WarehouseInventoryEntry> {
-    const existing = await db.select()
-      .from(warehouseInventoryEntries)
-      .where(and(
-        eq(warehouseInventoryEntries.warehouseId, warehouseId),
-        eq(warehouseInventoryEntries.itemTypeId, itemTypeId)
-      ));
-
-    if (existing.length > 0) {
-      const result = await db.update(warehouseInventoryEntries)
-        .set({ boxes, units, updatedAt: new Date() })
-        .where(and(
-          eq(warehouseInventoryEntries.warehouseId, warehouseId),
-          eq(warehouseInventoryEntries.itemTypeId, itemTypeId)
-        ))
-        .returning();
-      return result[0];
-    } else {
-      const result = await db.insert(warehouseInventoryEntries)
-        .values({ warehouseId, itemTypeId, boxes, units })
-        .returning();
-      return result[0];
-    }
-  }
-
   async getTechnicianFixedInventoryEntries(technicianId: string): Promise<TechnicianFixedInventoryEntry[]> {
-    return await db.select()
+    return this.db
+      .select()
       .from(technicianFixedInventoryEntries)
       .where(eq(technicianFixedInventoryEntries.technicianId, technicianId));
   }
 
-  async upsertTechnicianFixedInventoryEntry(technicianId: string, itemTypeId: string, boxes: number, units: number): Promise<TechnicianFixedInventoryEntry> {
-    const existing = await db.select()
+  async upsertTechnicianFixedInventoryEntry(
+    technicianId: string,
+    itemTypeId: string,
+    boxes: number,
+    units: number
+  ): Promise<TechnicianFixedInventoryEntry> {
+    const [existing] = await this.db
+      .select()
       .from(technicianFixedInventoryEntries)
       .where(and(
         eq(technicianFixedInventoryEntries.technicianId, technicianId),
         eq(technicianFixedInventoryEntries.itemTypeId, itemTypeId)
       ));
 
-    if (existing.length > 0) {
-      const result = await db.update(technicianFixedInventoryEntries)
+    if (existing) {
+      const [updated] = await this.db
+        .update(technicianFixedInventoryEntries)
         .set({ boxes, units, updatedAt: new Date() })
-        .where(and(
-          eq(technicianFixedInventoryEntries.technicianId, technicianId),
-          eq(technicianFixedInventoryEntries.itemTypeId, itemTypeId)
-        ))
+        .where(eq(technicianFixedInventoryEntries.id, existing.id))
         .returning();
-      return result[0];
-    } else {
-      const result = await db.insert(technicianFixedInventoryEntries)
-        .values({ technicianId, itemTypeId, boxes, units })
-        .returning();
-      return result[0];
+      return updated;
     }
+
+    const [created] = await this.db
+      .insert(technicianFixedInventoryEntries)
+      .values({
+        technicianId,
+        itemTypeId,
+        boxes,
+        units,
+      } as InsertTechnicianFixedInventoryEntry)
+      .returning();
+
+    return created;
   }
 
-  async getTechnicianMovingInventoryEntries(technicianId: string): Promise<TechnicianMovingInventoryEntry[]> {
-    return await db.select()
-      .from(technicianMovingInventoryEntries)
-      .where(eq(technicianMovingInventoryEntries.technicianId, technicianId));
+  async getWarehousesByRegion(regionId: string): Promise<WarehouseWithStats[]> {
+    const warehouses = await this.getWarehouses();
+    return warehouses.filter((warehouse) => warehouse.regionId === regionId);
   }
 
-  async upsertTechnicianMovingInventoryEntry(technicianId: string, itemTypeId: string, boxes: number, units: number): Promise<TechnicianMovingInventoryEntry> {
-    const existing = await db.select()
-      .from(technicianMovingInventoryEntries)
-      .where(and(
-        eq(technicianMovingInventoryEntries.technicianId, technicianId),
-        eq(technicianMovingInventoryEntries.itemTypeId, itemTypeId)
-      ));
-
-    if (existing.length > 0) {
-      const result = await db.update(technicianMovingInventoryEntries)
-        .set({ boxes, units, updatedAt: new Date() })
-        .where(and(
-          eq(technicianMovingInventoryEntries.technicianId, technicianId),
-          eq(technicianMovingInventoryEntries.itemTypeId, itemTypeId)
-        ))
-        .returning();
-      return result[0];
-    } else {
-      const result = await db.insert(technicianMovingInventoryEntries)
-        .values({ technicianId, itemTypeId, boxes, units })
-        .returning();
-      return result[0];
+  async getWarehousesBySupervisor(supervisorId: string): Promise<WarehouseWithStats[]> {
+    const assignments = await repositories.supervisor.getSupervisorWarehouses(supervisorId);
+    if (!assignments.length) {
+      return [];
     }
+
+    const warehouses = await this.getWarehouses();
+    const warehouseIds = new Set(assignments.map((assignment) => assignment.warehouseId));
+    return warehouses.filter((warehouse) => warehouseIds.has(warehouse.id));
   }
 
+  async assignWarehouseToSupervisor(supervisorId: string, warehouseId: string): Promise<SupervisorWarehouse> {
+    return repositories.supervisor.assignWarehouseToSupervisor(supervisorId, warehouseId);
+  }
+
+  async removeWarehouseFromSupervisor(supervisorId: string, warehouseId: string): Promise<boolean> {
+    return repositories.supervisor.removeWarehouseFromSupervisor(supervisorId, warehouseId);
+  }
+
+  async getSupervisorWarehouses(supervisorId: string): Promise<string[]> {
+    const rows = await repositories.supervisor.getSupervisorWarehouses(supervisorId);
+    return rows.map((row) => row.warehouseId);
+  }
+
+  async getTechnicianSupervisor(technicianId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ supervisorId: supervisorTechnicians.supervisorId })
+      .from(supervisorTechnicians)
+      .where(eq(supervisorTechnicians.technicianId, technicianId));
+    return row?.supervisorId || null;
+  }
+
+  async getInventoryRequests(warehouseId?: string, technicianId?: string, status?: string): Promise<InventoryRequest[]> {
+    return repositories.inventoryRequests.getInventoryRequests(warehouseId, technicianId, status);
+  }
+
+  async getUserInventoryRequests(userId: string): Promise<InventoryRequest[]> {
+    return repositories.inventoryRequests.getInventoryRequests(undefined, userId);
+  }
+
+  async createInventoryRequest(request: InsertInventoryRequest): Promise<InventoryRequest> {
+    return repositories.inventoryRequests.createInventoryRequest(request);
+  }
+
+  async updateInventoryRequestStatus(
+    id: string,
+    status: string,
+    respondedBy: string,
+    adminNotes?: string
+  ): Promise<InventoryRequest> {
+    const [updated] = await this.db
+      .update(inventoryRequests)
+      .set({
+        status: status as any,
+        respondedBy,
+        respondedAt: new Date(),
+        adminNotes,
+      })
+      .where(eq(inventoryRequests.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Inventory request with id ${id} not found`);
+    }
+
+    return updated;
+  }
+
+  async deleteInventoryRequest(id: string): Promise<boolean> {
+    return repositories.inventoryRequests.deleteInventoryRequest(id);
+  }
+
+  async getPendingInventoryRequestsCount(): Promise<number> {
+    const requests = await repositories.inventoryRequests.getInventoryRequests(undefined, undefined, 'pending');
+    return requests.length;
+  }
+
+  async acceptWarehouseTransferBatch(transferIds: string[]): Promise<WarehouseTransfer[]> {
+    const results: WarehouseTransfer[] = [];
+    for (const transferId of transferIds) {
+      results.push(await this.acceptWarehouseTransfer(transferId));
+    }
+    return results;
+  }
+
+  async rejectWarehouseTransferBatch(transferIds: string[], reason?: string): Promise<WarehouseTransfer[]> {
+    const results: WarehouseTransfer[] = [];
+    for (const transferId of transferIds) {
+      results.push(await this.rejectWarehouseTransfer(transferId, reason));
+    }
+    return results;
+  }
+
+  async acceptWarehouseTransfersBulk(criteria?: {
+    warehouseId?: string;
+    technicianId?: string;
+    regionId?: string;
+    limit?: number;
+  }): Promise<WarehouseTransfer[]> {
+    const transfers = await this.getWarehouseTransfers(
+      criteria?.warehouseId,
+      criteria?.technicianId,
+      criteria?.regionId,
+      criteria?.limit
+    );
+
+    const pending = transfers.filter((transfer) => transfer.status === 'pending');
+    const results: WarehouseTransfer[] = [];
+    for (const transfer of pending) {
+      results.push(await this.acceptWarehouseTransfer(transfer.id));
+    }
+    return results;
+  }
+
+  async rejectWarehouseTransfersBulk(
+    criteria?: {
+      warehouseId?: string;
+      technicianId?: string;
+      regionId?: string;
+      limit?: number;
+    },
+    reason?: string
+  ): Promise<WarehouseTransfer[]> {
+    const transfers = await this.getWarehouseTransfers(
+      criteria?.warehouseId,
+      criteria?.technicianId,
+      criteria?.regionId,
+      criteria?.limit
+    );
+
+    const pending = transfers.filter((transfer) => transfer.status === 'pending');
+    const results: WarehouseTransfer[] = [];
+    for (const transfer of pending) {
+      results.push(await this.rejectWarehouseTransfer(transfer.id, reason));
+    }
+    return results;
+  }
+
+  async acceptWarehouseTransferByRequestId(requestId: string): Promise<WarehouseTransfer> {
+    const transfers = await this.getWarehouseTransfers();
+    const transfer = transfers.find((item) => item.requestId === requestId);
+
+    if (!transfer) {
+      throw new Error(`Warehouse transfer with request id ${requestId} not found`);
+    }
+
+    return this.acceptWarehouseTransfer(transfer.id);
+  }
+
+  async rejectWarehouseTransferByRequestId(requestId: string, reason?: string): Promise<WarehouseTransfer> {
+    const transfers = await this.getWarehouseTransfers();
+    const transfer = transfers.find((item) => item.requestId === requestId);
+
+    if (!transfer) {
+      throw new Error(`Warehouse transfer with request id ${requestId} not found`);
+    }
+
+    return this.rejectWarehouseTransfer(transfer.id, reason);
+  }
+
+  async exportAllData(): Promise<{ exportedAt: string; data: Record<string, unknown> }> {
+    const [allUsers, allRegions, allItems, allTransactions] = await Promise.all([
+      this.db.select().from(users),
+      this.db.select().from(regions),
+      this.db.select().from(inventoryItems),
+      this.db.select().from(transactions),
+    ]);
+
+    return {
+      exportedAt: new Date().toISOString(),
+      data: {
+        users: allUsers,
+        regions: allRegions,
+        inventoryItems: allItems,
+        transactions: allTransactions,
+      },
+    };
+  }
+
+  async importAllData(_backup: { data?: Record<string, unknown> }): Promise<void> {
+    return;
+  }
+
+  // وظائف إدارة أنواع العناصر
+  async getItemTypes(): Promise<ItemType[]> {
+    return itemTypesModule.getItemTypes();
+  }
+
+  async getActiveItemTypes(): Promise<ItemType[]> {
+    return itemTypesModule.getActiveItemTypes();
+  }
+
+  async getItemTypeById(id: string): Promise<ItemType | undefined> {
+    return itemTypesModule.getItemTypeById(id);
+  }
+
+  async createItemType(data: InsertItemType): Promise<ItemType> {
+    return itemTypesModule.createItemType(data);
+  }
+
+  async updateItemType(id: string, data: Partial<InsertItemType>): Promise<ItemType | undefined> {
+    return itemTypesModule.updateItemType(id, data);
+  }
+
+  async deleteItemType(id: string): Promise<boolean> {
+    return itemTypesModule.deleteItemType(id);
+  }
+
+  async toggleItemTypeActive(id: string, isActive: boolean): Promise<ItemType | undefined> {
+    return itemTypesModule.toggleItemTypeActive(id, isActive);
+  }
+
+  async toggleItemTypeVisibility(id: string, isVisible: boolean): Promise<ItemType | undefined> {
+    return itemTypesModule.toggleItemTypeVisibility(id, isVisible);
+  }
+
+  async seedDefaultItemTypes(): Promise<void> {
+    return itemTypesModule.seedDefaultItemTypes();
+  }
+
+  // دالة التهيئة للتوافق مع الكود القديم
   async migrateToInventoryEntries(): Promise<void> {
-    const allItemTypes = await db.select().from(itemTypes);
-    const itemTypeMap = new Map(allItemTypes.map(t => [t.id, t]));
-
-    const allWarehouses = await db.select().from(warehouses);
-    for (const warehouse of allWarehouses) {
-      const inv = await db.select().from(warehouseInventory).where(eq(warehouseInventory.warehouseId, warehouse.id));
-      if (inv.length > 0) {
-        const i = inv[0];
-        const legacyFields: Record<string, { boxes: number; units: number }> = {
-          'n950': { boxes: i.n950Boxes, units: i.n950Units },
-          'i9000s': { boxes: i.i9000sBoxes, units: i.i9000sUnits },
-          'i9100': { boxes: i.i9100Boxes, units: i.i9100Units },
-          'rollPaper': { boxes: i.rollPaperBoxes, units: i.rollPaperUnits },
-          'stickers': { boxes: i.stickersBoxes, units: i.stickersUnits },
-          'newBatteries': { boxes: i.newBatteriesBoxes, units: i.newBatteriesUnits },
-          'mobilySim': { boxes: i.mobilySimBoxes, units: i.mobilySimUnits },
-          'stcSim': { boxes: i.stcSimBoxes, units: i.stcSimUnits },
-          'zainSim': { boxes: i.zainSimBoxes, units: i.zainSimUnits },
-          'lebaraSim': { boxes: i.lebaraBoxes || 0, units: i.lebaraUnits || 0 },
-        };
-        for (const [itemTypeId, vals] of Object.entries(legacyFields)) {
-          if (itemTypeMap.has(itemTypeId) && (vals.boxes > 0 || vals.units > 0)) {
-            await this.upsertWarehouseInventoryEntry(warehouse.id, itemTypeId, vals.boxes, vals.units);
-          }
-        }
-      }
-    }
-
-    const allFixedInventories = await db.select().from(technicianFixedInventories);
-    for (const inv of allFixedInventories) {
-      const legacyFields: Record<string, { boxes: number; units: number }> = {
-        'n950': { boxes: inv.n950Boxes, units: inv.n950Units },
-        'i9000s': { boxes: inv.i9000sBoxes, units: inv.i9000sUnits },
-        'i9100': { boxes: inv.i9100Boxes, units: inv.i9100Units },
-        'rollPaper': { boxes: inv.rollPaperBoxes, units: inv.rollPaperUnits },
-        'stickers': { boxes: inv.stickersBoxes, units: inv.stickersUnits },
-        'newBatteries': { boxes: inv.newBatteriesBoxes, units: inv.newBatteriesUnits },
-        'mobilySim': { boxes: inv.mobilySimBoxes, units: inv.mobilySimUnits },
-        'stcSim': { boxes: inv.stcSimBoxes, units: inv.stcSimUnits },
-        'zainSim': { boxes: inv.zainSimBoxes, units: inv.zainSimUnits },
-        'lebaraSim': { boxes: (inv as any).lebaraBoxes || 0, units: (inv as any).lebaraUnits || 0 },
-      };
-      for (const [itemTypeId, vals] of Object.entries(legacyFields)) {
-        if (itemTypeMap.has(itemTypeId) && (vals.boxes > 0 || vals.units > 0)) {
-          await this.upsertTechnicianFixedInventoryEntry(inv.technicianId, itemTypeId, vals.boxes, vals.units);
-        }
-      }
-    }
-
-    console.log('Migration to dynamic inventory entries completed successfully.');
+    console.log('Migration handled by Repository Pattern - Modern architecture in use');
   }
 }
+
+// إنشاء وتصدير المثيل العالمي للتوافق العكسي
+const storage = new DatabaseStorage();
+export default storage;
+
+// تصديرات إضافية للمرونة
+export { storage };
+
+// تصدير جميع الأنواع
+export * from './infrastructure/schemas';

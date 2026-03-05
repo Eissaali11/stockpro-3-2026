@@ -25,8 +25,23 @@ export class WarehousesController {
    */
   getSupervisorWarehouses = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
-    const warehouses = await storage.getWarehousesBySupervisor(user.id);
-    res.json(warehouses);
+    const assignedWarehouses = await storage.getWarehousesBySupervisor(user.id);
+
+    if (!user.regionId) {
+      return res.json(assignedWarehouses);
+    }
+
+    const regionWarehouses = await storage.getWarehousesByRegion(user.regionId);
+
+    const mergedById = new Map<string, typeof assignedWarehouses[number]>();
+    for (const warehouse of regionWarehouses) {
+      mergedById.set(warehouse.id, warehouse);
+    }
+    for (const warehouse of assignedWarehouses) {
+      mergedById.set(warehouse.id, warehouse);
+    }
+
+    res.json(Array.from(mergedById.values()));
   });
 
   /**

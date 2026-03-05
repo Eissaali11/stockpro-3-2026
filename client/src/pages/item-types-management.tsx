@@ -89,6 +89,7 @@ export default function ItemTypesManagement() {
         nameEn: data.nameEn,
         category: data.category,
         unitsPerBox: data.unitsPerBox,
+        sortOrder: data.sortOrder,
         isActive: true,
         isVisible: true,
       };
@@ -98,7 +99,11 @@ export default function ItemTypesManagement() {
       return await apiRequest('POST', '/api/item-types', payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/item-types'] });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === 'string' &&
+          query.queryKey[0].startsWith('/api/item-types'),
+      });
       setIsDialogOpen(false);
       resetForm();
       toast({
@@ -120,7 +125,11 @@ export default function ItemTypesManagement() {
       return await apiRequest('PATCH', `/api/item-types/${id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/item-types'] });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === 'string' &&
+          query.queryKey[0].startsWith('/api/item-types'),
+      });
       setIsDialogOpen(false);
       setEditingItem(null);
       resetForm();
@@ -143,7 +152,11 @@ export default function ItemTypesManagement() {
       return await apiRequest('PATCH', `/api/item-types/${id}/toggle-active`, { isActive });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/item-types'] });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === 'string' &&
+          query.queryKey[0].startsWith('/api/item-types'),
+      });
     },
   });
 
@@ -152,7 +165,11 @@ export default function ItemTypesManagement() {
       return await apiRequest('PATCH', `/api/item-types/${id}/toggle-visibility`, { isVisible });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/item-types'] });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === 'string' &&
+          query.queryKey[0].startsWith('/api/item-types'),
+      });
     },
   });
 
@@ -161,7 +178,11 @@ export default function ItemTypesManagement() {
       return await apiRequest('POST', '/api/item-types/seed');
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/item-types'] });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === 'string' &&
+          query.queryKey[0].startsWith('/api/item-types'),
+      });
       toast({
         title: "تم بنجاح",
         description: "تم إضافة الأصناف الافتراضية",
@@ -226,6 +247,8 @@ export default function ItemTypesManagement() {
     acc[cat].push(item);
     return acc;
   }, {} as Record<string, ItemType[]>);
+
+  const sortedItemTypes = [...itemTypes].sort((a, b) => a.sortOrder - b.sortOrder);
 
   if (user?.role !== 'admin') {
     return (
@@ -355,7 +378,7 @@ export default function ItemTypesManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {itemTypes.sort((a, b) => a.sortOrder - b.sortOrder).map((item) => {
+                    {sortedItemTypes.map((item) => {
                       const catInfo = getCategoryInfo(item.category);
                       const CatIcon = catInfo.icon;
                       

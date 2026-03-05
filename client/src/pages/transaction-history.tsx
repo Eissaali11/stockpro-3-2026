@@ -10,8 +10,43 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calendar, Filter, TrendingUp, TrendingDown, Users, MapPin, Search, Download, RefreshCw } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+
+type TransactionRow = {
+  id: string;
+  itemName?: string;
+  type: string;
+  quantity: number;
+  userName?: string;
+  regionName?: string;
+  reason?: string | null;
+  createdAt: string | Date;
+};
+
+type TransactionsResponse = {
+  transactions: TransactionRow[];
+  total: number;
+  page: number;
+  totalPages: number;
+};
+
+type TransactionStats = {
+  totalTransactions: number;
+  totalAdditions?: number;
+  totalWithdrawals?: number;
+  totalAddedQuantity?: number;
+  totalWithdrawnQuantity?: number;
+  byRegion?: Array<{ regionName: string; count: number }>;
+  byUser?: Array<{ userName: string; count: number }>;
+  totalInbound?: number;
+  totalOutbound?: number;
+};
+
+type UserOption = { id: string; fullName: string };
+type RegionOption = { id: string; name: string };
 
 export function TransactionHistoryPage() {
+  const { toast } = useToast();
   const [filters, setFilters] = useState({
     page: 1,
     limit: 10,
@@ -34,7 +69,7 @@ export function TransactionHistoryPage() {
   });
   const transactionUrl = `/api/transactions${transactionParams.toString() ? `?${transactionParams}` : ''}`;
   
-  const { data: transactionData, isLoading: transactionsLoading, refetch: refetchTransactions } = useQuery({
+  const { data: transactionData, isLoading: transactionsLoading, refetch: refetchTransactions } = useQuery<TransactionsResponse>({
     queryKey: [transactionUrl],
   });
 
@@ -46,16 +81,23 @@ export function TransactionHistoryPage() {
   const statisticsUrl = `/api/transactions/statistics${statisticsParams.toString() ? `?${statisticsParams}` : ''}`;
   
   // Fetch transaction statistics
-  const { data: statisticsData, isLoading: statisticsLoading } = useQuery({
+  const { data: statisticsData, isLoading: statisticsLoading, refetch: refetchStatistics } = useQuery<TransactionStats>({
     queryKey: [statisticsUrl],
   });
 
+  const totalAdditions = statisticsData?.totalAdditions ?? statisticsData?.totalInbound ?? 0;
+  const totalWithdrawals = statisticsData?.totalWithdrawals ?? statisticsData?.totalOutbound ?? 0;
+  const totalAddedQuantity = statisticsData?.totalAddedQuantity ?? 0;
+  const totalWithdrawnQuantity = statisticsData?.totalWithdrawnQuantity ?? 0;
+  const byRegion = statisticsData?.byRegion ?? [];
+  const byUser = statisticsData?.byUser ?? [];
+
   // Fetch users and regions for filter dropdowns
-  const { data: users } = useQuery({
+  const { data: users } = useQuery<UserOption[]>({
     queryKey: ['/api/users']
   });
 
-  const { data: regions } = useQuery({
+  const { data: regions } = useQuery<RegionOption[]>({
     queryKey: ['/api/regions']
   });
 
@@ -85,7 +127,9 @@ export function TransactionHistoryPage() {
   };
 
   const exportData = () => {
-    if (!transactionData || transactionData.length === 0) {
+    const exportRows = transactionData?.transactions || [];
+
+    if (exportRows.length === 0) {
       toast({
         variant: "destructive",
         title: "لا توجد بيانات",
@@ -95,14 +139,14 @@ export function TransactionHistoryPage() {
     }
 
     // Convert data to CSV format
-    const headers = ['التاريخ', 'النوع', 'المبلغ', 'الوصف'];
+    const headers = ['التاريخ', 'النوع', 'الكمية', 'السبب'];
     const csvContent = [
       headers.join(','),
-      ...transactionData.map(tx => [
+      ...exportRows.map((tx) => [
         new Date(tx.createdAt).toLocaleString('ar-SA'),
-        tx.type === 'credit' ? 'إضافة' : 'خصم',
-        tx.amount,
-        tx.description || ''
+        tx.type === 'add' ? 'إضافة' : 'سحب',
+        tx.quantity,
+        tx.reason || ''
       ].join(','))
     ].join('\n');
 
@@ -133,7 +177,10 @@ export function TransactionHistoryPage() {
         <div className="flex gap-2">
           <Button 
             variant="outline" 
-            onClick={() => refetchTransactions()}
+            onClick={() => {
+              refetchTransactions();
+              refetchStatistics();
+            }}
             data-testid="button-refresh-transactions"
           >
             <RefreshCw className="h-4 w-4 ml-2" />
@@ -206,7 +253,7 @@ export function TransactionHistoryPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all-users">جميع الموظفين</SelectItem>
-                      {users && Array.isArray(users) && users.map((user: any) => (
+                      {users?.map((user) => (
                         <SelectItem key={user.id} value={user.id}>
                           {user.fullName}
                         </SelectItem>
@@ -224,7 +271,7 @@ export function TransactionHistoryPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all-regions">جميع المناطق</SelectItem>
-                      {regions && Array.isArray(regions) && regions.map((region: any) => (
+                      {regions?.map((region) => (
                         <SelectItem key={region.id} value={region.id}>
                           {region.name}
                         </SelectItem>
@@ -415,7 +462,7 @@ export function TransactionHistoryPage() {
                     <div className="flex items-center gap-2">
                       <TrendingUp className="h-8 w-8 text-green-600" />
                       <div>
-                        <p className="text-2xl font-bold text-green-600">{statisticsData.totalAdditions}</p>
+                        <p className="text-2xl font-bold text-green-600">{totalAdditions}</p>
                         <p className="text-sm text-muted-foreground">عمليات الإضافة</p>
                       </div>
                     </div>
@@ -427,7 +474,7 @@ export function TransactionHistoryPage() {
                     <div className="flex items-center gap-2">
                       <TrendingDown className="h-8 w-8 text-red-600" />
                       <div>
-                        <p className="text-2xl font-bold text-red-600">{statisticsData.totalWithdrawals}</p>
+                        <p className="text-2xl font-bold text-red-600">{totalWithdrawals}</p>
                         <p className="text-sm text-muted-foreground">عمليات السحب</p>
                       </div>
                     </div>
@@ -442,7 +489,7 @@ export function TransactionHistoryPage() {
                       </div>
                       <div>
                         <p className="text-2xl font-bold">
-                          {statisticsData.totalAddedQuantity - statisticsData.totalWithdrawnQuantity}
+                          {totalAddedQuantity - totalWithdrawnQuantity}
                         </p>
                         <p className="text-sm text-muted-foreground">صافي الحركة</p>
                       </div>
@@ -462,7 +509,7 @@ export function TransactionHistoryPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      {statisticsData?.byRegion?.slice(0, 5)?.map((region: any, index: number) => (
+                      {byRegion.slice(0, 5).map((region: any, index: number) => (
                         <div key={region.regionName} className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs font-medium">
@@ -486,7 +533,7 @@ export function TransactionHistoryPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      {statisticsData.byUser.slice(0, 5).map((user: any, index: number) => (
+                      {byUser.slice(0, 5).map((user, index) => (
                         <div key={user.userName} className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center text-xs font-medium">

@@ -25,6 +25,7 @@ import {
 import {
   ArrowLeft,
   FileText,
+  Download,
   Filter,
   Search,
   AlertCircle,
@@ -37,8 +38,11 @@ import {
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { SystemLog } from "@shared/schema";
+import { exportSystemLogsToExcel } from "@/lib/exportToExcel";
+import { useToast } from "@/hooks/use-toast";
 
 export default function SystemLogsPage() {
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterAction, setFilterAction] = useState<string>("all");
   const [filterEntityType, setFilterEntityType] = useState<string>("all");
@@ -61,6 +65,25 @@ export default function SystemLogsPage() {
 
     return matchesSearch && matchesAction && matchesEntityType && matchesSeverity;
   });
+
+  const handleExportExcel = async () => {
+    const rows = filteredLogs || [];
+
+    if (rows.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "لا توجد بيانات",
+        description: "لا توجد سجلات لتصديرها",
+      });
+      return;
+    }
+
+    await exportSystemLogsToExcel({ logs: rows });
+    toast({
+      title: "تم التصدير بنجاح",
+      description: "تم تصدير سجل عمليات النظام إلى ملف Excel",
+    });
+  };
 
   const getSeverityBadge = (severity: string) => {
     switch (severity) {
@@ -132,6 +155,16 @@ export default function SystemLogsPage() {
               <p className="text-gray-400 text-sm">متابعة جميع العمليات والأحداث في النظام</p>
             </div>
           </div>
+
+          <Button
+            variant="outline"
+            className="border-[#18B2B0]/30 text-[#18B2B0] hover:bg-[#18B2B0]/10"
+            onClick={handleExportExcel}
+            data-testid="button-export-system-logs-excel"
+          >
+            <Download className="ml-2 h-4 w-4" />
+            تصدير Excel
+          </Button>
         </motion.div>
 
         {/* Filters */}
@@ -254,7 +287,7 @@ export default function SystemLogsPage() {
                           <TableCell className="font-mono text-sm text-gray-300">
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-[#18B2B0]" />
-                              {format(new Date(log.createdAt), "dd/MM/yyyy HH:mm", { locale: ar })}
+                              {log.createdAt ? format(new Date(log.createdAt), "dd/MM/yyyy HH:mm", { locale: ar }) : "-"}
                             </div>
                           </TableCell>
                           <TableCell>

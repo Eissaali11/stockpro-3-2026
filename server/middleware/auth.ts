@@ -38,6 +38,37 @@ export interface SessionData {
 // PostgreSQL-backed session store for Bearer tokens
 import { pool } from "../db";
 
+type AuthUser = {
+  id: string;
+  role: string;
+  username: string;
+  regionId: string | null;
+};
+
+async function getFreshAuthUser(userId: string): Promise<AuthUser | null> {
+  try {
+    const result = await pool.query(
+      `SELECT id, role, username, region_id FROM users WHERE id = $1 LIMIT 1`,
+      [userId]
+    );
+
+    if (!result.rows?.length) {
+      return null;
+    }
+
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      role: row.role,
+      username: row.username,
+      regionId: row.region_id,
+    };
+  } catch (error) {
+    console.error("Auth user refresh error:", error);
+    return null;
+  }
+}
+
 class PostgresSessionStore implements SessionStore {
   async get(token: string): Promise<SessionData | null> {
     const client = await pool.connect();
@@ -140,19 +171,49 @@ export async function requireAuth(
     if (token) {
       const session = await sessionStore.get(token);
       if (session) {
-        req.user = {
+        const fallbackUser: AuthUser = {
           id: session.userId,
           role: session.role,
           username: session.username,
           regionId: session.regionId,
         };
+
+        const freshUser = await getFreshAuthUser(session.userId);
+        req.user = freshUser || fallbackUser;
+
+        if (
+          freshUser &&
+          (freshUser.role !== session.role ||
+            freshUser.username !== session.username ||
+            freshUser.regionId !== session.regionId)
+        ) {
+          await sessionStore.set(
+            token,
+            {
+              userId: freshUser.id,
+              role: freshUser.role,
+              username: freshUser.username,
+              regionId: freshUser.regionId,
+              expiry: session.expiry,
+            },
+            session.expiry
+          );
+        }
+
         return next();
       }
     }
 
     // 2. Fallback to Express Session (PostgreSQL-backed cookie)
     if (req.session && (req.session as any).user) {
-      req.user = (req.session as any).user;
+      const sessionUser = (req.session as any).user as AuthUser;
+      const freshUser = sessionUser?.id ? await getFreshAuthUser(sessionUser.id) : null;
+      req.user = freshUser || sessionUser;
+
+      if (req.user) {
+        (req.session as any).user = req.user;
+      }
+
       return next();
     }
 

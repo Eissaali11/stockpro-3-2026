@@ -11,8 +11,8 @@ import { NotFoundError, ConflictError } from "../utils/errors";
 
 const createItemTypeSchema = z.object({
   id: z.string().optional(),
-  nameAr: z.string().min(1),
-  nameEn: z.string().min(1),
+  nameAr: z.string().trim().min(1),
+  nameEn: z.string().trim().min(1),
   category: z.enum(["devices", "papers", "sim", "accessories"]),
   unitsPerBox: z.number().int().positive(),
   isActive: z.boolean().optional().default(true),
@@ -23,8 +23,8 @@ const createItemTypeSchema = z.object({
 });
 
 const updateItemTypeSchema = z.object({
-  nameAr: z.string().min(1).optional(),
-  nameEn: z.string().min(1).optional(),
+  nameAr: z.string().trim().min(1).optional(),
+  nameEn: z.string().trim().min(1).optional(),
   category: z.enum(["devices", "papers", "sim", "accessories"]).optional(),
   unitsPerBox: z.number().int().positive().optional(),
   isActive: z.boolean().optional(),
@@ -43,6 +43,10 @@ const toggleVisibilitySchema = z.object({
 });
 
 export class ItemTypesController {
+  private normalizeName(name: string): string {
+    return name.trim().toLocaleLowerCase();
+  }
+
   /**
    * GET /api/item-types
    * Get all item types (admin view - shows all including inactive)
@@ -79,16 +83,36 @@ export class ItemTypesController {
    */
   create = asyncHandler(async (req: Request, res: Response) => {
     const data = createItemTypeSchema.parse(req.body);
+    const normalizedData = {
+      ...data,
+      nameAr: data.nameAr.trim(),
+      nameEn: data.nameEn.trim(),
+    };
 
     // Check if ID already exists (only if ID was provided)
-    if (data.id) {
-      const existing = await storage.getItemTypeById(data.id);
+    if (normalizedData.id) {
+      const existing = await storage.getItemTypeById(normalizedData.id);
       if (existing) {
         throw new ConflictError("Item type ID already exists");
       }
     }
 
-    const type = await storage.createItemType(data);
+    const existingTypes = await storage.getItemTypes();
+    const duplicateNameAr = existingTypes.find((type) =>
+      this.normalizeName(type.nameAr) === this.normalizeName(normalizedData.nameAr)
+    );
+    if (duplicateNameAr) {
+      throw new ConflictError("Item type Arabic name already exists");
+    }
+
+    const duplicateNameEn = existingTypes.find((type) =>
+      this.normalizeName(type.nameEn) === this.normalizeName(normalizedData.nameEn)
+    );
+    if (duplicateNameEn) {
+      throw new ConflictError("Item type English name already exists");
+    }
+
+    const type = await storage.createItemType(normalizedData);
     res.status(201).json(type);
   });
 
@@ -98,7 +122,37 @@ export class ItemTypesController {
    */
   update = asyncHandler(async (req: Request, res: Response) => {
     const data = updateItemTypeSchema.parse(req.body);
-    const type = await storage.updateItemType(req.params.id, data);
+    const normalizedData = {
+      ...data,
+      ...(typeof data.nameAr === 'string' ? { nameAr: data.nameAr.trim() } : {}),
+      ...(typeof data.nameEn === 'string' ? { nameEn: data.nameEn.trim() } : {}),
+    };
+
+    if (normalizedData.nameAr || normalizedData.nameEn) {
+      const existingTypes = await storage.getItemTypes();
+
+      if (normalizedData.nameAr) {
+        const duplicateNameAr = existingTypes.find((type) =>
+          type.id !== req.params.id &&
+          this.normalizeName(type.nameAr) === this.normalizeName(normalizedData.nameAr!)
+        );
+        if (duplicateNameAr) {
+          throw new ConflictError("Item type Arabic name already exists");
+        }
+      }
+
+      if (normalizedData.nameEn) {
+        const duplicateNameEn = existingTypes.find((type) =>
+          type.id !== req.params.id &&
+          this.normalizeName(type.nameEn) === this.normalizeName(normalizedData.nameEn!)
+        );
+        if (duplicateNameEn) {
+          throw new ConflictError("Item type English name already exists");
+        }
+      }
+    }
+
+    const type = await storage.updateItemType(req.params.id, normalizedData);
 
     if (!type) {
       throw new NotFoundError("Item type not found");
