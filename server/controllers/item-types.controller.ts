@@ -8,6 +8,12 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { validateBody } from "../middleware/validation";
 import { z } from "zod";
 import { NotFoundError, ConflictError } from "../utils/errors";
+import { CreateItemTypeUseCase } from "../application/item-types/use-cases/CreateItemType.use-case";
+import {
+  DuplicateItemTypeNameError,
+  ItemTypeIdAlreadyExistsError,
+} from "../domain/item-types/item-type.entity";
+import type { InsertItemType } from "@shared/schema";
 
 const createItemTypeSchema = z.object({
   id: z.string().optional(),
@@ -40,6 +46,12 @@ const toggleActiveSchema = z.object({
 
 const toggleVisibilitySchema = z.object({
   isVisible: z.boolean(),
+});
+
+const createItemTypeUseCase = new CreateItemTypeUseCase({
+  getById: (id) => storage.getItemTypeById(id),
+  getAll: () => storage.getItemTypes(),
+  create: (data) => storage.createItemType(data),
 });
 
 export class ItemTypesController {
@@ -83,37 +95,19 @@ export class ItemTypesController {
    */
   create = asyncHandler(async (req: Request, res: Response) => {
     const data = createItemTypeSchema.parse(req.body);
-    const normalizedData = {
-      ...data,
-      nameAr: data.nameAr.trim(),
-      nameEn: data.nameEn.trim(),
-    };
-
-    // Check if ID already exists (only if ID was provided)
-    if (normalizedData.id) {
-      const existing = await storage.getItemTypeById(normalizedData.id);
-      if (existing) {
-        throw new ConflictError("Item type ID already exists");
+    try {
+      const type = await createItemTypeUseCase.execute(data as InsertItemType);
+      res.status(201).json(type);
+    } catch (error) {
+      if (
+        error instanceof ItemTypeIdAlreadyExistsError ||
+        error instanceof DuplicateItemTypeNameError
+      ) {
+        throw new ConflictError(error.message);
       }
-    }
 
-    const existingTypes = await storage.getItemTypes();
-    const duplicateNameAr = existingTypes.find((type) =>
-      this.normalizeName(type.nameAr) === this.normalizeName(normalizedData.nameAr)
-    );
-    if (duplicateNameAr) {
-      throw new ConflictError("Item type Arabic name already exists");
+      throw error;
     }
-
-    const duplicateNameEn = existingTypes.find((type) =>
-      this.normalizeName(type.nameEn) === this.normalizeName(normalizedData.nameEn)
-    );
-    if (duplicateNameEn) {
-      throw new ConflictError("Item type English name already exists");
-    }
-
-    const type = await storage.createItemType(normalizedData);
-    res.status(201).json(type);
   });
 
   /**

@@ -7,6 +7,8 @@
     "dev": "cross-env NODE_ENV=development PORT=3001 tsx server/index.ts",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "cross-env NODE_ENV=production node dist/index.js",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
     "check": "tsc -p tsconfig.runtime-check.json",
     "check:full": "tsc -p tsconfig.json",
     "db:push": "drizzle-kit push",
@@ -114,7 +116,8 @@
     "tailwindcss": "^3.4.17",
     "tsx": "^4.20.5",
     "typescript": "5.6.3",
-    "vite": "^5.4.20"
+    "vite": "^5.4.20",
+    "vitest": "^2.1.9"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"

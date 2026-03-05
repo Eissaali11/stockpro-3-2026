@@ -1,5 +1,5 @@
 import { repositories } from '../infrastructure/repositories';
-import type { UserSafe, User, InsertUser, SupervisorTechnician } from '../infrastructure/schemas';
+import type { InsertUser, SupervisorTechnician, User, UserSafe } from '../infrastructure/schemas';
 
 export async function getUsers(): Promise<UserSafe[]> {
   return repositories.user.getUsers();
@@ -27,6 +27,11 @@ export async function deleteUser(id: string): Promise<boolean> {
 
 export async function getSupervisorTechnicians(supervisorId: string): Promise<UserSafe[]> {
   return repositories.supervisor.getSupervisorTechnicians(supervisorId);
+}
+
+export async function getSupervisorTechnicianIds(supervisorId: string): Promise<string[]> {
+  const technicians = await repositories.supervisor.getSupervisorTechnicians(supervisorId);
+  return technicians.map((technician) => technician.id);
 }
 
 export async function assignTechnicianToSupervisor(supervisorId: string, technicianId: string): Promise<SupervisorTechnician> {

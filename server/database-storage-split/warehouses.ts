@@ -1,11 +1,12 @@
 import { repositories } from '../infrastructure/repositories';
 import type {
-  Warehouse,
-  WarehouseWithStats,
-  WarehouseWithInventory,
   InsertWarehouse,
   InsertWarehouseInventory,
+  Warehouse,
+  WarehouseInventory,
   WarehouseInventoryEntry,
+  WarehouseWithInventory,
+  WarehouseWithStats,
 } from '../infrastructure/schemas';
 
 export async function getWarehouses(): Promise<WarehouseWithStats[]> {
@@ -28,14 +29,26 @@ export async function deleteWarehouse(id: string): Promise<boolean> {
   return repositories.warehouse.deleteWarehouse(id);
 }
 
-export async function getWarehouseInventory(warehouseId: string): Promise<WarehouseWithInventory | undefined> {
-  return repositories.warehouse.getWarehouseInventory(warehouseId) as any;
+export async function getWarehouseInventory(warehouseId: string): Promise<WarehouseInventory | null> {
+  return repositories.warehouse.getWarehouseInventory(warehouseId);
 }
 
-export async function updateWarehouseInventory(warehouseId: string, updates: Partial<InsertWarehouseInventory>) {
-  return repositories.warehouse.updateWarehouseInventory(warehouseId, updates) as any;
+export async function updateWarehouseInventory(
+  warehouseId: string,
+  updates: Partial<InsertWarehouseInventory>
+): Promise<WarehouseInventory> {
+  return repositories.warehouse.updateWarehouseInventory(warehouseId, updates);
 }
 
 export async function getWarehouseInventoryEntries(warehouseId: string): Promise<WarehouseInventoryEntry[]> {
   return repositories.warehouseInventory.getWarehouseInventoryEntries(warehouseId);
+}
+
+export async function upsertWarehouseInventoryEntry(
+  warehouseId: string,
+  itemTypeId: string,
+  boxes: number,
+  units: number
+): Promise<WarehouseInventoryEntry> {
+  return repositories.warehouseInventory.upsertWarehouseInventoryEntry(warehouseId, itemTypeId, boxes, units);
 }
