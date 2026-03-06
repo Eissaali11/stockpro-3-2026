@@ -1,6 +1,6 @@
 import type { Express } from "express";
-import { storage } from "../storage";
 import { requireAuth } from "../middleware/auth";
+import { inventoryEntriesMigrationContainer } from "../composition/inventory-entries-migration.container";
 
 /**
  * Inventory Entries Migration Routes - هجرة قيود المخزون (< 100 lines)
@@ -11,7 +11,7 @@ export function registerInventoryEntriesMigrationRoutes(app: Express): void {
   // هجرة قيود المخزون إلى البنية الجديدة
   app.post("/api/migrate-inventory-entries", requireAuth, async (req, res) => {
     try {
-      await storage.migrateToInventoryEntries();
+      await inventoryEntriesMigrationContainer.inventoryEntriesMigrationUseCase.execute();
       res.json({ success: true, message: "Migration completed successfully" });
     } catch (error) {
       console.error("Error migrating inventory entries:", error);

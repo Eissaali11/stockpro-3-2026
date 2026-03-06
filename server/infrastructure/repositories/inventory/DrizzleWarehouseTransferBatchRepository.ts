@@ -116,6 +116,17 @@ export class DrizzleWarehouseTransferBatchRepository {
     }) => this.typeTransferRow(transfer));
   }
 
+  async findLatestTransferIdByRequestId(requestId: string): Promise<string | undefined> {
+    const [row] = await this.executor
+      .select({ id: warehouseTransfers.id })
+      .from(warehouseTransfers)
+      .where(eq(warehouseTransfers.requestId, requestId))
+      .orderBy(desc(warehouseTransfers.createdAt))
+      .limit(1);
+
+    return row?.id;
+  }
+
   async getWarehouseBalance(warehouseId: string, itemTypeId: string): Promise<WarehouseStockBalance> {
     const [entry] = await this.executor
       .select({
@@ -274,6 +285,22 @@ export class DrizzleWarehouseTransferBatchRepository {
       .update(warehouseTransfers)
       .set({
         status: 'approved',
+        respondedAt: new Date(),
+      })
+      .where(and(inArray(warehouseTransfers.id, transferIds), eq(warehouseTransfers.status, 'pending')))
+      .returning();
+  }
+
+  async markTransfersRejected(transferIds: string[], reason: string): Promise<WarehouseTransfer[]> {
+    if (transferIds.length === 0) {
+      return [];
+    }
+
+    return this.executor
+      .update(warehouseTransfers)
+      .set({
+        status: 'rejected',
+        rejectionReason: reason,
         respondedAt: new Date(),
       })
       .where(and(inArray(warehouseTransfers.id, transferIds), eq(warehouseTransfers.status, 'pending')))

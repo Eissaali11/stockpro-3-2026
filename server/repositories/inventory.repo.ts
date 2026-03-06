@@ -1,22 +1,24 @@
-import { storage } from "../storage";
+import { InventoryService } from "../services/inventory.service";
 import type { InsertInventoryItem, InventoryItemWithStatus } from "@shared/schema";
 
+const inventoryService = new InventoryService();
+
 export async function getInventoryItems(): Promise<InventoryItemWithStatus[]> {
-  return storage.getInventoryItems();
+  return inventoryService.getInventoryItems();
 }
 
 export async function getInventoryItem(id: string) {
-  return storage.getInventoryItem(id);
+  return inventoryService.getInventoryItem(id);
 }
 
 export async function createInventoryItem(item: InsertInventoryItem) {
-  return storage.createInventoryItem(item);
+  return inventoryService.createInventoryItem(item);
 }
 
 export async function updateInventoryItem(id: string, updates: Partial<InsertInventoryItem>) {
-  return storage.updateInventoryItem(id, updates);
+  return inventoryService.updateInventoryItem(id, updates);
 }
 
 export async function deleteInventoryItem(id: string) {
-  return storage.deleteInventoryItem(id);
+  return inventoryService.deleteInventoryItem(id);
 }

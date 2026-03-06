@@ -1,6 +1,6 @@
 import type { Express } from "express";
-import { storage } from "../storage";
 import { requireAuth, requireAdmin } from "../middleware/auth";
+import { supervisorAssignmentsContainer } from "../composition/supervisor-assignments.container";
 
 export function registerSupervisorAssignmentsRoutes(app: Express) {
   
@@ -8,7 +8,7 @@ export function registerSupervisorAssignmentsRoutes(app: Express) {
   
   app.post("/api/supervisors/:supervisorId/technicians/:technicianId", requireAuth, requireAdmin, async (req, res) => {
     try {
-      const assignment = await storage.assignTechnicianToSupervisor(
+      const assignment = await supervisorAssignmentsContainer.supervisorAssignmentsUseCase.assignTechnician(
         req.params.supervisorId,
         req.params.technicianId
       );
@@ -21,7 +21,7 @@ export function registerSupervisorAssignmentsRoutes(app: Express) {
 
   app.delete("/api/supervisors/:supervisorId/technicians/:technicianId", requireAuth, requireAdmin, async (req, res) => {
     try {
-      const removed = await storage.removeTechnicianFromSupervisor(
+      const removed = await supervisorAssignmentsContainer.supervisorAssignmentsUseCase.removeTechnician(
         req.params.supervisorId,
         req.params.technicianId
       );
@@ -37,7 +37,9 @@ export function registerSupervisorAssignmentsRoutes(app: Express) {
 
   app.get("/api/supervisors/:supervisorId/technicians", requireAuth, async (req, res) => {
     try {
-      const technicianIds = await storage.getSupervisorTechnicians(req.params.supervisorId);
+      const technicianIds = await supervisorAssignmentsContainer.supervisorAssignmentsUseCase.getTechnicianIdsBySupervisor(
+        req.params.supervisorId
+      );
       res.json(technicianIds);
     } catch (error) {
       console.error("Error fetching supervisor technicians:", error);
@@ -49,7 +51,7 @@ export function registerSupervisorAssignmentsRoutes(app: Express) {
   
   app.post("/api/supervisors/:supervisorId/warehouses/:warehouseId", requireAuth, requireAdmin, async (req, res) => {
     try {
-      const assignment = await storage.assignWarehouseToSupervisor(
+      const assignment = await supervisorAssignmentsContainer.supervisorAssignmentsUseCase.assignWarehouse(
         req.params.supervisorId,
         req.params.warehouseId
       );
@@ -62,7 +64,7 @@ export function registerSupervisorAssignmentsRoutes(app: Express) {
 
   app.delete("/api/supervisors/:supervisorId/warehouses/:warehouseId", requireAuth, requireAdmin, async (req, res) => {
     try {
-      const removed = await storage.removeWarehouseFromSupervisor(
+      const removed = await supervisorAssignmentsContainer.supervisorAssignmentsUseCase.removeWarehouse(
         req.params.supervisorId,
         req.params.warehouseId
       );
@@ -78,7 +80,9 @@ export function registerSupervisorAssignmentsRoutes(app: Express) {
 
   app.get("/api/supervisors/:supervisorId/warehouses", requireAuth, async (req, res) => {
     try {
-      const warehouseIds = await storage.getSupervisorWarehouses(req.params.supervisorId);
+      const warehouseIds = await supervisorAssignmentsContainer.supervisorAssignmentsUseCase.getWarehouseIdsBySupervisor(
+        req.params.supervisorId
+      );
       res.json(warehouseIds);
     } catch (error) {
       console.error("Error fetching supervisor warehouses:", error);

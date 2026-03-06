@@ -3,6 +3,8 @@ import type { IInventoryTransactionLogRepository } from './IInventoryTransaction
 import type { ITechnicianInventoryTransferRepository } from './ITechnicianInventoryTransferRepository';
 import type { IStockMovementRepository } from './IStockMovementRepository';
 import type { IWarehouseTransferBatchRepository } from './IWarehouseTransferBatchRepository';
+import type { IWarehouseTransferAdminRepository } from './IWarehouseTransferAdminRepository';
+import type { IWarehouseStockMovementsRepository } from './IWarehouseStockMovementsRepository';
 
 export type InventoryTransactionalContext = {
   inventoryRepository: IInventoryRepository;
@@ -10,6 +12,8 @@ export type InventoryTransactionalContext = {
   technicianInventoryTransferRepository?: ITechnicianInventoryTransferRepository;
   stockMovementRepository?: IStockMovementRepository;
   warehouseTransferBatchRepository?: IWarehouseTransferBatchRepository;
+  warehouseTransferAdminRepository?: IWarehouseTransferAdminRepository;
+  warehouseStockMovementsRepository?: IWarehouseStockMovementsRepository;
 };
 
 export interface IInventoryUnitOfWork {

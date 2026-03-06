@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { z } from "zod";
-import { storage } from "../storage";
 import { requireAuth } from "../middleware/auth";
+import { inventoryEntriesContainer } from "../composition/inventory-entries.container";
 
 /**
  * Warehouse Inventory Entries Routes - مدخلات مخزون المستودعات (< 100 lines)
@@ -12,7 +12,7 @@ export function registerWarehouseInventoryEntriesRoutes(app: Express): void {
   // عرض قيود مخزون المستودع
   app.get("/api/warehouses/:warehouseId/inventory-entries", requireAuth, async (req, res) => {
     try {
-      const entries = await storage.getWarehouseInventoryEntries(req.params.warehouseId);
+      const entries = await inventoryEntriesContainer.inventoryEntriesUseCase.getWarehouseEntries(req.params.warehouseId);
       res.json(entries);
     } catch (error) {
       console.error("Error fetching warehouse inventory entries:", error);
@@ -30,12 +30,11 @@ export function registerWarehouseInventoryEntriesRoutes(app: Express): void {
       });
 
       const data = schema.parse(req.body);
-      const entry = await storage.upsertWarehouseInventoryEntry(
-        req.params.warehouseId,
-        data.itemTypeId,
-        data.boxes,
-        data.units
-      );
+      const entry = await inventoryEntriesContainer.inventoryEntriesUseCase.upsertWarehouseEntry(req.params.warehouseId, {
+        itemTypeId: data.itemTypeId,
+        boxes: data.boxes,
+        units: data.units,
+      });
       
       res.json(entry);
     } catch (error) {

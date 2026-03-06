@@ -1,8 +1,6 @@
 import type { Express } from "express";
 import { registerTechniciansProfileRoutes } from "./technicians-profile.routes";
 import { registerTechniciansInventoryRoutes } from "./technicians-inventory.routes";
-import { registerStockFixedInventoryRoutes } from "./stock-fixed-inventory.routes";
-import { registerStockTransferRoutes } from "./stock-transfer.routes";
 import { registerInventoryRequestsCreateRoutes } from "./inventory-requests-create.routes";
 
 /**
@@ -12,7 +10,5 @@ import { registerInventoryRequestsCreateRoutes } from "./inventory-requests-crea
 export function registerTechnicianRoleRoutes(app: Express): void {
   registerTechniciansProfileRoutes(app);
   registerTechniciansInventoryRoutes(app);
-  registerStockFixedInventoryRoutes(app);
-  registerStockTransferRoutes(app);
   registerInventoryRequestsCreateRoutes(app);
 }

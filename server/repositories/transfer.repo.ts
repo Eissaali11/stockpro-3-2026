@@ -1,18 +1,18 @@
-import { storage } from "../storage";
+import { repositories } from "../infrastructure/repositories";
 import type { InsertWarehouseTransfer } from "@shared/schema";
 
 export async function getWarehouseTransfers(warehouseId?: string, technicianId?: string, regionId?: string, limit?: number) {
-  return storage.getWarehouseTransfers(warehouseId, technicianId, regionId, limit);
+  return repositories.transfer.getWarehouseTransfers(warehouseId, technicianId, regionId, limit);
 }
 
 export async function createWarehouseTransfer(data: InsertWarehouseTransfer) {
-  return storage.transferFromWarehouse(data);
+  return repositories.transfer.transferFromWarehouse(data);
 }
 
 export async function acceptWarehouseTransfer(id: string) {
-  return storage.acceptWarehouseTransfer(id);
+  return repositories.transfer.acceptWarehouseTransfer(id);
 }
 
 export async function rejectWarehouseTransfer(id: string, reason?: string) {
-  return storage.rejectWarehouseTransfer(id, reason);
+  return repositories.transfer.rejectWarehouseTransfer(id, reason || "Rejected");
 }

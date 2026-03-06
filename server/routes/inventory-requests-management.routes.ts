@@ -1,6 +1,9 @@
 import type { Express } from "express";
 import { requireAuth } from "../middleware/auth";
-import { storage } from "../storage";
+import {
+  InventoryRequestsManagementUseCaseError,
+} from "../application/inventory-requests/use-cases/InventoryRequestsManagement.use-case";
+import { inventoryRequestsManagementContainer } from "../composition/inventory-requests-management.container";
 
 /**
  * Inventory Requests Management Routes - إدارة طلبات المخزون (< 100 lines)
@@ -13,20 +16,15 @@ export function registerInventoryRequestsManagementRoutes(app: Express): void {
     try {
       const user = (req as any).user;
       const { status, adminNotes } = req.body;
-      
-      if (!['approved', 'rejected'].includes(status)) {
-        return res.status(400).json({ message: "Invalid status. Must be 'approved' or 'rejected'" });
-      }
-      
-      const updatedRequest = await storage.updateInventoryRequestStatus(
-        req.params.id,
+      const updatedRequest = await inventoryRequestsManagementContainer.inventoryRequestsManagementUseCase.updateStatus({
+        id: req.params.id,
         status,
-        user.id,
-        adminNotes
-      );
+        respondedBy: user.id,
+        adminNotes,
+      });
       
       // Log the status update
-      await storage.createSystemLog({
+      await inventoryRequestsManagementContainer.createSystemLogUseCase.execute({
         userId: user.id,
         userName: user.fullName || user.username || 'Unknown',
         userRole: user.role,
@@ -43,6 +41,10 @@ export function registerInventoryRequestsManagementRoutes(app: Express): void {
       
       res.json(updatedRequest);
     } catch (error) {
+      if (error instanceof InventoryRequestsManagementUseCaseError) {
+        return res.status(error.statusCode).json({ message: error.message });
+      }
+
       console.error("Error updating inventory request status:", error);
       if (error instanceof Error && error.message.includes("not found")) {
         return res.status(404).json({ message: "Inventory request not found" });
@@ -55,13 +57,10 @@ export function registerInventoryRequestsManagementRoutes(app: Express): void {
   app.delete("/api/inventory-requests/:id", requireAuth, async (req, res) => {
     try {
       const user = (req as any).user;
-      const deleted = await storage.deleteInventoryRequest(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ message: "Inventory request not found" });
-      }
+      await inventoryRequestsManagementContainer.inventoryRequestsManagementUseCase.deleteRequest(req.params.id);
       
       // Log the deletion
-      await storage.createSystemLog({
+      await inventoryRequestsManagementContainer.createSystemLogUseCase.execute({
         userId: user.id,
         userName: user.fullName || user.username || 'Unknown',
         userRole: user.role,
@@ -77,6 +76,10 @@ export function registerInventoryRequestsManagementRoutes(app: Express): void {
       
       res.json({ message: "Inventory request deleted successfully" });
     } catch (error) {
+      if (error instanceof InventoryRequestsManagementUseCaseError) {
+        return res.status(error.statusCode).json({ message: error.message });
+      }
+
       console.error("Error deleting inventory request:", error);
       res.status(500).json({ message: "Failed to delete inventory request" });
     }

@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { z } from "zod";
-import { storage } from "../storage";
 import { requireAuth } from "../middleware/auth";
+import { inventoryEntriesContainer } from "../composition/inventory-entries.container";
 
 /**
  * Technician Inventory Entries Routes - مدخلات مخزون الفنيين (< 100 lines)
@@ -12,7 +12,7 @@ export function registerTechnicianInventoryEntriesRoutes(app: Express): void {
   // عرض قيود المخزون الثابت للفني
   app.get("/api/technicians/:technicianId/fixed-inventory-entries", requireAuth, async (req, res) => {
     try {
-      const entries = await storage.getTechnicianFixedInventoryEntries(req.params.technicianId);
+      const entries = await inventoryEntriesContainer.inventoryEntriesUseCase.getTechnicianFixedEntries(req.params.technicianId);
       res.json(entries);
     } catch (error) {
       console.error("Error fetching technician fixed inventory entries:", error);
@@ -29,12 +29,11 @@ export function registerTechnicianInventoryEntriesRoutes(app: Express): void {
         units: z.number().min(0)
       });
       const data = schema.parse(req.body);
-      const entry = await storage.upsertTechnicianFixedInventoryEntry(
-        req.params.technicianId,
-        data.itemTypeId,
-        data.boxes,
-        data.units
-      );
+      const entry = await inventoryEntriesContainer.inventoryEntriesUseCase.upsertTechnicianFixedEntry(req.params.technicianId, {
+        itemTypeId: data.itemTypeId,
+        boxes: data.boxes,
+        units: data.units,
+      });
       res.json(entry);
     } catch (error) {
       console.error("Error upserting technician fixed inventory entry:", error);
@@ -45,7 +44,7 @@ export function registerTechnicianInventoryEntriesRoutes(app: Express): void {
   // عرض قيود المخزون المتنقل للفني
   app.get("/api/technicians/:technicianId/moving-inventory-entries", requireAuth, async (req, res) => {
     try {
-      const entries = await storage.getTechnicianMovingInventoryEntries(req.params.technicianId);
+      const entries = await inventoryEntriesContainer.inventoryEntriesUseCase.getTechnicianMovingEntries(req.params.technicianId);
       res.json(entries);
     } catch (error) {
       console.error("Error fetching technician moving inventory entries:", error);
@@ -61,16 +60,14 @@ export function registerTechnicianInventoryEntriesRoutes(app: Express): void {
       // Support both single entry and array of entries
       if (entries && Array.isArray(entries)) {
         // Batch update multiple entries
-        const results = [];
-        for (const entry of entries) {
-          const result = await storage.upsertTechnicianMovingInventoryEntry(
-            req.params.technicianId,
-            entry.itemTypeId,
-            entry.boxes || 0,
-            entry.units || 0
-          );
-          results.push(result);
-        }
+        const results = await inventoryEntriesContainer.inventoryEntriesUseCase.upsertTechnicianMovingEntriesBatch(
+          req.params.technicianId,
+          entries.map((entry: any) => ({
+            itemTypeId: entry.itemTypeId,
+            boxes: entry.boxes || 0,
+            units: entry.units || 0,
+          })),
+        );
         res.json(results);
       } else {
         // Single entry (backward compatible)
@@ -80,12 +77,11 @@ export function registerTechnicianInventoryEntriesRoutes(app: Express): void {
           units: z.number().min(0)
         });
         const data = schema.parse(req.body);
-        const entry = await storage.upsertTechnicianMovingInventoryEntry(
-          req.params.technicianId,
-          data.itemTypeId,
-          data.boxes,
-          data.units
-        );
+        const entry = await inventoryEntriesContainer.inventoryEntriesUseCase.upsertTechnicianMovingEntry(req.params.technicianId, {
+          itemTypeId: data.itemTypeId,
+          boxes: data.boxes,
+          units: data.units,
+        });
         res.json(entry);
       }
     } catch (error) {

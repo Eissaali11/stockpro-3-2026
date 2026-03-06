@@ -3,11 +3,14 @@
  */
 
 import type { Request, Response } from "express";
-import { storage } from "../storage";
 import { asyncHandler } from "../middleware/errorHandler";
 import { validateBody } from "../middleware/validation";
 import { insertRegionSchema } from "@shared/schema";
 import { NotFoundError } from "../utils/errors";
+import { GetRegionsWithStatsUseCase } from "../application/regions/use-cases/GetRegionsWithStats.use-case";
+import { repositories } from "../infrastructure/repositories";
+
+const getRegionsWithStatsUseCase = new GetRegionsWithStatsUseCase(repositories.region);
 
 export class RegionsController {
   /**
@@ -15,7 +18,7 @@ export class RegionsController {
    * Get all regions
    */
   getAll = asyncHandler(async (req: Request, res: Response) => {
-    const regions = await storage.getRegions();
+    const regions = await getRegionsWithStatsUseCase.execute();
     res.json(regions);
   });
 
@@ -24,7 +27,7 @@ export class RegionsController {
    * Get single region
    */
   getById = asyncHandler(async (req: Request, res: Response) => {
-    const region = await storage.getRegion(req.params.id);
+    const region = await repositories.region.findById(req.params.id);
     if (!region) {
       throw new NotFoundError("Region not found");
     }
@@ -38,10 +41,10 @@ export class RegionsController {
   create = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
     const validatedData = insertRegionSchema.parse(req.body);
-    const region = await storage.createRegion(validatedData);
+    const region = await repositories.region.create(validatedData);
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -65,10 +68,10 @@ export class RegionsController {
   update = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
     const updates = insertRegionSchema.partial().parse(req.body);
-    const region = await storage.updateRegion(req.params.id, updates);
+    const region = await repositories.region.update(req.params.id, updates);
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -92,17 +95,21 @@ export class RegionsController {
   delete = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
     // Get region name before deletion
-    const regions = await storage.getRegions();
-    const region = regions.find((r) => r.id === req.params.id);
+    const region = await repositories.region.findById(req.params.id);
     const regionName = region?.name || "Unknown";
 
-    const deleted = await storage.deleteRegion(req.params.id);
+    const usersCount = await repositories.region.countUsersByRegionId(req.params.id);
+    if (usersCount > 0) {
+      throw new Error("Cannot delete region with existing users");
+    }
+
+    const deleted = await repositories.region.delete(req.params.id);
     if (!deleted) {
       throw new NotFoundError("Region not found");
     }
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,

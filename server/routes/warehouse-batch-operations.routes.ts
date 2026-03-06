@@ -1,6 +1,6 @@
 import type { Express } from "express";
-import { storage } from "../storage";
 import { requireAuth } from "../middleware/auth";
+import { inventoryContainer } from "../composition/inventory.container";
 
 /**
  * Warehouse Batch Operations Routes - العمليات المجمعة للمناقلات (< 100 lines)
@@ -12,7 +12,7 @@ export function registerWarehouseBatchOperationsRoutes(app: Express): void {
   app.post("/api/warehouse-transfer-batches/by-ids/accept", requireAuth, async (req, res) => {
     try {
       const { transferIds } = req.body;
-      const results = await storage.acceptWarehouseTransferBatch(transferIds);
+      const results = await inventoryContainer.acceptWarehouseTransferBatchUseCase.execute(transferIds);
       res.json(results);
     } catch (error) {
       console.error("Error accepting transfer batch:", error);
@@ -24,7 +24,10 @@ export function registerWarehouseBatchOperationsRoutes(app: Express): void {
   app.post("/api/warehouse-transfer-batches/by-ids/reject", requireAuth, async (req, res) => {
     try {
       const { transferIds, reason } = req.body;
-      const results = await storage.rejectWarehouseTransferBatch(transferIds, reason);
+      const results = await inventoryContainer.rejectWarehouseTransferBatchUseCase.execute({
+        transferIds,
+        reason,
+      });
       res.json(results);
     } catch (error) {
       console.error("Error rejecting transfer batch:", error);
@@ -36,7 +39,7 @@ export function registerWarehouseBatchOperationsRoutes(app: Express): void {
   app.post("/api/warehouse-transfer-batches/bulk/accept", requireAuth, async (req, res) => {
     try {
       const { criteria } = req.body;
-      const results = await storage.acceptWarehouseTransfersBulk(criteria);
+      const results = await inventoryContainer.acceptBulkWarehouseTransfersUseCase.execute(criteria);
       res.json(results);
     } catch (error) {
       console.error("Error accepting transfers in bulk:", error);
@@ -48,7 +51,10 @@ export function registerWarehouseBatchOperationsRoutes(app: Express): void {
   app.post("/api/warehouse-transfer-batches/bulk/reject", requireAuth, async (req, res) => {
     try {
       const { criteria, reason } = req.body;
-      const results = await storage.rejectWarehouseTransfersBulk(criteria, reason);
+      const results = await inventoryContainer.rejectBulkWarehouseTransfersUseCase.execute({
+        criteria,
+        reason,
+      });
       res.json(results);
     } catch (error) {
       console.error("Error rejecting transfers in bulk:", error);
@@ -59,7 +65,9 @@ export function registerWarehouseBatchOperationsRoutes(app: Express): void {
   // قبول مناقلة بمعرف الطلب
   app.post("/api/warehouse-transfer-batches/:requestId/accept", requireAuth, async (req, res) => {
     try {
-      const result = await storage.acceptWarehouseTransferByRequestId(req.params.requestId);
+      const result = await inventoryContainer.acceptWarehouseTransferByRequestIdUseCase.execute({
+        requestId: req.params.requestId,
+      });
       res.json(result);
     } catch (error) {
       console.error("Error accepting transfer by request ID:", error);
@@ -71,7 +79,10 @@ export function registerWarehouseBatchOperationsRoutes(app: Express): void {
   app.post("/api/warehouse-transfer-batches/:requestId/reject", requireAuth, async (req, res) => {
     try {
       const { reason } = req.body;
-      const result = await storage.rejectWarehouseTransferByRequestId(req.params.requestId, reason);
+      const result = await inventoryContainer.rejectWarehouseTransferByRequestIdUseCase.execute({
+        requestId: req.params.requestId,
+        reason,
+      });
       res.json(result);
     } catch (error) {
       console.error("Error rejecting transfer by request ID:", error);

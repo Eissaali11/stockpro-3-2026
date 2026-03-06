@@ -3,12 +3,13 @@
  */
 
 import type { Request, Response } from "express";
-import { storage } from "../storage";
 import { asyncHandler } from "../middleware/errorHandler";
 import { validateBody, validateParams } from "../middleware/validation";
 import { insertInventoryItemSchema } from "@shared/schema";
 import { z } from "zod";
 import { NotFoundError } from "../utils/errors";
+import * as inventoryRepository from "../repositories/inventory.repo";
+import { inventoryContainer } from "../composition/inventory.container";
 
 export class InventoryController {
   /**
@@ -16,7 +17,7 @@ export class InventoryController {
    * Get all inventory items
    */
   getAll = asyncHandler(async (req: Request, res: Response) => {
-    const items = await storage.getInventoryItems();
+    const items = await inventoryRepository.getInventoryItems();
     res.json(items);
   });
 
@@ -25,7 +26,7 @@ export class InventoryController {
    * Get single inventory item
    */
   getById = asyncHandler(async (req: Request, res: Response) => {
-    const item = await storage.getInventoryItem(req.params.id);
+    const item = await inventoryRepository.getInventoryItem(req.params.id);
     if (!item) {
       throw new NotFoundError("Item not found");
     }
@@ -38,7 +39,7 @@ export class InventoryController {
    */
   create = asyncHandler(async (req: Request, res: Response) => {
     const validatedData = insertInventoryItemSchema.parse(req.body);
-    const item = await storage.createInventoryItem(validatedData);
+    const item = await inventoryRepository.createInventoryItem(validatedData);
     res.status(201).json(item);
   });
 
@@ -48,7 +49,7 @@ export class InventoryController {
    */
   update = asyncHandler(async (req: Request, res: Response) => {
     const updates = insertInventoryItemSchema.partial().parse(req.body);
-    const item = await storage.updateInventoryItem(req.params.id, updates);
+    const item = await inventoryRepository.updateInventoryItem(req.params.id, updates);
     res.json(item);
   });
 
@@ -57,7 +58,7 @@ export class InventoryController {
    * Delete inventory item
    */
   delete = asyncHandler(async (req: Request, res: Response) => {
-    const deleted = await storage.deleteInventoryItem(req.params.id);
+    const deleted = await inventoryRepository.deleteInventoryItem(req.params.id);
     if (!deleted) {
       throw new NotFoundError("Item not found");
     }
@@ -75,7 +76,12 @@ export class InventoryController {
     });
     const { quantity, reason } = schema.parse(req.body);
     const userId = req.user!.id;
-    const item = await storage.addStock(req.params.id, quantity, reason, userId);
+    const item = await inventoryContainer.addInventoryStockUseCase.execute({
+      itemId: req.params.id,
+      quantity,
+      reason,
+      userId,
+    });
     res.json(item);
   });
 
@@ -90,7 +96,12 @@ export class InventoryController {
     });
     const { quantity, reason } = schema.parse(req.body);
     const userId = req.user!.id;
-    const item = await storage.withdrawStock(req.params.id, quantity, reason, userId);
+    const item = await inventoryContainer.withdrawInventoryStockUseCase.execute({
+      itemId: req.params.id,
+      quantity,
+      reason,
+      userId,
+    });
     res.json(item);
   });
 }

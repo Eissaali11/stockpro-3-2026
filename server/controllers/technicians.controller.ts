@@ -3,10 +3,29 @@
  */
 
 import type { Request, Response } from "express";
-import { storage } from "../storage";
 import { asyncHandler } from "../middleware/errorHandler";
 import { NotFoundError } from "../utils/errors";
 import { z } from "zod";
+import {
+  WithdrawToWarehouseUseCaseError,
+} from "../application/inventory/use-cases/WithdrawTechnicianInventoryToWarehouse.use-case";
+import {
+  GetTechniciansInventoryByActorUseCaseError,
+} from "../application/technicians/use-cases/GetTechniciansInventoryByActor.use-case";
+import { techniciansContainer } from "../composition/technicians.container";
+import { stockFixedInventoryContainer } from "../composition/stock-fixed-inventory.container";
+import { stockTransferContainer } from "../composition/stock-transfer.container";
+import { usersContainer } from "../composition/users.container";
+import { supervisorAssignmentsContainer } from "../composition/supervisor-assignments.container";
+import { inventoryEntriesContainer } from "../composition/inventory-entries.container";
+import { createGetTechnicianMovingInventoryUseCase } from "../composition/technicians-moving-inventory.container";
+import { createWithdrawTechnicianInventoryToWarehouseUseCase } from "../composition/technicians-withdraw.container";
+
+const withdrawTechnicianInventoryToWarehouseUseCase =
+  createWithdrawTechnicianInventoryToWarehouseUseCase();
+
+const getTechnicianMovingInventoryUseCase =
+  createGetTechnicianMovingInventoryUseCase();
 
 export class TechniciansController {
   /**
@@ -18,13 +37,21 @@ export class TechniciansController {
     let technicians;
 
     if (user.role === "supervisor") {
-      // Get only assigned technicians for supervisor (resolve IDs to user objects)
-      const techIds = await storage.getSupervisorTechnicians(user.id);
-      const techs = await Promise.all(techIds.map(id => storage.getUser(id)));
-      technicians = techs.filter((t): t is any => !!t);
+      const technicianIds =
+        await supervisorAssignmentsContainer.supervisorAssignmentsUseCase.getTechnicianIdsBySupervisor(
+          user.id,
+        );
+
+      const assignedUsers = await Promise.all(
+        technicianIds.map((technicianId) => usersContainer.userManagementUseCase.findById(technicianId)),
+      );
+
+      technicians = assignedUsers.filter(
+        (assignedUser) => assignedUser?.role === "technician",
+      );
     } else {
       // Admin gets all
-      const users = await storage.getUsers();
+      const users = await usersContainer.userManagementUseCase.findAll();
       technicians = users.filter((u) => u.role === "technician");
     }
 
@@ -37,9 +64,20 @@ export class TechniciansController {
    */
   getSupervisorTechnicians = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
-    const techIds = await storage.getSupervisorTechnicians(user.id);
-    const techs = await Promise.all(techIds.map(id => storage.getUser(id)));
-    res.json(techs.filter((t): t is any => !!t));
+    const technicianIds =
+      await supervisorAssignmentsContainer.supervisorAssignmentsUseCase.getTechnicianIdsBySupervisor(
+        user.id,
+      );
+
+    const assignedUsers = await Promise.all(
+      technicianIds.map((technicianId) => usersContainer.userManagementUseCase.findById(technicianId)),
+    );
+
+    const technicians = assignedUsers.filter(
+      (assignedUser) => assignedUser?.role === "technician",
+    );
+
+    res.json(technicians);
   });
 
   /**
@@ -47,7 +85,7 @@ export class TechniciansController {
    * Get single technician details
    */
   getById = asyncHandler(async (req: Request, res: Response) => {
-    const technician = await storage.getUser(req.params.id);
+    const technician = await usersContainer.userManagementUseCase.findById(req.params.id);
     if (!technician) {
       throw new NotFoundError("Technician not found");
     }
@@ -60,7 +98,9 @@ export class TechniciansController {
    */
   getMyFixedInventory = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
-    const inventory = await storage.getTechnicianFixedInventory(user.id);
+    const inventory = await stockFixedInventoryContainer.stockFixedInventoryUseCase.get(
+      user.id,
+    );
     res.json(inventory);
   });
 
@@ -70,15 +110,8 @@ export class TechniciansController {
    */
   getMyMovingInventory = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
-    // Get legacy moving inventory
-    const legacyInventory = await storage.getTechnicianInventory(user.id);
-    // Get dynamic entries
-    const entries = await storage.getTechnicianMovingInventoryEntries(user.id);
-    
-    res.json({
-      ...legacyInventory,
-      entries,
-    });
+    const inventory = await getTechnicianMovingInventoryUseCase.execute(user.id);
+    res.json(inventory);
   });
 
   /**
@@ -86,7 +119,7 @@ export class TechniciansController {
    * Get technician's fixed inventory
    */
   getFixedInventory = asyncHandler(async (req: Request, res: Response) => {
-    const inventory = await storage.getTechnicianFixedInventory(
+    const inventory = await stockFixedInventoryContainer.stockFixedInventoryUseCase.get(
       req.params.technicianId
     );
     res.json(inventory);
@@ -99,13 +132,13 @@ export class TechniciansController {
   updateFixedInventory = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
     const updates = req.body;
-    const inventory = await storage.updateTechnicianFixedInventory(
+    const inventory = await stockFixedInventoryContainer.stockFixedInventoryUseCase.update(
       req.params.technicianId,
       updates
     );
 
     // Log the activity
-    await storage.logSystemActivity({
+    await stockFixedInventoryContainer.createSystemLogUseCase.execute({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -127,7 +160,7 @@ export class TechniciansController {
    * Delete technician's fixed inventory
    */
   deleteFixedInventory = asyncHandler(async (req: Request, res: Response) => {
-    await storage.deleteTechnicianFixedInventory(req.params.technicianId);
+    await stockFixedInventoryContainer.stockFixedInventoryUseCase.delete(req.params.technicianId);
     res.json({ message: "Fixed inventory deleted successfully" });
   });
 
@@ -137,7 +170,7 @@ export class TechniciansController {
    */
   getStockMovements = asyncHandler(async (req: Request, res: Response) => {
     const { technicianId, limit } = req.query;
-    const movements = await storage.getStockMovements(
+    const movements = await stockTransferContainer.stockTransferUseCase.getMovements(
       technicianId as string | undefined,
       limit ? parseInt(limit as string) : undefined
     );
@@ -162,13 +195,13 @@ export class TechniciansController {
     });
 
     const data = schema.parse(req.body);
-    const result = await storage.transferStock({
+    const result = await stockTransferContainer.stockTransferUseCase.transfer({
       ...data,
       performedBy: user.id,
     });
 
     // Log the activity
-    await storage.logSystemActivity({
+    await stockTransferContainer.createSystemLogUseCase.execute({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -204,168 +237,28 @@ export class TechniciansController {
     });
 
     const data = schema.parse(req.body);
-
-    const technician = await storage.getUser(technicianId);
-    if (!technician || technician.role !== "technician") {
-      throw new NotFoundError("Technician not found");
-    }
-
-    const warehouse = await storage.getWarehouse(data.warehouseId);
-    if (!warehouse) {
-      throw new NotFoundError("Warehouse not found");
-    }
-
-    if (actor.role === "supervisor") {
-      if (!actor.regionId) {
-        return res.status(400).json({ message: "المشرف يجب أن يكون مرتبط بمنطقة" });
-      }
-
-      if (technician.regionId !== actor.regionId) {
-        return res.status(403).json({ message: "لا يمكنك السحب من فني خارج منطقتك" });
-      }
-
-      if (warehouse.regionId !== actor.regionId) {
-        return res.status(403).json({ message: "لا يمكنك السحب إلى مستودع خارج منطقتك" });
-      }
-    }
-
-    const movingEntries = await storage.getTechnicianMovingInventoryEntries(technicianId);
-    const warehouseEntries = await storage.getWarehouseInventoryEntries(data.warehouseId);
-    const legacyTechnicianInventory = await storage.getTechnicianInventory(technicianId);
-    const legacyWarehouseInventory = await storage.getWarehouseInventory(data.warehouseId);
-
-    const movingMap = new Map(movingEntries.map((entry) => [entry.itemTypeId, entry]));
-    const warehouseMap = new Map(warehouseEntries.map((entry) => [entry.itemTypeId, entry]));
-
-    const legacyFieldMapping: Record<string, { boxes: string; units: string }> = {
-      n950: { boxes: "n950Boxes", units: "n950Units" },
-      i9000s: { boxes: "i9000sBoxes", units: "i9000sUnits" },
-      i9100: { boxes: "i9100Boxes", units: "i9100Units" },
-      rollPaper: { boxes: "rollPaperBoxes", units: "rollPaperUnits" },
-      stickers: { boxes: "stickersBoxes", units: "stickersUnits" },
-      newBatteries: { boxes: "newBatteriesBoxes", units: "newBatteriesUnits" },
-      mobilySim: { boxes: "mobilySimBoxes", units: "mobilySimUnits" },
-      stcSim: { boxes: "stcSimBoxes", units: "stcSimUnits" },
-      zainSim: { boxes: "zainSimBoxes", units: "zainSimUnits" },
-      lebaraSim: { boxes: "lebaraBoxes", units: "lebaraUnits" },
-      lebara: { boxes: "lebaraBoxes", units: "lebaraUnits" },
-    };
-
-    const aggregated = new Map<string, { itemTypeId: string; packagingType: "box" | "unit"; quantity: number }>();
-    for (const item of data.items) {
-      const key = `${item.itemTypeId}:${item.packagingType}`;
-      const existing = aggregated.get(key);
-      if (existing) {
-        existing.quantity += item.quantity;
-      } else {
-        aggregated.set(key, { ...item });
-      }
-    }
-
-    const touched = new Map<string, { technicianBoxes: number; technicianUnits: number; warehouseBoxes: number; warehouseUnits: number }>();
-    const technicianLegacyUpdates: Record<string, number> = {};
-    const warehouseLegacyUpdates: Record<string, number> = {};
-
-    for (const item of Array.from(aggregated.values())) {
-      const { itemTypeId, packagingType, quantity } = item;
-      const legacyFields = legacyFieldMapping[itemTypeId];
-
-      const currentTechnician = touched.get(itemTypeId) || {
-        technicianBoxes: movingMap.get(itemTypeId)?.boxes ?? (legacyFields && legacyTechnicianInventory ? ((legacyTechnicianInventory as any)[legacyFields.boxes] || 0) : 0),
-        technicianUnits: movingMap.get(itemTypeId)?.units ?? (legacyFields && legacyTechnicianInventory ? ((legacyTechnicianInventory as any)[legacyFields.units] || 0) : 0),
-        warehouseBoxes: warehouseMap.get(itemTypeId)?.boxes ?? (legacyFields && legacyWarehouseInventory ? ((legacyWarehouseInventory as any)[legacyFields.boxes] || 0) : 0),
-        warehouseUnits: warehouseMap.get(itemTypeId)?.units ?? (legacyFields && legacyWarehouseInventory ? ((legacyWarehouseInventory as any)[legacyFields.units] || 0) : 0),
-      };
-
-      if (packagingType === "box") {
-        if (currentTechnician.technicianBoxes < quantity) {
-          return res.status(400).json({
-            message: `الكمية غير كافية للصنف ${itemTypeId}. المتاح: ${currentTechnician.technicianBoxes} كرتون`,
-          });
-        }
-        currentTechnician.technicianBoxes -= quantity;
-        currentTechnician.warehouseBoxes += quantity;
-      } else {
-        if (currentTechnician.technicianUnits < quantity) {
-          return res.status(400).json({
-            message: `الكمية غير كافية للصنف ${itemTypeId}. المتاح: ${currentTechnician.technicianUnits} وحدة`,
-          });
-        }
-        currentTechnician.technicianUnits -= quantity;
-        currentTechnician.warehouseUnits += quantity;
-      }
-
-      touched.set(itemTypeId, currentTechnician);
-
-      if (legacyFields && legacyTechnicianInventory && legacyWarehouseInventory) {
-        if (packagingType === "box") {
-          const currentTechLegacy = Number((legacyTechnicianInventory as any)[legacyFields.boxes] || 0);
-          const currentWarehouseLegacy = Number((legacyWarehouseInventory as any)[legacyFields.boxes] || 0);
-          technicianLegacyUpdates[legacyFields.boxes] = Math.max(0, currentTechLegacy - quantity);
-          warehouseLegacyUpdates[legacyFields.boxes] = currentWarehouseLegacy + quantity;
-        } else {
-          const currentTechLegacy = Number((legacyTechnicianInventory as any)[legacyFields.units] || 0);
-          const currentWarehouseLegacy = Number((legacyWarehouseInventory as any)[legacyFields.units] || 0);
-          technicianLegacyUpdates[legacyFields.units] = Math.max(0, currentTechLegacy - quantity);
-          warehouseLegacyUpdates[legacyFields.units] = currentWarehouseLegacy + quantity;
-        }
-      }
-    }
-
-    for (const [itemTypeId, values] of Array.from(touched.entries())) {
-      await storage.upsertTechnicianMovingInventoryEntry(
+    try {
+      const result = await withdrawTechnicianInventoryToWarehouseUseCase.execute({
+        actor: {
+          id: actor.id,
+          username: actor.username,
+          role: actor.role,
+          regionId: actor.regionId,
+        },
         technicianId,
-        itemTypeId,
-        values.technicianBoxes,
-        values.technicianUnits
-      );
-
-      await storage.upsertWarehouseInventoryEntry(
-        data.warehouseId,
-        itemTypeId,
-        values.warehouseBoxes,
-        values.warehouseUnits
-      );
-    }
-
-    if (legacyTechnicianInventory && Object.keys(technicianLegacyUpdates).length > 0) {
-      await storage.updateTechnicianInventory(technicianId, technicianLegacyUpdates as any);
-    }
-
-    if (legacyWarehouseInventory && Object.keys(warehouseLegacyUpdates).length > 0) {
-      await storage.updateWarehouseInventory(data.warehouseId, warehouseLegacyUpdates as any);
-    }
-
-    const totalQuantity = Array.from(aggregated.values()).reduce((sum, item) => sum + item.quantity, 0);
-
-    await storage.logSystemActivity({
-      userId: actor.id,
-      userName: actor.username,
-      userRole: actor.role,
-      regionId: actor.regionId || null,
-      action: "transfer",
-      entityType: "warehouse",
-      entityId: data.warehouseId,
-      entityName: warehouse.name,
-      description: `تم سحب ${totalQuantity} من مخزون الفني ${technician.fullName} إلى المستودع ${warehouse.name}`,
-      details: JSON.stringify({
-        technicianId,
-        technicianName: technician.fullName,
         warehouseId: data.warehouseId,
-        warehouseName: warehouse.name,
-        items: Array.from(aggregated.values()),
-        notes: data.notes || null,
-      }),
-      severity: "info",
-      success: true,
-    });
+        notes: data.notes,
+        items: data.items,
+      });
 
-    res.json({
-      success: true,
-      message: "تم سحب المخزون إلى المستودع بنجاح",
-      itemsCount: aggregated.size,
-      totalQuantity,
-    });
+      res.json(result);
+    } catch (error) {
+      if (error instanceof WithdrawToWarehouseUseCaseError) {
+        return res.status(error.statusCode).json({ message: error.message });
+      }
+
+      throw error;
+    }
   });
 
   /**
@@ -373,7 +266,7 @@ export class TechniciansController {
    * Get technician's fixed inventory entries
    */
   getFixedInventoryEntries = asyncHandler(async (req: Request, res: Response) => {
-    const entries = await storage.getTechnicianFixedInventoryEntries(
+    const entries = await inventoryEntriesContainer.inventoryEntriesUseCase.getTechnicianFixedEntries(
       req.params.technicianId
     );
     res.json(entries);
@@ -390,12 +283,11 @@ export class TechniciansController {
       units: z.number().min(0),
     });
     const data = schema.parse(req.body);
-    const entry = await storage.upsertTechnicianFixedInventoryEntry(
-      req.params.technicianId,
-      data.itemTypeId,
-      data.boxes,
-      data.units
-    );
+    const entry = await inventoryEntriesContainer.inventoryEntriesUseCase.upsertTechnicianFixedEntry(req.params.technicianId, {
+      itemTypeId: data.itemTypeId,
+      boxes: data.boxes,
+      units: data.units,
+    });
     res.json(entry);
   });
 
@@ -404,7 +296,7 @@ export class TechniciansController {
    * Get technician's moving inventory entries
    */
   getMovingInventoryEntries = asyncHandler(async (req: Request, res: Response) => {
-    const entries = await storage.getTechnicianMovingInventoryEntries(
+    const entries = await inventoryEntriesContainer.inventoryEntriesUseCase.getTechnicianMovingEntries(
       req.params.technicianId
     );
     res.json(entries);
@@ -430,27 +322,20 @@ export class TechniciansController {
     // Check if it's a batch request with { entries: [...] }
     if (req.body.entries && Array.isArray(req.body.entries)) {
       const { entries } = batchSchema.parse(req.body);
-      const results = [];
-      for (const entry of entries) {
-        const result = await storage.upsertTechnicianMovingInventoryEntry(
-          technicianId,
-          entry.itemTypeId,
-          entry.boxes,
-          entry.units
-        );
-        results.push(result);
-      }
+      const results = await inventoryEntriesContainer.inventoryEntriesUseCase.upsertTechnicianMovingEntriesBatch(
+        technicianId,
+        entries,
+      );
       return res.json(results);
     }
     
     // Single entry format
     const data = singleSchema.parse(req.body);
-    const entry = await storage.upsertTechnicianMovingInventoryEntry(
-      technicianId,
-      data.itemTypeId,
-      data.boxes,
-      data.units
-    );
+    const entry = await inventoryEntriesContainer.inventoryEntriesUseCase.upsertTechnicianMovingEntry(technicianId, {
+      itemTypeId: data.itemTypeId,
+      boxes: data.boxes,
+      units: data.units,
+    });
     res.json(entry);
   });
 
@@ -459,8 +344,8 @@ export class TechniciansController {
    * Get all technicians with both inventories (admin)
    */
   getAllTechniciansInventory = asyncHandler(async (req: Request, res: Response) => {
-    const technicians = await storage.getAllTechniciansWithBothInventories();
-    res.json({ technicians });
+    const result = await techniciansContainer.getAllTechniciansInventoryUseCase.execute();
+    res.json(result);
   });
 
   /**
@@ -470,25 +355,26 @@ export class TechniciansController {
   getSupervisorTechniciansInventory = asyncHandler(
     async (req: Request, res: Response) => {
       const user = req.user!;
-      
-      // If admin, return all technicians
-      if (user.role === 'admin') {
-        const technicians = await storage.getAllTechniciansWithBothInventories();
-        return res.json({ technicians });
-      }
-      
-      // For supervisors, check regionId
-      if (!user.regionId) {
-        return res.status(400).json({ 
-          success: false,
-          message: "المشرف يجب أن يكون مرتبط بمنطقة لعرض البيانات" 
+
+      try {
+        const result = await techniciansContainer.getTechniciansInventoryByActorUseCase.execute({
+          actor: {
+            role: user.role,
+            regionId: user.regionId,
+          },
         });
+
+        res.json(result);
+      } catch (error) {
+        if (error instanceof GetTechniciansInventoryByActorUseCaseError) {
+          return res.status(error.statusCode).json({
+            success: false,
+            message: error.message,
+          });
+        }
+
+        throw error;
       }
-      
-      const technicians = await storage.getRegionTechniciansWithInventories(
-        user.regionId
-      );
-      res.json({ technicians });
     }
   );
 }

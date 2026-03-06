@@ -3,7 +3,6 @@
  */
 
 import type { Request, Response } from "express";
-import { storage } from "../storage";
 import { asyncHandler } from "../middleware/errorHandler";
 import {
   insertWithdrawnDeviceSchema,
@@ -11,6 +10,10 @@ import {
 } from "@shared/schema";
 import { NotFoundError } from "../utils/errors";
 import { z } from "zod";
+import { repositories } from "../infrastructure/repositories";
+import { DevicesService } from "../services/devices.service";
+
+const devicesService = new DevicesService();
 
 export class DevicesController {
   /**
@@ -22,9 +25,9 @@ export class DevicesController {
     let devices;
 
     if (user.role === "supervisor" && user.regionId) {
-      devices = await storage.getWithdrawnDevicesByRegion(user.regionId);
+      devices = await devicesService.getWithdrawnDevicesByRegion(user.regionId);
     } else {
-      devices = await storage.getWithdrawnDevices();
+      devices = await devicesService.getWithdrawnDevices();
     }
 
     res.json(devices);
@@ -35,7 +38,7 @@ export class DevicesController {
    * Get single withdrawn device
    */
   getWithdrawnDevice = asyncHandler(async (req: Request, res: Response) => {
-    const device = await storage.getWithdrawnDevice(req.params.id);
+    const device = await devicesService.getWithdrawnDevice(req.params.id);
     if (!device) {
       throw new NotFoundError("Device not found");
     }
@@ -50,14 +53,14 @@ export class DevicesController {
     const user = req.user!;
     const validatedData = insertWithdrawnDeviceSchema.parse(req.body);
     
-    const device = await storage.createWithdrawnDevice({
+    const device = await devicesService.createWithdrawnDevice({
       ...validatedData,
       createdBy: user.id,
       regionId: user.regionId,
     });
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -81,10 +84,10 @@ export class DevicesController {
   updateWithdrawnDevice = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
     const updates = insertWithdrawnDeviceSchema.partial().parse(req.body);
-    const device = await storage.updateWithdrawnDevice(req.params.id, updates);
+    const device = await devicesService.updateWithdrawnDevice(req.params.id, updates);
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -107,18 +110,18 @@ export class DevicesController {
    */
   deleteWithdrawnDevice = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
-    const device = await storage.getWithdrawnDevice(req.params.id);
+    const device = await devicesService.getWithdrawnDevice(req.params.id);
     if (!device) {
       throw new NotFoundError("Device not found");
     }
 
-    const deleted = await storage.deleteWithdrawnDevice(req.params.id);
+    const deleted = await devicesService.deleteWithdrawnDevice(req.params.id);
     if (!deleted) {
       throw new NotFoundError("Device not found");
     }
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -150,7 +153,7 @@ export class DevicesController {
       regionId: (regionId as string) || (user.role === "supervisor" ? user.regionId : undefined),
     };
 
-    const devices = await storage.getReceivedDevices(filters);
+    const devices = await devicesService.getReceivedDevices(filters);
     res.json(devices);
   });
 
@@ -161,7 +164,7 @@ export class DevicesController {
   getPendingReceivedDevicesCount = asyncHandler(
     async (req: Request, res: Response) => {
       const user = req.user!;
-      const count = await storage.getPendingReceivedDevicesCount(
+      const count = await devicesService.getPendingReceivedDevicesCount(
         user.role === "supervisor" ? user.id : undefined,
         user.regionId
       );
@@ -174,7 +177,7 @@ export class DevicesController {
    * Get single received device
    */
   getReceivedDevice = asyncHandler(async (req: Request, res: Response) => {
-    const device = await storage.getReceivedDevice(req.params.id);
+    const device = await devicesService.getReceivedDevice(req.params.id);
     if (!device) {
       throw new NotFoundError("Device not found");
     }
@@ -189,7 +192,7 @@ export class DevicesController {
     const user = req.user!;
     const validatedData = insertReceivedDeviceSchema.parse(req.body);
 
-    const device = await storage.createReceivedDevice({
+    const device = await devicesService.createReceivedDevice({
       ...validatedData,
       technicianId: validatedData.technicianId || user.id,
       supervisorId: user.role === "supervisor" ? user.id : null,
@@ -197,7 +200,7 @@ export class DevicesController {
     });
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -227,7 +230,7 @@ export class DevicesController {
       });
       const { status, adminNotes } = schema.parse(req.body);
 
-      const device = await storage.updateReceivedDeviceStatus(
+      const device = await devicesService.updateReceivedDeviceStatus(
         req.params.id,
         status,
         user.id,
@@ -235,7 +238,7 @@ export class DevicesController {
       );
 
       // Log the activity
-      await storage.logSystemActivity({
+      await repositories.systemLogs.createSystemLog({
         userId: user.id,
         userName: user.username,
         userRole: user.role,
@@ -259,18 +262,18 @@ export class DevicesController {
    */
   deleteReceivedDevice = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
-    const device = await storage.getReceivedDevice(req.params.id);
+    const device = await devicesService.getReceivedDevice(req.params.id);
     if (!device) {
       throw new NotFoundError("Device not found");
     }
 
-    const deleted = await storage.deleteReceivedDevice(req.params.id);
+    const deleted = await devicesService.deleteReceivedDevice(req.params.id);
     if (!deleted) {
       throw new NotFoundError("Device not found");
     }
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,

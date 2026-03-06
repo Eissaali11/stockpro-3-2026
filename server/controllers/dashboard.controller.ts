@@ -3,8 +3,10 @@
  */
 
 import type { Request, Response } from "express";
-import { storage } from "../storage";
 import { asyncHandler } from "../middleware/errorHandler";
+import { SystemAnalyticsService } from "../services/analytics.service";
+
+const analyticsService = new SystemAnalyticsService();
 
 export class DashboardController {
   /**
@@ -12,7 +14,7 @@ export class DashboardController {
    * Get dashboard statistics
    */
   getStats = asyncHandler(async (req: Request, res: Response) => {
-    const stats = await storage.getDashboardStats();
+    const stats = await analyticsService.getDashboardStats();
     res.json(stats);
   });
 
@@ -21,7 +23,7 @@ export class DashboardController {
    * Get admin statistics
    */
   getAdminStats = asyncHandler(async (req: Request, res: Response) => {
-    const stats = await storage.getAdminStats();
+    const stats = await analyticsService.getAdminStats();
     res.json(stats);
   });
 }

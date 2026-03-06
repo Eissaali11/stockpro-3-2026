@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { requireAuth } from "../middleware/auth";
-import { storage } from "../storage";
 import { z } from "zod";
+import { stockTransferContainer } from "../composition/stock-transfer.container";
 
 const stockTransferSchema = z.object({
   technicianId: z.string(),
@@ -26,13 +26,13 @@ export function registerStockTransferRoutes(app: Express): void {
       const user = (req as any).user;
       const transferData = stockTransferSchema.parse(req.body);
       
-      const result = await storage.transferStock({
+      const result = await stockTransferContainer.stockTransferUseCase.transfer({
         ...transferData,
         performedBy: user.id,
       });
       
       // Log the transfer activity
-      await storage.createSystemLog({
+      await stockTransferContainer.createSystemLogUseCase.execute({
         userId: user.id,
         userName: user.fullName || user.username || 'Unknown',
         userRole: user.role,
@@ -70,7 +70,7 @@ export function registerStockTransferRoutes(app: Express): void {
   // عرض حركات المخزون
   app.get("/api/stock-movements", requireAuth, async (req, res) => {
     try {
-      const movements = await storage.getStockMovements();
+      const movements = await stockTransferContainer.stockTransferUseCase.getMovements();
       res.json(movements);
     } catch (error) {
       console.error("Error fetching stock movements:", error);

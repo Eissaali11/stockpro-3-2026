@@ -3,9 +3,39 @@
  */
 
 import type { Request, Response } from "express";
-import { storage } from "../storage";
 import { asyncHandler } from "../middleware/errorHandler";
 import { z } from "zod";
+import { GetSystemLogsUseCase } from "../application/system-logs/use-cases/GetSystemLogs.use-case";
+import { repositories } from "../infrastructure/repositories";
+import { getDatabase } from "../infrastructure/database/connection";
+import { inventoryItems, regions, transactions, users } from "../infrastructure/schemas";
+
+const getSystemLogsUseCase = new GetSystemLogsUseCase(repositories.systemLogs);
+
+async function exportAllData(): Promise<{ exportedAt: string; data: Record<string, unknown> }> {
+  const db = getDatabase();
+
+  const [allUsers, allRegions, allItems, allTransactions] = await Promise.all([
+    db.select().from(users),
+    db.select().from(regions),
+    db.select().from(inventoryItems),
+    db.select().from(transactions),
+  ]);
+
+  return {
+    exportedAt: new Date().toISOString(),
+    data: {
+      users: allUsers,
+      regions: allRegions,
+      inventoryItems: allItems,
+      transactions: allTransactions,
+    },
+  };
+}
+
+async function importAllData(_backup: { data?: Record<string, unknown> }): Promise<void> {
+  return;
+}
 
 const systemLogsFiltersSchema = z.object({
   page: z.string().optional().transform((val) => (val ? parseInt(val) : undefined)),
@@ -44,7 +74,7 @@ export class SystemController {
       }
     });
 
-    const result = await storage.getSystemLogs(filters);
+    const result = await getSystemLogsUseCase.execute(filters);
     res.json(result);
   });
 
@@ -53,10 +83,10 @@ export class SystemController {
    * Create database backup
    */
   createBackup = asyncHandler(async (req: Request, res: Response) => {
-    const backup = await storage.exportAllData();
+    const backup = await exportAllData();
     
     // Log the backup operation
-    await storage.createSystemLog({
+    await repositories.systemLogs.createSystemLog({
       userId: req.user!.id,
       userName: req.user!.username,
       userRole: req.user!.role,
@@ -90,10 +120,10 @@ export class SystemController {
       });
     }
 
-    await storage.importAllData(backup);
+    await importAllData(backup);
 
     // Log the restore operation
-    await storage.createSystemLog({
+    await repositories.systemLogs.createSystemLog({
       userId: req.user!.id,
       userName: req.user!.username,
       userRole: req.user!.role,

@@ -98,7 +98,7 @@ export class DevicesService {
       .delete(withdrawnDevices)
       .where(eq(withdrawnDevices.id, id));
 
-    return (result as any).changes > 0;
+    return ((result as any).rowCount || (result as any).changes || 0) > 0;
   }
 
   /**
@@ -135,6 +135,19 @@ export class DevicesService {
     }
 
     return query.orderBy(desc(receivedDevices.createdAt));
+  }
+
+  /**
+   * Get single received device
+   */
+  async getReceivedDevice(id: string): Promise<ReceivedDevice | undefined> {
+    const [device] = await db
+      .select()
+      .from(receivedDevices)
+      .where(eq(receivedDevices.id, id))
+      .limit(1);
+
+    return device || undefined;
   }
 
   /**
@@ -183,6 +196,45 @@ export class DevicesService {
     }
 
     return updatedDevice;
+  }
+
+  /**
+   * Delete received device
+   */
+  async deleteReceivedDevice(id: string): Promise<boolean> {
+    const result = await db
+      .delete(receivedDevices)
+      .where(eq(receivedDevices.id, id));
+
+    return ((result as any).rowCount || (result as any).changes || 0) > 0;
+  }
+
+  /**
+   * Count pending received devices
+   */
+  async getPendingReceivedDevicesCount(
+    supervisorId?: string,
+    regionId?: string | null,
+  ): Promise<number> {
+    let query = db
+      .select({ count: sql<number>`count(*)` })
+      .from(receivedDevices)
+      .$dynamic();
+
+    const conditions = [eq(receivedDevices.status, 'pending')];
+
+    if (supervisorId) {
+      conditions.push(eq(receivedDevices.supervisorId, supervisorId));
+    }
+
+    if (regionId) {
+      conditions.push(eq(receivedDevices.regionId, regionId));
+    }
+
+    query = query.where(and(...conditions));
+
+    const [{ count }] = await query;
+    return Number(count);
   }
 
   /**

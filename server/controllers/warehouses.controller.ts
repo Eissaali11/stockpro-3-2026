@@ -3,11 +3,17 @@
  */
 
 import type { Request, Response } from "express";
-import { storage } from "../storage";
 import { asyncHandler } from "../middleware/errorHandler";
 import { insertWarehouseSchema } from "@shared/schema";
 import { NotFoundError } from "../utils/errors";
 import { z } from "zod";
+import { repositories } from "../infrastructure/repositories";
+import { GetSupervisorWarehousesUseCase } from "../application/warehouses/use-cases/GetSupervisorWarehouses.use-case";
+
+const getSupervisorWarehousesUseCase = new GetSupervisorWarehousesUseCase(
+  repositories.warehouse,
+  repositories.supervisor,
+);
 
 export class WarehousesController {
   /**
@@ -15,7 +21,7 @@ export class WarehousesController {
    * Get all warehouses (admin)
    */
   getAll = asyncHandler(async (req: Request, res: Response) => {
-    const warehouses = await storage.getWarehouses();
+    const warehouses = await repositories.warehouse.getWarehouses();
     res.json(warehouses);
   });
 
@@ -25,23 +31,11 @@ export class WarehousesController {
    */
   getSupervisorWarehouses = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
-    const assignedWarehouses = await storage.getWarehousesBySupervisor(user.id);
-
-    if (!user.regionId) {
-      return res.json(assignedWarehouses);
-    }
-
-    const regionWarehouses = await storage.getWarehousesByRegion(user.regionId);
-
-    const mergedById = new Map<string, typeof assignedWarehouses[number]>();
-    for (const warehouse of regionWarehouses) {
-      mergedById.set(warehouse.id, warehouse);
-    }
-    for (const warehouse of assignedWarehouses) {
-      mergedById.set(warehouse.id, warehouse);
-    }
-
-    res.json(Array.from(mergedById.values()));
+    const warehouses = await getSupervisorWarehousesUseCase.execute({
+      supervisorId: user.id,
+      regionId: user.regionId,
+    });
+    res.json(warehouses);
   });
 
   /**
@@ -49,7 +43,7 @@ export class WarehousesController {
    * Get single warehouse with inventory
    */
   getById = asyncHandler(async (req: Request, res: Response) => {
-    const warehouse = await storage.getWarehouse(req.params.id);
+    const warehouse = await repositories.warehouse.getWarehouse(req.params.id);
     if (!warehouse) {
       throw new NotFoundError("Warehouse not found");
     }
@@ -63,10 +57,10 @@ export class WarehousesController {
   create = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
     const validatedData = insertWarehouseSchema.parse(req.body);
-    const warehouse = await storage.createWarehouse(validatedData, user.id);
+    const warehouse = await repositories.warehouse.createWarehouse(validatedData, user.id);
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -90,10 +84,10 @@ export class WarehousesController {
   update = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
     const updates = insertWarehouseSchema.partial().parse(req.body);
-    const warehouse = await storage.updateWarehouse(req.params.id, updates);
+    const warehouse = await repositories.warehouse.updateWarehouse(req.params.id, updates);
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -116,18 +110,18 @@ export class WarehousesController {
    */
   delete = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
-    const warehouse = await storage.getWarehouse(req.params.id);
+    const warehouse = await repositories.warehouse.getWarehouse(req.params.id);
     if (!warehouse) {
       throw new NotFoundError("Warehouse not found");
     }
 
-    const deleted = await storage.deleteWarehouse(req.params.id);
+    const deleted = await repositories.warehouse.deleteWarehouse(req.params.id);
     if (!deleted) {
       throw new NotFoundError("Warehouse not found");
     }
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -149,7 +143,7 @@ export class WarehousesController {
    * Get warehouse inventory
    */
   getInventory = asyncHandler(async (req: Request, res: Response) => {
-    const inventory = await storage.getWarehouseInventory(req.params.warehouseId);
+    const inventory = await repositories.warehouse.getWarehouseInventory(req.params.warehouseId);
     res.json(inventory);
   });
 
@@ -160,13 +154,13 @@ export class WarehousesController {
   updateInventory = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
     const updates = req.body;
-    const inventory = await storage.updateWarehouseInventory(
+    const inventory = await repositories.warehouse.updateWarehouseInventory(
       req.params.warehouseId,
       updates
     );
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -188,7 +182,7 @@ export class WarehousesController {
    * Get warehouse inventory entries (dynamic)
    */
   getInventoryEntries = asyncHandler(async (req: Request, res: Response) => {
-    const entries = await storage.getWarehouseInventoryEntries(req.params.warehouseId);
+    const entries = await repositories.warehouseInventory.getWarehouseInventoryEntries(req.params.warehouseId);
     res.json(entries);
   });
 
@@ -203,7 +197,7 @@ export class WarehousesController {
       units: z.number().min(0),
     });
     const data = schema.parse(req.body);
-    const entry = await storage.upsertWarehouseInventoryEntry(
+    const entry = await repositories.warehouseInventory.upsertWarehouseInventoryEntry(
       req.params.warehouseId,
       data.itemTypeId,
       data.boxes,

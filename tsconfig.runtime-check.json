@@ -2,8 +2,7 @@
   "extends": "./tsconfig.json",
   "include": [
     "shared/**/*.ts",
-    "server/database-storage.ts",
-    "server/database-storage-split/**/*.ts",
+    "server/composition/**/*.ts",
     "server/infrastructure/database/**/*.ts",
     "server/infrastructure/schemas/**/*.ts",
     "server/infrastructure/repositories/**/*.ts"

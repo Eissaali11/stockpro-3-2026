@@ -3,12 +3,13 @@
  */
 
 import type { Request, Response } from "express";
-import { storage } from "../storage";
 import { asyncHandler } from "../middleware/errorHandler";
 import { validateBody } from "../middleware/validation";
 import { insertUserSchema } from "@shared/schema";
 import { NotFoundError } from "../utils/errors";
 import { hashPassword } from "../utils/password";
+import { usersContainer } from "../composition/users.container";
+import { repositories } from "../infrastructure/repositories";
 
 export class UsersController {
   /**
@@ -16,7 +17,7 @@ export class UsersController {
    * Get all users
    */
   getAll = asyncHandler(async (req: Request, res: Response) => {
-    const users = await storage.getUsers();
+    const users = await usersContainer.userManagementUseCase.findAll();
     res.json(users);
   });
 
@@ -25,7 +26,7 @@ export class UsersController {
    * Get single user
    */
   getById = asyncHandler(async (req: Request, res: Response) => {
-    const user = await storage.getUser(req.params.id);
+    const user = await usersContainer.userManagementUseCase.findById(req.params.id);
     if (!user) {
       throw new NotFoundError("User not found");
     }
@@ -45,10 +46,10 @@ export class UsersController {
       validatedData.password = await hashPassword(validatedData.password);
     }
 
-    const newUser = await storage.createUser(validatedData);
+    const newUser = await usersContainer.userManagementUseCase.create(validatedData);
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -78,10 +79,10 @@ export class UsersController {
       updates.password = await hashPassword(updates.password);
     }
 
-    const updatedUser = await storage.updateUser(req.params.id, updates);
+    const updatedUser = await usersContainer.userManagementUseCase.update(req.params.id, updates);
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,
@@ -105,18 +106,18 @@ export class UsersController {
   delete = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
     // Get user name before deletion
-    const userToDelete = await storage.getUser(req.params.id);
+    const userToDelete = await usersContainer.userManagementUseCase.findById(req.params.id);
     if (!userToDelete) {
       throw new NotFoundError("User not found");
     }
 
-    const deleted = await storage.deleteUser(req.params.id);
+    const deleted = await usersContainer.userManagementUseCase.softDelete(req.params.id);
     if (!deleted) {
       throw new NotFoundError("User not found");
     }
 
     // Log the activity
-    await storage.logSystemActivity({
+    await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
       userRole: user.role,

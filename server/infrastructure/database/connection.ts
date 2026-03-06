@@ -30,9 +30,9 @@ export async function initializeDatabase(): Promise<void> {
     logger.info(`Connecting to database: ${maskedUrl}`);
 
     // Create connection pool
+    // Do not force SSL by NODE_ENV; rely on DATABASE_URL options (e.g. sslmode=require)
     pool = new Pool({
       connectionString: databaseUrl,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     });
 
     // Initialize Drizzle

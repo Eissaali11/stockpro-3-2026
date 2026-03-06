@@ -8,25 +8,32 @@ export * from './InventoryRequestsRepository';
 export * from './TransferRepository';
 export * from './TransferQueryRepository';
 export * from './TransferExecutionRepository';
+export * from './SystemLogsRepository';
+export * from './DrizzleUserRepository';
+export * from './DrizzleRegionRepository';
 
 // Import all implementations
-import { UserRepository } from './UserRepository';
 import { SupervisorRepository } from './SupervisorRepository';
 import { WarehouseRepository } from './WarehouseRepository';
 import { WarehouseInventoryRepository } from './WarehouseInventoryRepository';
 import { TechnicianInventoryRepository } from './TechnicianInventoryRepository';
 import { InventoryRequestsRepository } from './InventoryRequestsRepository';
 import { TransferRepository } from './TransferRepository';
+import { SystemLogsRepository } from './SystemLogsRepository';
+import { DrizzleUserRepository } from './DrizzleUserRepository';
+import { DrizzleRegionRepository } from './DrizzleRegionRepository';
 
 // Repository Instances (Singleton pattern)
 export const repositories = {
-  user: new UserRepository(),
+  user: new DrizzleUserRepository(),
   supervisor: new SupervisorRepository(),
   warehouse: new WarehouseRepository(),
   warehouseInventory: new WarehouseInventoryRepository(),
   technicianInventory: new TechnicianInventoryRepository(),
   inventoryRequests: new InventoryRequestsRepository(),
   transfer: new TransferRepository(),
+  systemLogs: new SystemLogsRepository(),
+  region: new DrizzleRegionRepository(),
 };
 
 // Type definitions for the repository container

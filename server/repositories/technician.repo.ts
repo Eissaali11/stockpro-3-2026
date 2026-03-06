@@ -1,18 +1,20 @@
-import { storage } from "../storage";
+import { TechnicianService } from "../services/technician.service";
 import type { InsertTechnicianFixedInventory } from "@shared/schema";
 
+const technicianService = new TechnicianService();
+
 export async function getTechnicianFixedInventory(technicianId: string) {
-  return storage.getTechnicianFixedInventory(technicianId);
+  return technicianService.getTechnicianFixedInventory(technicianId);
 }
 
 export async function createTechnicianFixedInventory(inventory: InsertTechnicianFixedInventory) {
-  return storage.createTechnicianFixedInventory(inventory);
+  return technicianService.createTechnicianFixedInventory(inventory);
 }
 
 export async function updateTechnicianFixedInventory(technicianId: string, updates: Partial<InsertTechnicianFixedInventory>) {
-  return storage.updateTechnicianFixedInventory(technicianId, updates);
+  return technicianService.updateTechnicianFixedInventory(technicianId, updates);
 }
 
 export async function deleteTechnicianFixedInventory(technicianId: string) {
-  return storage.deleteTechnicianFixedInventory(technicianId);
+  return technicianService.deleteTechnicianFixedInventory(technicianId);
 }

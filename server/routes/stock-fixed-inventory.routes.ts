@@ -1,8 +1,8 @@
 import type { Express } from "express";
 import { requireAuth } from "../middleware/auth";
-import { storage } from "../storage";
 import { z } from "zod";
 import { insertTechnicianInventorySchema } from "@shared/schema";
+import { stockFixedInventoryContainer } from "../composition/stock-fixed-inventory.container";
 
 /**
  * Stock Fixed Inventory Routes - المخزون الثابت للفنيين (< 100 lines)
@@ -13,7 +13,9 @@ export function registerStockFixedInventoryRoutes(app: Express): void {
   // عرض المخزون الثابت للفني
   app.get("/api/technician-fixed-inventory/:technicianId", requireAuth, async (req, res) => {
     try {
-      const inventory = await storage.getTechnicianFixedInventory(req.params.technicianId);
+      const inventory = await stockFixedInventoryContainer.stockFixedInventoryUseCase.getByTechnicianId(
+        req.params.technicianId,
+      );
       res.json(inventory);
     } catch (error) {
       console.error("Error fetching technician fixed inventory:", error);
@@ -28,18 +30,18 @@ export function registerStockFixedInventoryRoutes(app: Express): void {
       const data = insertTechnicianInventorySchema.parse(req.body);
       
       // Get technician info for logging
-      const technician = await storage.getUser(req.params.technicianId);
+      const technician = await stockFixedInventoryContainer.userManagementUseCase.findById(req.params.technicianId);
       if (!technician) {
         return res.status(404).json({ message: "Technician not found" });
       }
 
-      const updatedInventory = await storage.updateTechnicianFixedInventory(
+      const updatedInventory = await stockFixedInventoryContainer.stockFixedInventoryUseCase.updateByTechnicianId(
         req.params.technicianId, 
         data
       );
       
       // Log the activity
-      await storage.createSystemLog({
+      await stockFixedInventoryContainer.createSystemLogUseCase.execute({
         userId: user.id,
         userName: user.fullName || user.username || 'Unknown',
         userRole: user.role,
@@ -70,18 +72,20 @@ export function registerStockFixedInventoryRoutes(app: Express): void {
   app.delete("/api/technician-fixed-inventory/:technicianId", requireAuth, async (req, res) => {
     try {
       const user = (req as any).user;
-      const technician = await storage.getUser(req.params.technicianId);
+      const technician = await stockFixedInventoryContainer.userManagementUseCase.findById(req.params.technicianId);
       if (!technician) {
         return res.status(404).json({ message: "Technician not found" });
       }
 
-      const deleted = await storage.deleteTechnicianFixedInventory(req.params.technicianId);
+      const deleted = await stockFixedInventoryContainer.stockFixedInventoryUseCase.deleteByTechnicianId(
+        req.params.technicianId,
+      );
       if (!deleted) {
         return res.status(404).json({ message: "Fixed inventory not found" });
       }
       
       // Log the activity
-      await storage.createSystemLog({
+      await stockFixedInventoryContainer.createSystemLogUseCase.execute({
         userId: user.id,
         userName: user.fullName || user.username || 'Unknown',
         userRole: user.role,

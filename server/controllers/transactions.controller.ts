@@ -3,9 +3,9 @@
  */
 
 import type { Request, Response } from "express";
-import { storage } from "../storage";
 import { asyncHandler } from "../middleware/errorHandler";
 import { z } from "zod";
+import { transactionsContainer } from "../composition/transactions.container";
 
 const transactionFiltersSchema = z.object({
   page: z.string().optional().transform((val) => (val ? parseInt(val) : undefined)),
@@ -33,15 +33,7 @@ export class TransactionsController {
   getAll = asyncHandler(async (req: Request, res: Response) => {
     const query = transactionFiltersSchema.parse(req.query);
 
-    // If recent=true, use the simple method
-    if (query.recent === "true") {
-      const limitNum = query.limit || 10;
-      const transactions = await storage.getRecentTransactions(limitNum);
-      return res.json(transactions);
-    }
-
-    // Use the enhanced method with filters
-    const filters: any = {
+    const result = await transactionsContainer.getTransactionsUseCase.execute({
       page: query.page,
       limit: query.limit,
       type: query.type,
@@ -50,16 +42,9 @@ export class TransactionsController {
       startDate: query.startDate,
       endDate: query.endDate,
       search: query.search,
-    };
-
-    // Remove undefined filters
-    Object.keys(filters).forEach((key) => {
-      if (filters[key] === undefined) {
-        delete filters[key];
-      }
+      recent: query.recent,
     });
 
-    const result = await storage.getTransactions(filters);
     res.json(result);
   });
 
@@ -70,20 +55,12 @@ export class TransactionsController {
   getStatistics = asyncHandler(async (req: Request, res: Response) => {
     const query = transactionStatisticsSchema.parse(req.query);
 
-    const filters: any = {
+    const statistics = await transactionsContainer.getTransactionStatisticsUseCase.execute({
       startDate: query.startDate,
       endDate: query.endDate,
       regionId: query.regionId,
-    };
-
-    // Remove undefined filters
-    Object.keys(filters).forEach((key) => {
-      if (filters[key] === undefined) {
-        delete filters[key];
-      }
     });
 
-    const statistics = await storage.getTransactionStatistics(filters);
     res.json(statistics);
   });
 }

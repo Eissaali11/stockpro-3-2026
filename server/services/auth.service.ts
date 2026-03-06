@@ -2,13 +2,13 @@
  * Authentication service
  */
 
-import { storage } from "../storage";
 import { hashPassword, verifyPassword } from "../utils/password";
 import { AuthenticationError, NotFoundError } from "../utils/errors";
 import { loginSchema, insertUserSchema } from "@shared/schema";
 import type { User, InsertUser } from "@shared/schema";
 import { generateSessionToken, sessionStore } from "../middleware/auth";
 import { logger } from "../utils/logger";
+import { repositories } from "../infrastructure/repositories";
 
 export interface LoginCredentials {
   username: string;
@@ -30,7 +30,7 @@ export class AuthService {
     const { username, password } = loginSchema.parse(credentials);
 
     // Find user by username
-    const user = await storage.getUserByUsername(username);
+    const user = await repositories.user.getUserByUsername(username);
     if (!user) {
       throw new AuthenticationError("اسم المستخدم أو كلمة المرور غير صحيحة");
     }
@@ -101,7 +101,7 @@ export class AuthService {
    * Get current user info
    */
   async getCurrentUser(userId: string): Promise<Omit<User, "password">> {
-    const user = await storage.getUser(userId);
+    const user = await repositories.user.getUser(userId);
     if (!user) {
       throw new NotFoundError("User not found");
     }

@@ -1,8 +1,8 @@
 import type { Express } from "express";
 import { requireAuth } from "../middleware/auth";
-import { storage } from "../storage";
 import { z } from "zod";
 import { insertInventoryRequestSchema } from "@shared/schema";
+import { inventoryRequestsCreateContainer } from "../composition/inventory-requests-create.container";
 
 /**
  * Inventory Requests Creation Routes - إنشاء وعرض طلبات المخزون (< 100 lines)
@@ -14,7 +14,7 @@ export function registerInventoryRequestsCreateRoutes(app: Express): void {
   app.get("/api/inventory-requests/my", requireAuth, async (req, res) => {
     try {
       const user = (req as any).user;
-      const requests = await storage.getUserInventoryRequests(user.id);
+      const requests = await inventoryRequestsCreateContainer.inventoryRequestsCreateUseCase.getUserRequests(user.id);
       res.json(requests);
     } catch (error) {
       console.error("Error fetching user inventory requests:", error);
@@ -27,18 +27,13 @@ export function registerInventoryRequestsCreateRoutes(app: Express): void {
     try {
       const user = (req as any).user;
       const data = insertInventoryRequestSchema.parse(req.body);
-      
-      const requestData = {
-        ...data,
+      const request = await inventoryRequestsCreateContainer.inventoryRequestsCreateUseCase.createForTechnician({
         technicianId: user.id,
-        createdAt: new Date(),
-        status: "pending" as const,
-      };
-      
-      const request = await storage.createInventoryRequest(requestData);
+        data,
+      });
       
       // Log the request creation
-      await storage.createSystemLog({
+      await inventoryRequestsCreateContainer.createSystemLogUseCase.execute({
         userId: user.id,
         userName: user.fullName || user.username || 'Unknown',
         userRole: user.role,

@@ -8,6 +8,8 @@ import { DrizzleInventoryTransactionLogRepository } from './DrizzleInventoryTran
 import { DrizzleTechnicianInventoryTransferRepository } from './DrizzleTechnicianInventoryTransferRepository';
 import { DrizzleStockMovementRepository } from './DrizzleStockMovementRepository';
 import { DrizzleWarehouseTransferBatchRepository } from './DrizzleWarehouseTransferBatchRepository';
+import { DrizzleWarehouseTransferAdminRepository } from './DrizzleWarehouseTransferAdminRepository';
+import { DrizzleWarehouseStockMovementsRepository } from './DrizzleWarehouseStockMovementsRepository';
 
 export class DrizzleInventoryUnitOfWork implements IInventoryUnitOfWork {
   private get db() {
@@ -22,6 +24,8 @@ export class DrizzleInventoryUnitOfWork implements IInventoryUnitOfWork {
         technicianInventoryTransferRepository: new DrizzleTechnicianInventoryTransferRepository(tx),
         stockMovementRepository: new DrizzleStockMovementRepository(tx),
         warehouseTransferBatchRepository: new DrizzleWarehouseTransferBatchRepository(tx),
+        warehouseTransferAdminRepository: new DrizzleWarehouseTransferAdminRepository(tx),
+        warehouseStockMovementsRepository: new DrizzleWarehouseStockMovementsRepository(tx),
       };
 
       return work(context);

@@ -3,7 +3,6 @@
  */
 
 import type { Request, Response } from "express";
-import { storage } from "../storage";
 import { asyncHandler } from "../middleware/errorHandler";
 import { validateBody } from "../middleware/validation";
 import { z } from "zod";
@@ -14,6 +13,7 @@ import {
   ItemTypeIdAlreadyExistsError,
 } from "../domain/item-types/item-type.entity";
 import type { InsertItemType } from "@shared/schema";
+import { ItemTypesService } from "../services/item-types.service";
 
 const createItemTypeSchema = z.object({
   id: z.string().optional(),
@@ -48,10 +48,12 @@ const toggleVisibilitySchema = z.object({
   isVisible: z.boolean(),
 });
 
+const itemTypesService = new ItemTypesService();
+
 const createItemTypeUseCase = new CreateItemTypeUseCase({
-  getById: (id) => storage.getItemTypeById(id),
-  getAll: () => storage.getItemTypes(),
-  create: (data) => storage.createItemType(data),
+  getById: (id) => itemTypesService.getItemTypeById(id),
+  getAll: () => itemTypesService.getItemTypes(),
+  create: (data) => itemTypesService.createItemType(data),
 });
 
 export class ItemTypesController {
@@ -64,7 +66,7 @@ export class ItemTypesController {
    * Get all item types (admin view - shows all including inactive)
    */
   getAll = asyncHandler(async (req: Request, res: Response) => {
-    const types = await storage.getItemTypes();
+    const types = await itemTypesService.getItemTypes();
     res.json(types);
   });
 
@@ -73,7 +75,7 @@ export class ItemTypesController {
    * Get active item types only
    */
   getActive = asyncHandler(async (req: Request, res: Response) => {
-    const types = await storage.getActiveItemTypes();
+    const types = await itemTypesService.getActiveItemTypes();
     res.json(types);
   });
 
@@ -82,7 +84,7 @@ export class ItemTypesController {
    * Get single item type
    */
   getById = asyncHandler(async (req: Request, res: Response) => {
-    const type = await storage.getItemTypeById(req.params.id);
+    const type = await itemTypesService.getItemTypeById(req.params.id);
     if (!type) {
       throw new NotFoundError("Item type not found");
     }
@@ -123,7 +125,7 @@ export class ItemTypesController {
     };
 
     if (normalizedData.nameAr || normalizedData.nameEn) {
-      const existingTypes = await storage.getItemTypes();
+      const existingTypes = await itemTypesService.getItemTypes();
 
       if (normalizedData.nameAr) {
         const duplicateNameAr = existingTypes.find((type) =>
@@ -146,10 +148,14 @@ export class ItemTypesController {
       }
     }
 
-    const type = await storage.updateItemType(req.params.id, normalizedData);
-
-    if (!type) {
-      throw new NotFoundError("Item type not found");
+    let type;
+    try {
+      type = await itemTypesService.updateItemType(req.params.id, normalizedData);
+    } catch (error) {
+      if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
+        throw new NotFoundError("Item type not found");
+      }
+      throw error;
     }
 
     res.json(type);
@@ -161,10 +167,14 @@ export class ItemTypesController {
    */
   toggleActive = asyncHandler(async (req: Request, res: Response) => {
     const { isActive } = toggleActiveSchema.parse(req.body);
-    const type = await storage.toggleItemTypeActive(req.params.id, isActive);
-
-    if (!type) {
-      throw new NotFoundError("Item type not found");
+    let type;
+    try {
+      type = await itemTypesService.updateItemType(req.params.id, { isActive });
+    } catch (error) {
+      if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
+        throw new NotFoundError("Item type not found");
+      }
+      throw error;
     }
 
     res.json(type);
@@ -176,10 +186,14 @@ export class ItemTypesController {
    */
   toggleVisibility = asyncHandler(async (req: Request, res: Response) => {
     const { isVisible } = toggleVisibilitySchema.parse(req.body);
-    const type = await storage.toggleItemTypeVisibility(req.params.id, isVisible);
-
-    if (!type) {
-      throw new NotFoundError("Item type not found");
+    let type;
+    try {
+      type = await itemTypesService.updateItemType(req.params.id, { isVisible });
+    } catch (error) {
+      if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
+        throw new NotFoundError("Item type not found");
+      }
+      throw error;
     }
 
     res.json(type);
@@ -191,10 +205,13 @@ export class ItemTypesController {
    */
   delete = asyncHandler(async (req: Request, res: Response) => {
     // Soft delete by setting isActive to false
-    const type = await storage.toggleItemTypeActive(req.params.id, false);
-
-    if (!type) {
-      throw new NotFoundError("Item type not found");
+    try {
+      await itemTypesService.updateItemType(req.params.id, { isActive: false });
+    } catch (error) {
+      if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
+        throw new NotFoundError("Item type not found");
+      }
+      throw error;
     }
 
     res.json({ success: true, message: "Item type disabled successfully" });
@@ -205,7 +222,7 @@ export class ItemTypesController {
    * Seed default item types
    */
   seed = asyncHandler(async (req: Request, res: Response) => {
-    await storage.seedDefaultItemTypes();
+    await itemTypesService.seedDefaultItemTypes();
     res.json({ success: true, message: "Default item types seeded successfully" });
   });
 }

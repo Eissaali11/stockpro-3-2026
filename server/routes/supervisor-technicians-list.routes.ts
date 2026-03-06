@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { requireAuth, requireSupervisor } from "../middleware/auth";
-import { storage } from "../storage";
+import { techniciansContainer } from "../composition/technicians.container";
+import { usersContainer } from "../composition/users.container";
 
 /**
  * Supervisor Technicians List - عرض قوائم الفنيين (<100 سطر)
@@ -15,7 +16,12 @@ export function registerSupervisorTechniciansListRoutes(app: Express): void {
         return res.status(400).json({ message: "المشرف يجب أن يكون مرتبط بمنطقة لعرض البيانات" });
       }
       
-      const technicians = await storage.getRegionTechniciansWithInventories(user.regionId);
+      const { technicians } = await techniciansContainer.getTechniciansInventoryByActorUseCase.execute({
+        actor: {
+          role: user.role,
+          regionId: user.regionId,
+        },
+      });
       res.json({ technicians });
     } catch (error) {
       console.error("Error fetching region technicians inventory:", error);
@@ -32,7 +38,7 @@ export function registerSupervisorTechniciansListRoutes(app: Express): void {
         return res.status(400).json({ message: "المشرف يجب أن يكون مرتبط بمنطقة" });
       }
 
-      const allUsers = await storage.getUsers();
+      const allUsers = await usersContainer.userManagementUseCase.findByRegion(supervisor.regionId);
       
       // Filter technicians in supervisor's region
       const technicians = allUsers.filter(user => 
