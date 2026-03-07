@@ -9,7 +9,8 @@ import LandingPage from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import AdminPage from "@/pages/admin";
 import { TransactionHistoryPage } from "@/pages/transaction-history";
-import WithdrawnDevicesPage from "@/pages/withdrawn-devices";
+import WithdrawnDevicesPage from "./pages/withdrawn-devices";
+import WithdrawnDevicesManagementPage from "./pages/withdrawn-devices-management";
 import WithdrawnDeviceDetailsPage from "@/pages/WithdrawnDeviceDetails";
 import ReceivedDevicesSubmit from "@/pages/ReceivedDevicesSubmit";
 import ReceivedDevicesReview from "@/pages/ReceivedDevicesReview";
@@ -24,12 +25,16 @@ import WarehouseDetailsPage from "@/pages/warehouse-details";
 import TransferDetailsPage from "@/pages/transfer-details";
 import OperationsPage from "@/pages/operations";
 import OperationDetailsPage from "@/pages/operation-details";
+import OperationsSearchPage from "@/pages/operations-search";
 import NotificationsPage from "@/pages/notifications";
 import ProductsManagementPage from "./pages/products-management";
 import ProductDetailsPage from "./pages/product-details";
 import ProductSmartAddPage from "@/pages/product-smart-add";
 import ProfilePage from "@/pages/profile";
 import TechnicianDetailsPage from "@/pages/technician-details";
+import TechnicianItemDetailsPage from "@/pages/technician-item-details";
+import EmployeeDetailedProfileTemplatePage from "@/pages/employee-detailed-profile-template";
+import EmployeeEditProfileTemplatePage from "@/pages/employee-edit-profile-template";
 import SystemLogsPage from "@/pages/system-logs";
 import BackupManagementPage from "@/pages/backup-management";
 import ItemTypesManagement from "@/pages/item-types-management";
@@ -71,7 +76,9 @@ function AuthenticatedRouter() {
       <Route path="/stock" component={LandingPage} />
       <Route path="/home" component={withShell(Dashboard, "الصفحة الرئيسية")} />
       <Route path="/transactions" component={withShell(TransactionHistoryPage, "سجل الحركات")} />
+      <Route path="/operations-search" component={withShell(OperationsSearchPage, "البحث في العمليات")} />
       <Route path="/withdrawn-devices" component={withShell(WithdrawnDevicesPage, "الأصناف المرتجعة")} />
+      <Route path="/withdrawn-devices/management" component={withShell(WithdrawnDevicesManagementPage, "إدارة الأصناف المرتجعة")} />
       <Route path="/withdrawn-devices/:id" component={withShell(WithdrawnDeviceDetailsPage, "تفاصيل الجهاز المرتجع")} />
       <Route path="/received-devices/submit" component={withShell(ReceivedDevicesSubmit, "إدخال أجهزة مستقبلة")} />
       <Route path="/received-devices/review" component={withShell(ReceivedDevicesReview, "مراجعة الأجهزة المستقبلة")} />
@@ -82,6 +89,9 @@ function AuthenticatedRouter() {
       <Route path="/products-management/:id/smart-add" component={withShell(ProductSmartAddPage, "مركز المسح والتحقق الذكي")} />
       <Route path="/profile" component={withShell(ProfilePage, "الملف الشخصي")} />
       <Route path="/technician-details/:id" component={withShell(TechnicianDetailsPage, "تفاصيل عهدة الفني")} />
+      <Route path="/technician-details/:technicianId/item/:itemTypeId" component={withShell(TechnicianItemDetailsPage, "تفاصيل المنتج")} />
+      <Route path="/employee-detailed-profile-template" component={withShell(EmployeeDetailedProfileTemplatePage, "الملف التفصيلي للموظف")} />
+      <Route path="/employee-edit-profile-template" component={withShell(EmployeeEditProfileTemplatePage, "تعديل بيانات الموظف")} />
       <Route path="/system-logs" component={withShell(SystemLogsPage, "سجل النظام")} />
       {user?.role === "technician" && (
         <>

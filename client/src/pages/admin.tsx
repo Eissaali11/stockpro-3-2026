@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle,
+  Eye,
   Edit,
   FileSpreadsheet,
   KeyRound,
@@ -20,6 +21,7 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
+import { Link } from "wouter";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -628,6 +630,20 @@ export default function AdminPage() {
                       </div>
 
                       <div className="flex items-center justify-center gap-1">
+                        {user.role === "technician" && (
+                          <Button
+                            asChild
+                            variant="ghost"
+                            size="icon"
+                            className="text-slate-400 hover:text-sky-300 hover:bg-sky-400/10"
+                            title="عرض تفاصيل الموظف"
+                            data-testid={`button-user-details-${user.id}`}
+                          >
+                            <Link href={`/employee-detailed-profile-template?userId=${user.id}`}>
+                              <Eye className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"

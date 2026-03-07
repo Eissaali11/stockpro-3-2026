@@ -1,62 +1,59 @@
 import { useMemo, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowRight,
-  Cable,
+  BarChart3,
   CheckCircle2,
   CircleEllipsis,
-  FileSpreadsheet,
-  Filter,
+  ClipboardCheck,
   PackageX,
-  Pencil,
-  Plus,
   Search,
+  Settings2,
   Smartphone,
-  Trash2,
+  TrendingDown,
+  TrendingUp,
   TriangleAlert,
   User,
   XCircle,
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 import { WithdrawnDevice } from "@shared/schema";
-import AddWithdrawnDeviceModal from "@/components/add-withdrawn-device-modal";
-import EditWithdrawnDeviceModal from "@/components/edit-withdrawn-device-modal";
-import ExcelJS from 'exceljs';
 
 type DeviceReviewStatus = "pending" | "approved" | "rejected";
+type ReasonKey = "damaged" | "mismatch" | "warranty";
 
 const statusConfig: Record<
   DeviceReviewStatus,
   {
     text: string;
-    cardClass: string;
     badgeClass: string;
     icon: React.ComponentType<{ className?: string }>;
   }
 > = {
   pending: {
     text: "قيد المراجعة",
-    cardClass: "border-amber-500/25",
     badgeClass: "bg-amber-500/15 text-amber-300 border-amber-500/30",
     icon: TriangleAlert,
   },
   approved: {
     text: "موافق عليها",
-    cardClass: "border-emerald-500/25",
     badgeClass: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
     icon: CheckCircle2,
   },
   rejected: {
     text: "مرفوضة",
-    cardClass: "border-rose-500/25",
     badgeClass: "bg-rose-500/15 text-rose-300 border-rose-500/30",
     icon: XCircle,
   },
+};
+
+const reasonLabels: Record<ReasonKey, string> = {
+  damaged: "منتج تالف",
+  mismatch: "عدم تطابق",
+  warranty: "ضمان وكفالة",
 };
 
 const normalize = (value?: string | null): string => (value || "").trim().toLowerCase();
@@ -75,19 +72,25 @@ const inferDeviceReviewStatus = (device: WithdrawnDevice): DeviceReviewStatus =>
   return "pending";
 };
 
-const hasAccessory = (value?: string | null): boolean => {
-  const normalized = normalize(value);
+const inferReasonKey = (device: WithdrawnDevice): ReasonKey => {
+  const source = `${normalize(device.damagePart)} ${normalize(device.notes)}`;
 
-  if (!normalized) return false;
-
-  if (
-    /^(لا|no|false|0|بدون)$/i.test(normalized) ||
-    /(غير\s*موجود|غير\s*متوفر|غير\s*مرفق|cancel|none|n\/a)/i.test(normalized)
-  ) {
-    return false;
+  if (/(تالف|كسر|مكسور|ضرر|damag|broken|fault)/i.test(source)) {
+    return "damaged";
   }
 
-  return true;
+  if (/(عدم\s*تطابق|مختلف|wrong|mismatch|خطأ)/i.test(source)) {
+    return "mismatch";
+  }
+
+  return "warranty";
+};
+
+const getDeviceFamily = (terminalId: string): string => {
+  const value = String(terminalId || "").trim();
+  if (!value) return "غير مصنف";
+  const family = value.split(/[-_\s]/)[0]?.trim();
+  return family ? family.toUpperCase() : "غير مصنف";
 };
 
 const formatCardDate = (value?: unknown): string => {
@@ -101,38 +104,23 @@ const formatCardDate = (value?: unknown): string => {
   });
 };
 
+const formatCardTime = (value?: unknown): string => {
+  if (!value) return "-";
+  const parsed = new Date(value as string);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return parsed.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
+
 export default function WithdrawnDevicesPage() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState<DeviceReviewStatus>("pending");
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedDevice, setSelectedDevice] = useState<WithdrawnDevice | null>(null);
+  const [hoveredMonthKey, setHoveredMonthKey] = useState<string | null>(null);
 
   const { data: devices, isLoading } = useQuery<WithdrawnDevice[]>({
     queryKey: ["/api/withdrawn-devices"],
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await apiRequest("DELETE", `/api/withdrawn-devices/${id}`);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/withdrawn-devices"] });
-      toast({
-        title: "تم الحذف بنجاح",
-        description: "تم حذف الجهاز المسحوب",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "خطأ في الحذف",
-        description: error.message || "حدث خطأ أثناء حذف الجهاز",
-        variant: "destructive",
-      });
-    },
   });
 
   const allDevices = devices || [];
@@ -148,10 +136,107 @@ export default function WithdrawnDevicesPage() {
     );
   }, [allDevices]);
 
-  const filteredDevices = useMemo(() => {
+  const analytics = useMemo(() => {
+    const total = allDevices.length;
+    const approvalRate = total > 0 ? Math.round((stats.approved / total) * 100) : 0;
+    const estimatedLoss = stats.rejected * 350;
+
+    const reasonCounts = allDevices.reduce<Record<ReasonKey, number>>(
+      (acc, device) => {
+        const reason = inferReasonKey(device);
+        acc[reason] += 1;
+        return acc;
+      },
+      { damaged: 0, mismatch: 0, warranty: 0 }
+    );
+
+    const reasons = (Object.keys(reasonCounts) as ReasonKey[]).map((key) => {
+      const count = reasonCounts[key];
+      return {
+        key,
+        label: reasonLabels[key],
+        count,
+        percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+      };
+    });
+
+    const now = new Date();
+    const monthBuckets = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+      const key = `${date.getFullYear()}-${date.getMonth()}`;
+      return {
+        key,
+        label: date.toLocaleDateString("ar-SA", { month: "long" }),
+        count: 0,
+      };
+    });
+
+    const monthIndex = new Map(monthBuckets.map((bucket, idx) => [bucket.key, idx]));
+
+    allDevices.forEach((device) => {
+      const created = new Date(device.createdAt || "");
+      if (Number.isNaN(created.getTime())) return;
+
+      const bucketKey = `${created.getFullYear()}-${created.getMonth()}`;
+      const index = monthIndex.get(bucketKey);
+      if (index === undefined) return;
+      monthBuckets[index].count += 1;
+    });
+
+    const maxMonthCount = Math.max(1, ...monthBuckets.map((bucket) => bucket.count));
+    const chartMaxHeightPx = 160;
+    const monthlyTrend = monthBuckets.map((bucket, index) => ({
+      ...bucket,
+      barHeightPx:
+        bucket.count <= 0
+          ? 10
+          : Math.max(20, Math.round((bucket.count / maxMonthCount) * chartMaxHeightPx)),
+      isCurrentMonth: index === monthBuckets.length - 1,
+    }));
+
+    const currentMonth = monthBuckets[monthBuckets.length - 1]?.count || 0;
+    const previousMonth = monthBuckets[monthBuckets.length - 2]?.count || 0;
+    const monthlyDelta =
+      previousMonth === 0
+        ? currentMonth > 0
+          ? 100
+          : 0
+        : Math.round(((currentMonth - previousMonth) / previousMonth) * 100);
+
+    const topFamiliesMap = allDevices.reduce<Record<string, number>>((acc, device) => {
+      const family = getDeviceFamily(device.terminalId);
+      acc[family] = (acc[family] || 0) + 1;
+      return acc;
+    }, {});
+
+    const topFamilies = Object.entries(topFamiliesMap)
+      .map(([family, count]) => ({ family, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    const topFamilyMax = Math.max(1, ...topFamilies.map((item) => item.count));
+
+    return {
+      total,
+      approvalRate,
+      pending: stats.pending,
+      estimatedLoss,
+      monthlyDelta,
+      monthlyTrend,
+      reasons,
+      topFamilies,
+      topFamilyMax,
+    };
+  }, [allDevices, stats]);
+
+  const latestOperations = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
 
     return allDevices
+      .map((device) => ({
+        ...device,
+        reviewStatus: inferDeviceReviewStatus(device),
+      }))
       .filter((device) => {
         if (!term) return true;
 
@@ -162,454 +247,293 @@ export default function WithdrawnDevicesPage() {
           device.serialNumber.toLowerCase().includes(term)
         );
       })
-      .map((device) => ({
-        ...device,
-        reviewStatus: inferDeviceReviewStatus(device),
-      }))
-      .filter((device) => device.reviewStatus === activeTab);
-  }, [activeTab, allDevices, searchTerm]);
+      .sort((a, b) => new Date(b.createdAt || "").getTime() - new Date(a.createdAt || "").getTime())
+      .slice(0, 8);
+  }, [allDevices, searchTerm]);
 
-  const handleEdit = (device: WithdrawnDevice) => {
-    setSelectedDevice(device);
-    setShowEditModal(true);
-  };
+  const activeTrendPoint = useMemo(() => {
+    if (!analytics.monthlyTrend.length) return null;
 
-  const handleDelete = (id: string) => {
-    if (confirm("هل أنت متأكد من حذف بيانات هذا الجهاز؟")) {
-      deleteMutation.mutate(id);
-    }
-  };
-
-  const handleExport = async () => {
-    if (!filteredDevices || filteredDevices.length === 0) {
-      toast({
-        title: "لا توجد بيانات للتصدير",
-        description: "يجب أن يكون هناك بيانات لتصديرها",
-        variant: "destructive",
-      });
-      return;
+    if (hoveredMonthKey) {
+      const hovered = analytics.monthlyTrend.find((month) => month.key === hoveredMonthKey);
+      if (hovered) return hovered;
     }
 
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('الأجهزة المسحوبة');
-    
-    const currentDate = new Date().toLocaleDateString('ar-EG', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    
-    // Add title row
-    worksheet.mergeCells('A1:L1');
-    const titleCell = worksheet.getCell('A1');
-    titleCell.value = 'تقرير الأجهزة المسحوبة';
-    titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
-    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
-    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    worksheet.getRow(1).height = 35;
-    
-    // Add date row
-    worksheet.mergeCells('A2:L2');
-    const dateCell = worksheet.getCell('A2');
-    dateCell.value = `تاريخ التقرير: ${currentDate}`;
-    dateCell.font = { size: 12, bold: true };
-    dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    dateCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
-    worksheet.getRow(2).height = 25;
-    
-    // Add header row
-    const headerRow = worksheet.getRow(4);
-    headerRow.values = [
-      '#',
-      'المدينة',
-      'اسم الفني',
-      'رقم الجهاز',
-      'الرقم التسلسلي',
-      'البطارية',
-      'كابل الشاحن',
-      'رأس الشاحن',
-      'وجود شريحة',
-      'نوع الشريحة',
-      'الضرر',
-      'ملاحظات'
-    ];
-    headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF475569' } };
-    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
-    headerRow.height = 25;
-    
-    // Add borders to header
-    headerRow.eachCell((cell) => {
-      cell.border = {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' }
-      };
-    });
-    
-    // Add device data
-    filteredDevices.forEach((device, index) => {
-      const row = worksheet.addRow([
-        index + 1,
-        device.city,
-        device.technicianName,
-        device.terminalId,
-        device.serialNumber,
-        device.battery,
-        device.chargerCable,
-        device.chargerHead,
-        device.hasSim,
-        device.simCardType || '-',
-        device.damagePart || '-',
-        device.notes || '-'
-      ]);
-      
-      row.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      row.height = 22;
-      
-      // Alternate row colors
-      if (index % 2 === 0) {
-        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
-      }
-      
-      // Add borders
-      row.eachCell((cell) => {
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-        };
-      });
-      
-      // Right align text columns
-      row.getCell(2).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(3).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(11).alignment = { horizontal: 'right', vertical: 'middle', wrapText: true };
-      row.getCell(12).alignment = { horizontal: 'right', vertical: 'middle', wrapText: true };
-    });
-    
-    // Add statistics section
-    const statsStartRow = worksheet.lastRow!.number + 2;
-    
-    // Stats title
-    worksheet.mergeCells(`A${statsStartRow}:L${statsStartRow}`);
-    const statsTitle = worksheet.getCell(`A${statsStartRow}`);
-    statsTitle.value = 'الإحصائيات الإجمالية';
-    statsTitle.font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
-    statsTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
-    statsTitle.alignment = { horizontal: 'center', vertical: 'middle' };
-    worksheet.getRow(statsStartRow).height = 30;
-    
-    // Stats data
-    const statsRow = worksheet.getRow(statsStartRow + 1);
-    statsRow.values = ['', 'إجمالي عدد الأجهزة المسحوبة', filteredDevices.length];
-    statsRow.height = 25;
-    statsRow.getCell(2).font = { bold: true };
-    statsRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F2FE' } };
-    statsRow.getCell(2).alignment = { horizontal: 'right', vertical: 'middle' };
-    statsRow.getCell(3).font = { bold: true, color: { argb: 'FF1E40AF' } };
-    statsRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
-    
-    // Set column widths
-    worksheet.columns = [
-      { width: 6 },   // #
-      { width: 18 },  // المدينة
-      { width: 25 },  // اسم الفني
-      { width: 18 },  // رقم الجهاز
-      { width: 22 },  // الرقم التسلسلي
-      { width: 14 },  // البطارية
-      { width: 16 },  // كابل الشاحن
-      { width: 16 },  // رأس الشاحن
-      { width: 14 },  // وجود شريحة
-      { width: 16 },  // نوع الشريحة
-      { width: 25 },  // الضرر
-      { width: 35 },  // ملاحظات
-    ];
-    
-    // Write file
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `تقرير_الأجهزة_المسحوبة_${new Date().toISOString().split('T')[0]}.xlsx`;
-    link.click();
-    window.URL.revokeObjectURL(url);
-    
-    toast({
-      title: "تم تصدير التقرير بنجاح",
-      description: `تم تصدير ${filteredDevices.length} سجل بتنسيق احترافي`,
-    });
-  };
+    return analytics.monthlyTrend[analytics.monthlyTrend.length - 1];
+  }, [analytics.monthlyTrend, hoveredMonthKey]);
+
+  const chartScale = useMemo(() => {
+    const maxValue = Math.max(0, ...analytics.monthlyTrend.map((month) => month.count));
+    const midValue = Math.round(maxValue / 2);
+    return { maxValue, midValue };
+  }, [analytics.monthlyTrend]);
 
   if (isLoading) {
     return <div className="text-center py-8 text-slate-300">جاري التحميل...</div>;
   }
 
   return (
-    <>
-      <div className="space-y-6">
-        <section className="rounded-2xl border border-slate-700/60 bg-slate-900/50 backdrop-blur-md p-5">
-          <div className="flex flex-col gap-4">
+    <div className="space-y-8">
+      <section className="rounded-2xl border border-slate-700/60 bg-slate-900/50 backdrop-blur-md p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="space-y-2">
+            <Button asChild variant="ghost" size="sm" className="text-slate-300 hover:bg-slate-800/70 hover:text-white w-fit">
+              <Link href="/home" data-testid="button-back-home">
+                <ArrowRight className="h-4 w-4 ml-2" />
+                <span>العودة للرئيسية</span>
+              </Link>
+            </Button>
             <div className="flex items-center gap-3">
-              <Button asChild variant="ghost" size="sm" className="text-slate-300 hover:bg-slate-800/70 hover:text-white">
-                <Link href="/home" data-testid="button-back-home">
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                  <span>العودة للرئيسية</span>
-                </Link>
-              </Button>
-            </div>
-
-            <div className="flex flex-col xl:flex-row gap-4 xl:items-center xl:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center">
-                  <PackageX className="h-6 w-6 text-cyan-300" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white">إدارة الأجهزة المسحوبة</h2>
-                  <p className="text-sm text-slate-400">متابعة وفهرسة الأجهزة المرتجعة من الفنيين</p>
-                </div>
+              <div className="h-12 w-12 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center">
+                <BarChart3 className="h-6 w-6 text-cyan-300" />
               </div>
-
-              <div className="flex flex-col md:flex-row gap-2 md:items-center">
-                <div className="relative w-full md:w-80">
-                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 h-4 w-4" />
-                  <Input
-                    type="text"
-                    placeholder="ابحث برقم الجهاز أو الفني..."
-                    value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
-                    className="pr-9 bg-slate-950/40 border-white/10 text-white placeholder:text-slate-500"
-                    data-testid="input-search"
-                  />
-                </div>
-
-                <Button variant="outline" className="border-white/10 bg-white/5 text-slate-300 hover:bg-white/10" type="button">
-                  <Filter className="h-4 w-4" />
-                </Button>
-
-                <Button
-                  onClick={handleExport}
-                  variant="outline"
-                  className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
-                  data-testid="button-export"
-                >
-                  <FileSpreadsheet className="h-4 w-4 ml-2" />
-                  تصدير
-                </Button>
-
-                <Button
-                  onClick={() => setShowAddModal(true)}
-                  className="bg-cyan-600 hover:bg-cyan-500 text-white"
-                  data-testid="button-add"
-                >
-                  <Plus className="h-4 w-4 ml-2" />
-                  إضافة جهاز
-                </Button>
+              <div>
+                <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight">
+                  تحليلات المسحوبة <span className="text-cyan-300">Returns Analytics</span>
+                </h2>
+                <p className="text-sm text-slate-400">نظرة عامة على أداء المرتجعات والخسائر المالية للمخزون</p>
               </div>
             </div>
           </div>
-        </section>
 
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="border-amber-500/25 bg-slate-900/50">
-            <div className="p-5 flex items-start justify-between">
-              <div>
-                <p className="text-sm text-slate-400 mb-1">قيد المراجعة</p>
-                <h3 className="text-3xl font-bold text-white">{stats.pending}</h3>
+          <Button asChild className="bg-cyan-600 hover:bg-cyan-500 text-white">
+            <Link href="/withdrawn-devices/management" data-testid="button-open-management">
+              <Settings2 className="h-4 w-4 ml-2" />
+              إدارة الأصناف المرتجعة
+            </Link>
+          </Button>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <Card className="border-cyan-500/25 bg-slate-900/50">
+          <div className="p-5 flex items-start justify-between">
+            <div>
+              <p className="text-sm text-slate-400 mb-1">إجمالي المرتجعات</p>
+              <h3 className="text-3xl font-bold text-white">{analytics.total}</h3>
+              <p className={`text-xs mt-2 flex items-center gap-1 ${analytics.monthlyDelta >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                {analytics.monthlyDelta >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+                {analytics.monthlyDelta >= 0 ? "+" : ""}{analytics.monthlyDelta}% عن الشهر السابق
+              </p>
+            </div>
+            <div className="h-10 w-10 rounded-lg bg-cyan-500/15 text-cyan-300 flex items-center justify-center">
+              <PackageX className="h-5 w-5" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="border-emerald-500/25 bg-slate-900/50">
+          <div className="p-5 flex items-start justify-between">
+            <div>
+              <p className="text-sm text-slate-400 mb-1">معدل الموافقة</p>
+              <h3 className="text-3xl font-bold text-white">{analytics.approvalRate}%</h3>
+              <p className="text-xs text-emerald-300 mt-2 flex items-center gap-1">
+                <ClipboardCheck className="h-3.5 w-3.5" />
+                اعتماد مباشر من رحلة الفحص
+              </p>
+            </div>
+            <div className="h-10 w-10 rounded-lg bg-emerald-500/15 text-emerald-300 flex items-center justify-center">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="border-amber-500/25 bg-slate-900/50">
+          <div className="p-5 flex items-start justify-between">
+            <div>
+              <p className="text-sm text-slate-400 mb-1">في انتظار الفحص</p>
+              <h3 className="text-3xl font-bold text-white">{analytics.pending}</h3>
+              <p className="text-xs text-amber-300 mt-2">حالات تحتاج متابعة المشرف</p>
+            </div>
+            <div className="h-10 w-10 rounded-lg bg-amber-500/15 text-amber-300 flex items-center justify-center">
+              <TriangleAlert className="h-5 w-5" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="border-rose-500/25 bg-slate-900/50">
+          <div className="p-5 flex items-start justify-between">
+            <div>
+              <p className="text-sm text-slate-400 mb-1">خسائر التلفيات</p>
+              <h3 className="text-3xl font-bold text-rose-300">
+                {analytics.estimatedLoss.toLocaleString("en-US")} <span className="text-sm text-slate-400">SAR</span>
+              </h3>
+              <p className="text-xs text-rose-300 mt-2">تقدير مبدئي مبني على الحالات المرفوضة</p>
+            </div>
+            <div className="h-10 w-10 rounded-lg bg-rose-500/15 text-rose-300 flex items-center justify-center">
+              <XCircle className="h-5 w-5" />
+            </div>
+          </div>
+        </Card>
+      </section>
+
+      <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <Card className="xl:col-span-2 border-white/10 bg-slate-900/50 p-5">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-white font-bold">اتجاهات المسحوبة الشهرية</h3>
+            <div className="text-left">
+              <span className="text-xs text-slate-400 block">آخر 6 أشهر</span>
+              <span className="text-xs text-cyan-300 block mt-1">
+                {activeTrendPoint ? `المؤشر: ${activeTrendPoint.label} • ${activeTrendPoint.count}` : "المؤشر: -"}
+              </span>
+            </div>
+          </div>
+          <div className="h-[240px] px-2">
+            <div className="h-[185px] grid grid-cols-[42px_1fr] gap-2">
+              <div className="flex flex-col justify-between pb-2 text-[11px] text-slate-500">
+                <span>{chartScale.maxValue}</span>
+                <span>{chartScale.midValue}</span>
+                <span>0</span>
               </div>
-              <div className="h-10 w-10 rounded-lg bg-amber-500/15 text-amber-300 flex items-center justify-center">
-                <TriangleAlert className="h-5 w-5" />
+
+              <div className="h-full flex items-end gap-3 border-b border-cyan-500/15 pb-2">
+                {analytics.monthlyTrend.map((month) => (
+                  <div
+                    key={month.key}
+                    className="flex-1 min-w-[56px] flex flex-col items-center justify-end gap-2"
+                    onMouseEnter={() => setHoveredMonthKey(month.key)}
+                    onMouseLeave={() => setHoveredMonthKey(null)}
+                  >
+                    <div className="relative w-full flex flex-col items-center">
+                      {hoveredMonthKey === month.key && (
+                        <div className="absolute -top-8 text-[11px] px-2 py-1 rounded bg-cyan-500/20 border border-cyan-400/40 text-cyan-200 whitespace-nowrap">
+                          {month.count} عملية
+                        </div>
+                      )}
+                      <span className={`text-[11px] font-mono mb-1 ${month.isCurrentMonth ? "text-cyan-200" : "text-slate-400"}`}>{month.count}</span>
+                      <div
+                        className={
+                          month.isCurrentMonth
+                            ? "w-full rounded-t-md bg-gradient-to-t from-cyan-600 to-cyan-300 border border-cyan-300/50 shadow-[0_0_18px_rgba(6,249,249,0.35)] transition-all"
+                            : "w-full rounded-t-md bg-cyan-500/55 border border-cyan-300/25 transition-all"
+                        }
+                        style={{ height: `${month.barHeightPx}px` }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          </Card>
 
-          <Card className="border-emerald-500/25 bg-slate-900/50">
-            <div className="p-5 flex items-start justify-between">
-              <div>
-                <p className="text-sm text-slate-400 mb-1">موافق عليها</p>
-                <h3 className="text-3xl font-bold text-white">{stats.approved}</h3>
-              </div>
-              <div className="h-10 w-10 rounded-lg bg-emerald-500/15 text-emerald-300 flex items-center justify-center">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
+            <div className="mt-2 ml-[44px] flex items-start gap-3">
+              {analytics.monthlyTrend.map((month) => (
+                <div key={`${month.key}-label`} className="flex-1 min-w-[56px] text-center">
+                  <span className={`text-xs ${month.isCurrentMonth ? "text-slate-200 font-semibold" : "text-slate-500"}`}>{month.label}</span>
+                </div>
+              ))}
             </div>
-          </Card>
+          </div>
+        </Card>
 
-          <Card className="border-rose-500/25 bg-slate-900/50">
-            <div className="p-5 flex items-start justify-between">
-              <div>
-                <p className="text-sm text-slate-400 mb-1">مرفوضة</p>
-                <h3 className="text-3xl font-bold text-white">{stats.rejected}</h3>
+        <Card className="border-white/10 bg-slate-900/50 p-5">
+          <h3 className="text-white font-bold mb-5">أسباب المرتجعات</h3>
+          <div className="space-y-4">
+            {analytics.reasons.map((reason) => (
+              <div key={reason.key}>
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <span className="text-slate-300">{reason.label}</span>
+                  <span className="text-white font-semibold">{reason.percentage}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                  <div
+                    className={
+                      reason.key === "damaged"
+                        ? "h-full bg-cyan-400"
+                        : reason.key === "mismatch"
+                          ? "h-full bg-amber-400"
+                          : "h-full bg-rose-400"
+                    }
+                    style={{ width: `${Math.max(3, reason.percentage)}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">عدد الحالات: {reason.count}</p>
               </div>
-              <div className="h-10 w-10 rounded-lg bg-rose-500/15 text-rose-300 flex items-center justify-center">
-                <XCircle className="h-5 w-5" />
-              </div>
-            </div>
-          </Card>
-        </section>
+            ))}
+          </div>
+        </Card>
+      </section>
 
-        <section className="border-b border-slate-700/60 flex gap-1 overflow-x-auto">
-          {([
-            { key: "pending", label: "قيد المراجعة", count: stats.pending },
-            { key: "approved", label: "موافق", count: stats.approved },
-            { key: "rejected", label: "مرفوضة", count: stats.rejected },
-          ] as const).map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-              className={
-                activeTab === tab.key
-                  ? "px-5 py-3 text-sm font-bold text-cyan-300 border-b-2 border-cyan-300 whitespace-nowrap"
-                  : "px-5 py-3 text-sm font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap"
-              }
-            >
-              {tab.label} ({tab.count})
-            </button>
-          ))}
-        </section>
+      <section className="rounded-2xl border border-slate-700/60 bg-slate-900/45 p-5 space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <h3 className="text-xl font-bold text-white">آخر العمليات فقط</h3>
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 h-4 w-4" />
+            <Input
+              type="text"
+              placeholder="ابحث بآخر العمليات..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="pr-9 bg-slate-950/40 border-white/10 text-white placeholder:text-slate-500"
+              data-testid="input-search-latest"
+            />
+          </div>
+        </div>
 
-        {filteredDevices.length > 0 ? (
-          <section className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            {filteredDevices.map((device) => {
+        {latestOperations.length > 0 ? (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {latestOperations.map((device) => {
               const cfg = statusConfig[device.reviewStatus as DeviceReviewStatus];
               const StatusIcon = cfg.icon;
-              const hasBattery = hasAccessory(device.battery);
-              const hasCable = hasAccessory(device.chargerCable);
-              const hasHead = hasAccessory(device.chargerHead);
-              const hasSim = hasAccessory(device.hasSim);
 
               return (
-                <Card key={device.id} className={`bg-slate-900/50 border ${cfg.cardClass} overflow-hidden`} data-testid={`card-device-${device.id}`}>
-                  <div className="p-5 space-y-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded border ${cfg.badgeClass}`}>
-                            <StatusIcon className="h-3.5 w-3.5" />
-                            {cfg.text}
-                          </span>
-                          <span className="text-xs text-slate-400">التاريخ: {formatCardDate(device.createdAt)}</span>
-                        </div>
-                        <h4 className="text-base md:text-lg font-bold text-cyan-300" dir="ltr">
-                          ID: {device.terminalId} | SN: {device.serialNumber}
-                        </h4>
-                      </div>
+                <Card key={device.id} className="bg-slate-900/55 border border-white/10 overflow-hidden" data-testid={`card-latest-${device.id}`}>
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded border ${cfg.badgeClass}`}>
+                        <StatusIcon className="h-3.5 w-3.5" />
+                        {cfg.text}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        {formatCardDate(device.createdAt)} - {formatCardTime(device.createdAt)}
+                      </span>
                     </div>
+
+                    <h4 className="text-sm md:text-base font-bold text-cyan-300" dir="ltr">
+                      ID: {device.terminalId} | SN: {device.serialNumber}
+                    </h4>
 
                     <div className="flex items-center gap-2 text-sm text-slate-300">
                       <User className="h-4 w-4 text-cyan-300" />
                       <span>{device.technicianName}</span>
                       <span className="text-slate-500">•</span>
                       <span>{device.city}</span>
+                      {device.simCardType ? (
+                        <>
+                          <span className="text-slate-500">•</span>
+                          <span className="inline-flex items-center gap-1">
+                            <Smartphone className="h-3.5 w-3.5 text-slate-400" />
+                            {device.simCardType}
+                          </span>
+                        </>
+                      ) : null}
                     </div>
-
-                    <div className="bg-slate-950/35 border border-white/10 rounded-lg p-3">
-                      <p className="text-xs text-slate-400 mb-2 font-medium">الملحقات المرفقة:</p>
-                      <div className="flex flex-wrap gap-4 text-sm">
-                        <div className="flex items-center gap-1.5 text-slate-300">
-                          {hasBattery ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <XCircle className="h-4 w-4 text-rose-400" />}
-                          <span className={!hasBattery ? "line-through text-slate-500" : ""}>بطارية</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-slate-300">
-                          {hasCable ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <XCircle className="h-4 w-4 text-rose-400" />}
-                          <span className={!hasCable ? "line-through text-slate-500" : ""}>كابل</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-slate-300">
-                          {hasHead ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <XCircle className="h-4 w-4 text-rose-400" />}
-                          <span className={!hasHead ? "line-through text-slate-500" : ""}>رأس</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-slate-300">
-                          {hasSim ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <XCircle className="h-4 w-4 text-rose-400" />}
-                          <span className={!hasSim ? "line-through text-slate-500" : ""}>SIM</span>
-                        </div>
-                      </div>
-                      {device.simCardType && (
-                        <div className="mt-2 text-xs text-slate-400 flex items-center gap-1.5">
-                          <Smartphone className="h-3.5 w-3.5" />
-                          نوع الشريحة: {device.simCardType}
-                        </div>
-                      )}
-                    </div>
-
-                    {device.damagePart && (
-                      <div className="flex items-start gap-2 text-sm bg-rose-500/10 text-rose-300 p-3 rounded-lg border border-rose-500/20">
-                        <TriangleAlert className="h-4 w-4 mt-0.5" />
-                        <div>
-                          <p className="font-semibold mb-1">ملاحظات الأضرار:</p>
-                          <p>{device.damagePart}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {device.notes && (
-                      <div className="bg-slate-950/35 border border-white/10 rounded-lg p-3 text-sm text-slate-300">
-                        <p className="text-xs text-slate-400 mb-1">ملاحظات:</p>
-                        <p>{device.notes}</p>
-                      </div>
-                    )}
                   </div>
 
-                  <div className="p-4 bg-slate-950/40 border-t border-white/10 flex justify-end gap-2">
+                  <div className="p-3 bg-slate-950/40 border-t border-white/10 flex justify-end">
                     <Button
                       asChild
                       variant="outline"
                       className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20"
-                      data-testid={`button-details-${device.id}`}
+                      data-testid={`button-latest-details-${device.id}`}
                     >
                       <Link href={`/withdrawn-devices/${device.id}`}>
                         <CircleEllipsis className="h-4 w-4 ml-1" />
                         تفاصيل
                       </Link>
                     </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => handleDelete(device.id)}
-                      className="border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
-                      data-testid={`button-delete-${device.id}`}
-                    >
-                      <Trash2 className="h-4 w-4 ml-1" />
-                      حذف
-                    </Button>
-                    <Button
-                      onClick={() => handleEdit(device)}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white"
-                      data-testid={`button-edit-${device.id}`}
-                    >
-                      <Pencil className="h-4 w-4 ml-1" />
-                      تعديل
-                    </Button>
                   </div>
                 </Card>
               );
             })}
-          </section>
+          </div>
         ) : (
           <Card className="bg-slate-900/40 border-white/10">
-            <div className="py-14 text-center">
-              <p className="text-slate-300 text-lg mb-3">لا توجد أجهزة ضمن هذا التصنيف حالياً</p>
-              <p className="text-slate-500 text-sm mb-5">جرّب تغيير الفلتر أو إضافة جهاز جديد</p>
-              <Button onClick={() => setShowAddModal(true)} className="bg-cyan-600 hover:bg-cyan-500 text-white">
-                <Plus className="h-4 w-4 ml-2" />
-                إضافة أول جهاز
-              </Button>
+            <div className="py-10 text-center">
+              <p className="text-slate-300">لا توجد عمليات حديثة مطابقة للبحث.</p>
             </div>
           </Card>
         )}
-      </div>
-
-      <AddWithdrawnDeviceModal open={showAddModal} onOpenChange={setShowAddModal} />
-      <EditWithdrawnDeviceModal 
-        open={showEditModal} 
-        onOpenChange={setShowEditModal}
-        device={selectedDevice}
-      />
-    </>
+      </section>
+    </div>
   );
 }

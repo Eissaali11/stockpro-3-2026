@@ -83,9 +83,31 @@ function getTrendFactors(period: TrendPeriod): number[] {
   return [0.72, 0.89, 0.66, 0.76, 0.92, 0.84];
 }
 
+function getTrendLabels(period: TrendPeriod): string[] {
+  const now = new Date();
+
+  if (period === "daily") {
+    return Array.from({ length: 6 }, (_, index) => {
+      const d = new Date(now);
+      d.setDate(now.getDate() - (5 - index));
+      return d.toLocaleDateString("ar-SA", { day: "2-digit", month: "numeric" });
+    });
+  }
+
+  if (period === "weekly") {
+    return Array.from({ length: 6 }, (_, index) => `أسبوع ${index + 1}`);
+  }
+
+  return Array.from({ length: 6 }, (_, index) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+    return d.toLocaleDateString("ar-SA", { month: "long" });
+  });
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>("monthly");
+  const [hoveredTrendId, setHoveredTrendId] = useState<number | null>(null);
 
   const canSeeGlobalData = user?.role === "admin" || user?.role === "supervisor";
 
@@ -178,6 +200,7 @@ export default function Dashboard() {
 
   const trendBars = useMemo(() => {
     const factors = getTrendFactors(trendPeriod);
+    const labels = getTrendLabels(trendPeriod);
     const fixedBase = Math.max(totals.fixed, 1);
     const movingBase = Math.max(totals.moving, 1);
     const centralBase = Math.max(totals.central || totals.total * 0.25, 1);
@@ -186,18 +209,35 @@ export default function Dashboard() {
       const bucket = index % 3;
 
       if (bucket === 0) {
-        return { id: index + 1, value: fixedBase * factor, color: "#22d3ee" };
+        return { id: index + 1, value: fixedBase * factor, color: "#22d3ee", label: labels[index], kind: "ثابت" as const };
       }
 
       if (bucket === 1) {
-        return { id: index + 1, value: movingBase * factor, color: "#fb923c" };
+        return { id: index + 1, value: movingBase * factor, color: "#fb923c", label: labels[index], kind: "متحرك" as const };
       }
 
-      return { id: index + 1, value: centralBase * factor, color: "#c084fc" };
+      return { id: index + 1, value: centralBase * factor, color: "#c084fc", label: labels[index], kind: "مركزي" as const };
     });
   }, [trendPeriod, totals.fixed, totals.moving, totals.central, totals.total]);
 
   const maxTrend = Math.max(...trendBars.map((bar) => bar.value), 1);
+
+  const activeTrendBar = useMemo(() => {
+    if (!trendBars.length) return null;
+
+    if (hoveredTrendId !== null) {
+      const hovered = trendBars.find((bar) => bar.id === hoveredTrendId);
+      if (hovered) return hovered;
+    }
+
+    return trendBars[trendBars.length - 1];
+  }, [trendBars, hoveredTrendId]);
+
+  const trendScale = useMemo(() => {
+    const maxValue = Math.max(...trendBars.map((bar) => bar.value), 0);
+    const midValue = maxValue / 2;
+    return { maxValue, midValue };
+  }, [trendBars]);
 
   return (
     <div dir="rtl" className="space-y-6 text-slate-100">
@@ -271,28 +311,71 @@ export default function Dashboard() {
             <div className="lg:col-span-2 rounded-2xl bg-slate-900/40 border border-slate-700 p-6 flex flex-col">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold">اتجاهات المخزون ({getTrendWindowLabel(trendPeriod)})</h3>
-                <div className="bg-slate-950 border border-slate-700 rounded-lg p-1 flex items-center gap-1">
-                  {trendPeriodOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      className={
-                        trendPeriod === option.value
-                          ? "px-3 py-1.5 text-sm rounded-md bg-cyan-400/20 text-cyan-300 border border-cyan-300/30"
-                          : "px-3 py-1.5 text-sm rounded-md text-slate-300 hover:bg-slate-800 transition-colors"
-                      }
-                      onClick={() => setTrendPeriod(option.value)}
-                      type="button"
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+                <div className="text-left">
+                  <div className="bg-slate-950 border border-slate-700 rounded-lg p-1 flex items-center gap-1">
+                    {trendPeriodOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        className={
+                          trendPeriod === option.value
+                            ? "px-3 py-1.5 text-sm rounded-md bg-cyan-400/20 text-cyan-300 border border-cyan-300/30"
+                            : "px-3 py-1.5 text-sm rounded-md text-slate-300 hover:bg-slate-800 transition-colors"
+                        }
+                        onClick={() => setTrendPeriod(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-cyan-300 mt-2">
+                    {activeTrendBar
+                      ? `المؤشر: ${activeTrendBar.label} • ${formatNumber(activeTrendBar.value)} (${activeTrendBar.kind})`
+                      : "المؤشر: -"}
+                  </p>
                 </div>
               </div>
 
-              <div className="flex-1 min-h-[250px] flex items-end justify-between gap-4 px-4 pb-8 border-b border-l border-slate-700">
-                {trendBars.map((bar) => (
-                  <div key={bar.id} className="w-full max-w-[48px] rounded-t-sm" style={{ height: `${percentage(bar.value, maxTrend)}%`, backgroundColor: bar.color }} />
-                ))}
+              <div className="flex-1 min-h-[250px] px-2">
+                <div className="h-[210px] grid grid-cols-[52px_1fr] gap-2">
+                  <div className="flex flex-col justify-between pb-2 text-[11px] text-slate-500">
+                    <span>{formatNumber(trendScale.maxValue)}</span>
+                    <span>{formatNumber(trendScale.midValue)}</span>
+                    <span>0</span>
+                  </div>
+
+                  <div className="h-full flex items-end justify-between gap-4 pb-2 border-b border-l border-slate-700">
+                    {trendBars.map((bar) => {
+                      const heightPx = bar.value <= 0 ? 12 : Math.max(22, Math.round((bar.value / maxTrend) * 170));
+                      const isHovered = hoveredTrendId === bar.id;
+                      return (
+                        <div
+                          key={bar.id}
+                          className="w-full max-w-[54px] flex flex-col items-center justify-end gap-2"
+                          onMouseEnter={() => setHoveredTrendId(bar.id)}
+                          onMouseLeave={() => setHoveredTrendId(null)}
+                        >
+                          <div className="relative w-full flex flex-col items-center">
+                            {isHovered && (
+                              <div className="absolute -top-8 text-[11px] px-2 py-1 rounded bg-cyan-500/20 border border-cyan-400/40 text-cyan-200 whitespace-nowrap">
+                                {formatNumber(bar.value)}
+                              </div>
+                            )}
+                            <div
+                              className="w-full rounded-t-sm transition-all"
+                              style={{
+                                height: `${heightPx}px`,
+                                backgroundColor: bar.color,
+                                boxShadow: isHovered ? `0 0 14px ${bar.color}66` : "none",
+                              }}
+                            />
+                          </div>
+                          <span className={`text-[11px] ${isHovered ? "text-slate-200" : "text-slate-500"}`}>{bar.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-center gap-6 mt-4 text-sm text-slate-300">

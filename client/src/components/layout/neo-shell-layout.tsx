@@ -16,6 +16,7 @@ import {
   Undo2,
   LogOut,
   ScrollText,
+  Search,
   Users,
   Warehouse,
 } from "lucide-react";
@@ -126,6 +127,7 @@ export function NeoShellLayout({ title, children }: NeoShellLayoutProps) {
     { href: "/home", label: "الصفحة الرئيسية", icon: Home, roles: ["admin", "supervisor", "technician"] },
     { href: user?.role === "technician" ? "/my-fixed-inventory" : "/admin-inventory-overview", label: "إدارة المخزون", icon: Boxes, roles: ["admin", "supervisor", "technician"] },
     { href: "/products-management", label: "إدارة المنتجات", icon: Shapes, roles: ["admin", "supervisor", "technician"] },
+    { href: "/operations-search", label: "البحث", icon: Search, roles: ["admin", "supervisor", "technician"] },
     { href: "/operations", label: "العمليات", icon: ClipboardList, roles: ["admin", "supervisor"] },
     { href: "/warehouses", label: "إدارة المستودعات", icon: Warehouse, roles: ["admin", "supervisor"] },
     { href: "/withdrawn-devices", label: "الأصناف المرتجعة", icon: Undo2, roles: ["admin", "supervisor"] },
