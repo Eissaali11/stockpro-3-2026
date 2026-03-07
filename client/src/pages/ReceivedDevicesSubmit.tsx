@@ -1,6 +1,6 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { insertReceivedDeviceSchema, type InsertReceivedDevice } from "@shared/schema";
+import { insertReceivedDeviceSchema, type InsertReceivedDevice, type ItemType } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { Smartphone, Package, Battery, Cable, CreditCard, AlertCircle, CheckCircle2, Sparkles, ArrowRight, Home } from "lucide-react";
 import { motion } from "framer-motion";
@@ -25,6 +25,7 @@ export default function ReceivedDevicesSubmit() {
   const form = useForm<InsertReceivedDevice>({
     resolver: zodResolver(insertReceivedDeviceSchema),
     defaultValues: {
+      itemTypeId: "",
       terminalId: "",
       serialNumber: "",
       battery: false,
@@ -34,6 +35,11 @@ export default function ReceivedDevicesSubmit() {
       simCardType: null,
       damagePart: "",
     },
+  });
+
+  const { data: deviceItemTypes = [] } = useQuery<ItemType[]>({
+    queryKey: ["/api/item-types/active"],
+    select: (types) => types.filter((type) => type.category === "devices"),
   });
 
   const createMutation = useMutation({
@@ -57,6 +63,15 @@ export default function ReceivedDevicesSubmit() {
   });
 
   const onSubmit = (data: InsertReceivedDevice) => {
+    if (!data.itemTypeId) {
+      toast({
+        title: "❌ بيانات ناقصة",
+        description: "يرجى اختيار نوع الجهاز أولاً",
+        variant: "destructive",
+      });
+      return;
+    }
+
     createMutation.mutate(data);
   };
 
@@ -180,6 +195,37 @@ export default function ReceivedDevicesSubmit() {
                       </div>
 
                       <div className="grid md:grid-cols-2 gap-6">
+                        <FormField
+                          control={form.control}
+                          name="itemTypeId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-300 text-base font-medium">
+                                نوع الجهاز <span className="text-red-400">*</span>
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value || undefined}
+                                data-testid="select-itemTypeId"
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="h-12 bg-slate-800/50 border-slate-600 text-slate-100 focus:border-[#18B2B0] focus:ring-[#18B2B0]/20">
+                                    <SelectValue placeholder="اختر نوع الجهاز" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent className="bg-slate-800 border-slate-700">
+                                  {deviceItemTypes.map((itemType) => (
+                                    <SelectItem key={itemType.id} value={itemType.id} className="text-slate-100 focus:bg-slate-700">
+                                      {itemType.nameAr}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage className="text-red-400" />
+                            </FormItem>
+                          )}
+                        />
+
                         <FormField
                           control={form.control}
                           name="terminalId"

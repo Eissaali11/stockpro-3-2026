@@ -16,6 +16,7 @@ export class SystemLogsRepository implements ISystemLogsRepository {
     if (filters?.regionId) conditions.push(eq(systemLogs.regionId, filters.regionId));
     if (filters?.action) conditions.push(eq(systemLogs.action, filters.action));
     if (filters?.entityType) conditions.push(eq(systemLogs.entityType, filters.entityType));
+    if (filters?.entityId) conditions.push(eq(systemLogs.entityId, filters.entityId));
     if (filters?.severity) conditions.push(eq(systemLogs.severity, filters.severity));
     if (filters?.startDate) conditions.push(gte(systemLogs.createdAt, new Date(filters.startDate)));
     if (filters?.endDate) conditions.push(lte(systemLogs.createdAt, new Date(filters.endDate)));

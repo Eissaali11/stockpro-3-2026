@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useActiveItemTypes, getItemTypeVisuals, type ItemType, type InventoryEntry } from "@/hooks/use-item-types";
-import { Loader2 } from "lucide-react";
+import { Loader2, Minus, Plus, Search, XCircle } from "lucide-react";
 
 interface InventoryFormData {
   [key: string]: { boxes: number; units: number };
@@ -51,6 +51,7 @@ export default function UpdateWarehouseInventoryModal({
   const { toast } = useToast();
   const { data: itemTypes, isLoading: itemTypesLoading } = useActiveItemTypes();
   const [formData, setFormData] = useState<InventoryFormData>({});
+  const [productSearchQuery, setProductSearchQuery] = useState("");
 
   const entryMap = useMemo(() => {
     return new Map(currentEntries.map((e) => [e.itemTypeId, e]));
@@ -77,6 +78,12 @@ export default function UpdateWarehouseInventoryModal({
       setFormData(initial);
     }
   }, [itemTypes, currentInventory, entryMap, open]);
+
+  useEffect(() => {
+    if (!open) {
+      setProductSearchQuery("");
+    }
+  }, [open]);
 
   const updateInventoryMutation = useMutation({
     mutationFn: async (data: InventoryFormData) => {
@@ -150,6 +157,18 @@ export default function UpdateWarehouseInventoryModal({
       });
   }, [itemTypes]);
 
+  const filteredVisibleItems = useMemo(() => {
+    const normalized = productSearchQuery.trim().toLowerCase();
+    if (!normalized) return visibleItems;
+
+    return visibleItems.filter((item) => {
+      const nameAr = (item.nameAr || "").toLowerCase();
+      const nameEn = (item.nameEn || "").toLowerCase();
+      const category = (item.category || "").toLowerCase();
+      return nameAr.includes(normalized) || nameEn.includes(normalized) || category.includes(normalized);
+    });
+  }, [visibleItems, productSearchQuery]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
@@ -166,9 +185,37 @@ export default function UpdateWarehouseInventoryModal({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>البحث عن المنتج</Label>
+              <div className="relative">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={productSearchQuery}
+                  onChange={(event) => setProductSearchQuery(event.target.value)}
+                  placeholder="ابحث بالاسم أو الفئة"
+                  className="pr-10 pl-10"
+                />
+                {productSearchQuery.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setProductSearchQuery("")}
+                    aria-label="مسح البحث"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    <XCircle className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">عرض {filteredVisibleItems.length} من {visibleItems.length} صنف</p>
+            </div>
+
             <ScrollArea className="h-[500px] pr-4">
               <div className="space-y-6">
-                {visibleItems.map((item) => {
+                {filteredVisibleItems.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    لا توجد منتجات مطابقة لبحثك
+                  </div>
+                ) : filteredVisibleItems.map((item) => {
                   const Icon = item.icon;
                   const values = formData[item.id] || { boxes: 0, units: 0 };
                   return (
@@ -182,21 +229,77 @@ export default function UpdateWarehouseInventoryModal({
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>الكراتين</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            value={values.boxes}
-                            onChange={(e) => handleValueChange(item.id, 'boxes', parseInt(e.target.value) || 0)}
-                          />
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => handleValueChange(item.id, 'boxes', values.boxes - 1)}
+                              disabled={values.boxes <= 0}
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={values.boxes}
+                              onChange={(e) => handleValueChange(item.id, 'boxes', parseInt(e.target.value) || 0)}
+                              className="text-center"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => handleValueChange(item.id, 'boxes', values.boxes + 1)}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              onClick={() => handleValueChange(item.id, 'boxes', 0)}
+                              disabled={values.boxes === 0}
+                            >
+                              تصفير
+                            </Button>
+                          </div>
                         </div>
                         <div className="space-y-2">
                           <Label>الوحدات</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            value={values.units}
-                            onChange={(e) => handleValueChange(item.id, 'units', parseInt(e.target.value) || 0)}
-                          />
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => handleValueChange(item.id, 'units', values.units - 1)}
+                              disabled={values.units <= 0}
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={values.units}
+                              onChange={(e) => handleValueChange(item.id, 'units', parseInt(e.target.value) || 0)}
+                              className="text-center"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => handleValueChange(item.id, 'units', values.units + 1)}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              onClick={() => handleValueChange(item.id, 'units', 0)}
+                              disabled={values.units === 0}
+                            >
+                              تصفير
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>

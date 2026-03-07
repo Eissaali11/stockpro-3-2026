@@ -14,7 +14,6 @@ import {
   Package, 
   AlertTriangle,
   ArrowRight,
-  LayoutDashboard,
   Sparkles,
   Download,
   Search,
@@ -22,11 +21,8 @@ import {
 } from "lucide-react";
 import CreateWarehouseModal from "@/components/create-warehouse-modal";
 import EditWarehouseModal from "@/components/edit-warehouse-modal";
-import dashboardBg from "@assets/image_1762515061799.png";
 import { exportWarehousesToExcel } from "@/lib/exportToExcel";
 import { useToast } from "@/hooks/use-toast";
-import { Navbar } from "@/components/dashboard/Navbar";
-import { GridBackground } from "@/components/dashboard/GridBackground";
 import { useAuth } from "@/lib/auth";
 import { useActiveItemTypes, getInventoryValueForItemType, legacyFieldMapping, InventoryEntry } from "@/hooks/use-item-types";
 
@@ -187,21 +183,8 @@ export default function WarehousesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden" dir="rtl">
-      <GridBackground />
-      
-      <div
-        className="absolute inset-0 opacity-5 bg-center bg-cover"
-        style={{
-          backgroundImage: `url(${dashboardBg})`,
-          backgroundBlendMode: 'overlay'
-        }}
-      />
-
-      <div className="relative z-10">
-        <Navbar />
-
-        <div className="container mx-auto px-4 sm:px-6 py-8 max-w-7xl">
+    <>
+        <div className="space-y-8">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -407,7 +390,6 @@ export default function WarehousesPage() {
           </motion.div>
         )}
         </div>
-      </div>
 
       <CreateWarehouseModal 
         open={showCreateModal}
@@ -419,6 +401,6 @@ export default function WarehousesPage() {
         onOpenChange={setShowEditModal}
         warehouse={selectedWarehouse}
       />
-    </div>
+    </>
   );
 }

@@ -10,6 +10,7 @@ import Dashboard from "@/pages/dashboard";
 import AdminPage from "@/pages/admin";
 import { TransactionHistoryPage } from "@/pages/transaction-history";
 import WithdrawnDevicesPage from "@/pages/withdrawn-devices";
+import WithdrawnDeviceDetailsPage from "@/pages/WithdrawnDeviceDetails";
 import ReceivedDevicesSubmit from "@/pages/ReceivedDevicesSubmit";
 import ReceivedDevicesReview from "@/pages/ReceivedDevicesReview";
 import ReceivedDeviceDetails from "@/pages/ReceivedDeviceDetails";
@@ -24,16 +25,21 @@ import TransferDetailsPage from "@/pages/transfer-details";
 import OperationsPage from "@/pages/operations";
 import OperationDetailsPage from "@/pages/operation-details";
 import NotificationsPage from "@/pages/notifications";
+import ProductsManagementPage from "@/pages/products-management";
+import ProductDetailsPage from "@/pages/product-details";
+import ProductSmartAddPage from "@/pages/product-smart-add";
 import ProfilePage from "@/pages/profile";
 import TechnicianDetailsPage from "@/pages/technician-details";
 import SystemLogsPage from "@/pages/system-logs";
 import BackupManagementPage from "@/pages/backup-management";
 import ItemTypesManagement from "@/pages/item-types-management";
+import ItemTypeDetailsPage from "@/pages/item-type-details";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
+import { NeoShellLayout } from "@/components/layout/neo-shell-layout";
 import { Loader2 } from "lucide-react";
 import { hasRoleOrAbove, ROLES } from "@shared/roles";
-import { useEffect } from "react";
+import { useEffect, type ComponentType } from "react";
 
 function Redirect({ to }: { to: string }) {
   const [, setLocation] = useLocation();
@@ -47,6 +53,15 @@ function Redirect({ to }: { to: string }) {
 
 function AuthenticatedRouter() {
   const { user } = useAuth();
+
+  const withShell = (
+    Component: ComponentType,
+    title: string,
+  ) => () => (
+    <NeoShellLayout title={title}>
+      <Component />
+    </NeoShellLayout>
+  );
   
   // Show appropriate routes based on user role
   return (
@@ -54,39 +69,44 @@ function AuthenticatedRouter() {
       <Route path="/" component={() => <Redirect to="/home" />} />
       <Route path="/devices" component={() => <Redirect to="/home" />} />
       <Route path="/stock" component={LandingPage} />
-      <Route path="/home" component={Dashboard} />
-      <Route path="/transactions" component={TransactionHistoryPage} />
-      <Route path="/withdrawn-devices" component={WithdrawnDevicesPage} />
-      <Route path="/received-devices/submit" component={ReceivedDevicesSubmit} />
-      <Route path="/received-devices/review" component={ReceivedDevicesReview} />
-      <Route path="/received-devices/:id" component={ReceivedDeviceDetails} />
-      <Route path="/notifications" component={NotificationsPage} />
-      <Route path="/profile" component={ProfilePage} />
-      <Route path="/technician-details/:id" component={TechnicianDetailsPage} />
-      <Route path="/system-logs" component={SystemLogsPage} />
+      <Route path="/home" component={withShell(Dashboard, "الصفحة الرئيسية")} />
+      <Route path="/transactions" component={withShell(TransactionHistoryPage, "سجل الحركات")} />
+      <Route path="/withdrawn-devices" component={withShell(WithdrawnDevicesPage, "الأصناف المرتجعة")} />
+      <Route path="/withdrawn-devices/:id" component={withShell(WithdrawnDeviceDetailsPage, "تفاصيل الجهاز المرتجع")} />
+      <Route path="/received-devices/submit" component={withShell(ReceivedDevicesSubmit, "إدخال أجهزة مستقبلة")} />
+      <Route path="/received-devices/review" component={withShell(ReceivedDevicesReview, "مراجعة الأجهزة المستقبلة")} />
+      <Route path="/received-devices/:id" component={withShell(ReceivedDeviceDetails, "تفاصيل الجهاز المستلم")} />
+      <Route path="/notifications" component={withShell(NotificationsPage, "مركز التنبيهات الذكي")} />
+      <Route path="/products-management" component={withShell(ProductsManagementPage, "إدارة المنتجات")} />
+      <Route path="/products-management/:id/details" component={withShell(ProductDetailsPage, "تفاصيل المنتج")} />
+      <Route path="/products-management/:id/smart-add" component={withShell(ProductSmartAddPage, "مركز المسح والتحقق الذكي")} />
+      <Route path="/profile" component={withShell(ProfilePage, "الملف الشخصي")} />
+      <Route path="/technician-details/:id" component={withShell(TechnicianDetailsPage, "تفاصيل عهدة الفني")} />
+      <Route path="/system-logs" component={withShell(SystemLogsPage, "سجل النظام")} />
       {user?.role === "technician" && (
         <>
-          <Route path="/my-fixed-inventory" component={MyFixedInventory} />
-          <Route path="/my-moving-inventory" component={MyMovingInventory} />
+          <Route path="/my-fixed-inventory" component={withShell(MyFixedInventory, "المخزون الثابت")} />
+          <Route path="/my-moving-inventory" component={withShell(MyMovingInventory, "المخزون المتحرك")} />
         </>
       )}
       {hasRoleOrAbove(user?.role || '', ROLES.SUPERVISOR) && (
         <>
-          <Route path="/admin-inventory-overview" component={AdminInventoryOverview} />
-          <Route path="/warehouses" component={WarehousesPage} />
-          <Route path="/warehouses/:id" component={WarehouseDetailsPage} />
-          <Route path="/transfer-details/:id" component={TransferDetailsPage} />
-          <Route path="/operations" component={OperationsPage} />
-          <Route path="/operation-details/:groupId" component={OperationDetailsPage} />
+          <Route path="/admin-inventory-overview" component={withShell(AdminInventoryOverview, "لوحة مخزون الفنيين")} />
+          <Route path="/warehouses" component={withShell(WarehousesPage, "إدارة المستودعات")} />
+          <Route path="/warehouses/:id" component={withShell(WarehouseDetailsPage, "تفاصيل المستودع")} />
+          <Route path="/transfer-details/:id" component={withShell(TransferDetailsPage, "تفاصيل التحويل")} />
+          <Route path="/operations" component={withShell(OperationsPage, "لوحة العمليات")} />
+          <Route path="/operation-details/:groupId" component={withShell(OperationDetailsPage, "تفاصيل العملية")} />
         </>
       )}
       {user?.role === "admin" && (
         <>
-          <Route path="/admin" component={AdminPage} />
-          <Route path="/users" component={UsersPage} />
-          <Route path="/fixed-inventory" component={FixedInventoryDashboard} />
-          <Route path="/backup" component={BackupManagementPage} />
-          <Route path="/item-types" component={ItemTypesManagement} />
+          <Route path="/admin" component={withShell(AdminPage, "إدارة المستخدمين والمناطق")} />
+          <Route path="/users" component={withShell(UsersPage, "إدارة المستخدمين")} />
+          <Route path="/fixed-inventory" component={withShell(FixedInventoryDashboard, "المخزون الثابت للفنيين")} />
+          <Route path="/backup" component={withShell(BackupManagementPage, "إدارة النسخ الاحتياطية")} />
+          <Route path="/item-types" component={withShell(ItemTypesManagement, "إدارة الأصناف")} />
+          <Route path="/item-types/:id/details" component={withShell(ItemTypeDetailsPage, "تفاصيل الصنف")} />
         </>
       )}
       <Route component={NotFound} />

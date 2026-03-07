@@ -12,7 +12,6 @@ import { User, Lock, Loader2, Package, TruckIcon, BarChart3, FileText, Users, Sh
 import { motion } from 'framer-motion';
 import { useLocation } from 'wouter';
 import rasscoLogo from "@assets/39bff80c-2b7d-48a8-80ed-34b372af4da3_transparent_1762470013152.png";
-import backgroundImage from "@assets/Gemini_Generated_Image_1iknau1iknau1ikn_1762469188250.png";
 
 export default function Login() {
   const { login, isLoading } = useAuth();
@@ -111,7 +110,7 @@ export default function Login() {
       className="min-h-screen flex items-center justify-center relative overflow-hidden" 
       dir="rtl"
       style={{
-        backgroundImage: `url(${backgroundImage})`,
+        backgroundImage: 'linear-gradient(135deg, #0b1d1f 0%, #12353a 45%, #0f2a2f 100%)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat'

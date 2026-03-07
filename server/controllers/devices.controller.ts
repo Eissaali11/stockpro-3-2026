@@ -8,7 +8,8 @@ import {
   insertWithdrawnDeviceSchema,
   insertReceivedDeviceSchema,
 } from "@shared/schema";
-import { NotFoundError } from "../utils/errors";
+import { ROLES } from "@shared/roles";
+import { AuthorizationError, NotFoundError } from "../utils/errors";
 import { z } from "zod";
 import { repositories } from "../infrastructure/repositories";
 import { DevicesService } from "../services/devices.service";
@@ -164,8 +165,12 @@ export class DevicesController {
   getPendingReceivedDevicesCount = asyncHandler(
     async (req: Request, res: Response) => {
       const user = req.user!;
+      if (user.role !== ROLES.SUPERVISOR) {
+        throw new AuthorizationError("هذه العملية متاحة للمشرف فقط");
+      }
+
       const count = await devicesService.getPendingReceivedDevicesCount(
-        user.role === "supervisor" ? user.id : undefined,
+        user.id,
         user.regionId
       );
       res.json({ count });
@@ -218,12 +223,84 @@ export class DevicesController {
   });
 
   /**
+   * POST /api/received-devices/:id/delivery-proof
+   * Upload delivery proof from technician mobile app
+   */
+  uploadReceivedDeviceDeliveryProof = asyncHandler(async (req: Request, res: Response) => {
+    const user = req.user!;
+
+    if (user.role !== ROLES.TECHNICIAN) {
+      throw new AuthorizationError("هذه العملية متاحة للفني فقط");
+    }
+
+    const schema = z.object({
+      fileUrl: z.string().trim().min(1),
+      fileName: z.string().trim().optional(),
+      customerName: z.string().trim().optional(),
+      notes: z.string().trim().optional(),
+      deliveredAt: z.string().datetime().optional(),
+      latitude: z.number().optional(),
+      longitude: z.number().optional(),
+    });
+
+    const payload = schema.parse(req.body);
+
+    const device = await devicesService.getReceivedDevice(req.params.id);
+    if (!device) {
+      throw new NotFoundError("Device not found");
+    }
+
+    if (device.technicianId && device.technicianId !== user.id) {
+      throw new AuthorizationError("لا يمكنك رفع ملف تسليم لجهاز لا يتبع عهدتك");
+    }
+
+    const deliveredAt = payload.deliveredAt || new Date().toISOString();
+
+    await repositories.systemLogs.createSystemLog({
+      userId: user.id,
+      userName: user.username,
+      userRole: user.role,
+      regionId: device.regionId || user.regionId,
+      action: "delivery_proof",
+      entityType: "device",
+      entityId: device.id,
+      entityName: device.serialNumber,
+      description: `تم رفع ملف تسليم الجهاز للعميل من تطبيق الفني: ${device.serialNumber}`,
+      details: JSON.stringify({
+        fileUrl: payload.fileUrl,
+        fileName: payload.fileName || null,
+        customerName: payload.customerName || null,
+        notes: payload.notes || null,
+        deliveredAt,
+        latitude: payload.latitude ?? null,
+        longitude: payload.longitude ?? null,
+        source: "mobile_app",
+        targetRole: "supervisor",
+        reviewRequired: true,
+      }),
+      severity: "info",
+      success: true,
+    });
+
+    res.json({
+      success: true,
+      message: "تم رفع ملف التسليم بنجاح",
+      deviceId: device.id,
+      serialNumber: device.serialNumber,
+    });
+  });
+
+  /**
    * PATCH /api/received-devices/:id/status
    * Update received device status
    */
   updateReceivedDeviceStatus = asyncHandler(
     async (req: Request, res: Response) => {
       const user = req.user!;
+      if (user.role !== ROLES.SUPERVISOR) {
+        throw new AuthorizationError("اعتماد حالة الجهاز متاح للمشرف فقط");
+      }
+
       const schema = z.object({
         status: z.enum(["pending", "approved", "rejected"]),
         adminNotes: z.string().optional(),

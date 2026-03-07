@@ -17,7 +17,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { motion } from "framer-motion";
-import { Navbar } from "@/components/dashboard/Navbar";
 import { GridBackground } from "@/components/dashboard/GridBackground";
 import dashboardBg from "@assets/image_1762515061799.png";
 import { useActiveItemTypes, buildInventoryDisplayItems } from "@/hooks/use-item-types";
@@ -418,8 +417,6 @@ export default function MyMovingInventory() {
       />
 
       <div className="relative z-10">
-        <Navbar />
-
         <div className="container mx-auto px-4 sm:px-6 py-8 max-w-7xl">
           
           <motion.div

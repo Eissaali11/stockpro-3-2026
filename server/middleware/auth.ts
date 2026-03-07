@@ -262,6 +262,25 @@ export function requireSupervisor(
 }
 
 /**
+ * Middleware to require supervisor role only (exclude admin)
+ */
+export function requireSupervisorOnly(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  if (!req.user) {
+    return next(new AuthenticationError("Authentication required"));
+  }
+
+  if (req.user.role !== ROLES.SUPERVISOR) {
+    return next(new AuthorizationError("هذه العملية متاحة للمشرف فقط"));
+  }
+
+  next();
+}
+
+/**
  * Middleware factory to require a specific role or above
  */
 export function requireRole(minRole: string) {

@@ -1,10 +1,26 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, FileSpreadsheet, Trash2, Search, Edit, PackageX, ArrowRight } from "lucide-react";
+import {
+  ArrowRight,
+  Cable,
+  CheckCircle2,
+  CircleEllipsis,
+  FileSpreadsheet,
+  Filter,
+  PackageX,
+  Pencil,
+  Plus,
+  Search,
+  Smartphone,
+  Trash2,
+  TriangleAlert,
+  User,
+  XCircle,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { WithdrawnDevice } from "@shared/schema";
@@ -12,10 +28,84 @@ import AddWithdrawnDeviceModal from "@/components/add-withdrawn-device-modal";
 import EditWithdrawnDeviceModal from "@/components/edit-withdrawn-device-modal";
 import ExcelJS from 'exceljs';
 
+type DeviceReviewStatus = "pending" | "approved" | "rejected";
+
+const statusConfig: Record<
+  DeviceReviewStatus,
+  {
+    text: string;
+    cardClass: string;
+    badgeClass: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }
+> = {
+  pending: {
+    text: "قيد المراجعة",
+    cardClass: "border-amber-500/25",
+    badgeClass: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+    icon: TriangleAlert,
+  },
+  approved: {
+    text: "موافق عليها",
+    cardClass: "border-emerald-500/25",
+    badgeClass: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    icon: CheckCircle2,
+  },
+  rejected: {
+    text: "مرفوضة",
+    cardClass: "border-rose-500/25",
+    badgeClass: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+    icon: XCircle,
+  },
+};
+
+const normalize = (value?: string | null): string => (value || "").trim().toLowerCase();
+
+const inferDeviceReviewStatus = (device: WithdrawnDevice): DeviceReviewStatus => {
+  const combined = `${normalize(device.notes)} ${normalize(device.damagePart)}`;
+
+  if (/(مرفوض|رفض|rejected|reject)/i.test(combined)) {
+    return "rejected";
+  }
+
+  if (/(موافق|تمت\s*الموافقة|approved|accept|مقبول)/i.test(combined)) {
+    return "approved";
+  }
+
+  return "pending";
+};
+
+const hasAccessory = (value?: string | null): boolean => {
+  const normalized = normalize(value);
+
+  if (!normalized) return false;
+
+  if (
+    /^(لا|no|false|0|بدون)$/i.test(normalized) ||
+    /(غير\s*موجود|غير\s*متوفر|غير\s*مرفق|cancel|none|n\/a)/i.test(normalized)
+  ) {
+    return false;
+  }
+
+  return true;
+};
+
+const formatCardDate = (value?: unknown): string => {
+  if (!value) return "-";
+  const parsed = new Date(value as string);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return parsed.toLocaleDateString("ar-SA", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
 export default function WithdrawnDevicesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState<DeviceReviewStatus>("pending");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<WithdrawnDevice | null>(null);
@@ -45,13 +135,39 @@ export default function WithdrawnDevicesPage() {
     },
   });
 
-  const filteredDevices = devices?.filter(
-    (device) =>
-      device.technicianName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      device.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      device.terminalId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      device.serialNumber.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const allDevices = devices || [];
+
+  const stats = useMemo(() => {
+    return allDevices.reduce(
+      (acc, device) => {
+        const status = inferDeviceReviewStatus(device);
+        acc[status] += 1;
+        return acc;
+      },
+      { pending: 0, approved: 0, rejected: 0 } as Record<DeviceReviewStatus, number>
+    );
+  }, [allDevices]);
+
+  const filteredDevices = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+
+    return allDevices
+      .filter((device) => {
+        if (!term) return true;
+
+        return (
+          device.technicianName.toLowerCase().includes(term) ||
+          device.city.toLowerCase().includes(term) ||
+          device.terminalId.toLowerCase().includes(term) ||
+          device.serialNumber.toLowerCase().includes(term)
+        );
+      })
+      .map((device) => ({
+        ...device,
+        reviewStatus: inferDeviceReviewStatus(device),
+      }))
+      .filter((device) => device.reviewStatus === activeTab);
+  }, [activeTab, allDevices, searchTerm]);
 
   const handleEdit = (device: WithdrawnDevice) => {
     setSelectedDevice(device);
@@ -232,263 +348,261 @@ export default function WithdrawnDevicesPage() {
   };
 
   if (isLoading) {
-    return <div className="text-center py-8">جاري التحميل...</div>;
+    return <div className="text-center py-8 text-slate-300">جاري التحميل...</div>;
   }
 
   return (
     <>
-      <Card className="shadow-lg">
-        <CardHeader className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-950 dark:to-red-950 border-b">
+      <div className="space-y-6">
+        <section className="rounded-2xl border border-slate-700/60 bg-slate-900/50 backdrop-blur-md p-5">
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-3">
-              <Button
-                asChild
-                variant="ghost"
-                size="sm"
-                className="hover:bg-orange-100 dark:hover:bg-orange-900"
-              >
+              <Button asChild variant="ghost" size="sm" className="text-slate-300 hover:bg-slate-800/70 hover:text-white">
                 <Link href="/home" data-testid="button-back-home">
                   <ArrowRight className="h-4 w-4 ml-2" />
                   <span>العودة للرئيسية</span>
                 </Link>
               </Button>
             </div>
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
+            <div className="flex flex-col xl:flex-row gap-4 xl:items-center xl:justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-orange-100 dark:bg-orange-900 rounded-lg">
-                  <PackageX className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+                <div className="h-12 w-12 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center">
+                  <PackageX className="h-6 w-6 text-cyan-300" />
                 </div>
                 <div>
-                  <h2 className="text-xl md:text-2xl font-bold text-foreground">الأجهزة المسحوبة</h2>
-                  <p className="text-sm text-muted-foreground">إدارة الأجهزة المسحوبة من الخدمة</p>
+                  <h2 className="text-2xl font-bold text-white">إدارة الأجهزة المسحوبة</h2>
+                  <p className="text-sm text-slate-400">متابعة وفهرسة الأجهزة المرتجعة من الفنيين</p>
                 </div>
               </div>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-                <div className="relative flex-1 sm:flex-initial">
+
+              <div className="flex flex-col md:flex-row gap-2 md:items-center">
+                <div className="relative w-full md:w-80">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 h-4 w-4" />
                   <Input
                     type="text"
-                    placeholder="ابحث..."
+                    placeholder="ابحث برقم الجهاز أو الفني..."
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 w-full sm:w-64 bg-white dark:bg-gray-900 text-sm"
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    className="pr-9 bg-slate-950/40 border-white/10 text-white placeholder:text-slate-500"
                     data-testid="input-search"
                   />
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleExport}
-                    variant="outline"
-                    className="flex-1 sm:flex-initial gap-1.5 sm:gap-2 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 text-xs sm:text-sm"
-                    data-testid="button-export"
-                  >
-                    <FileSpreadsheet className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-600 dark:text-emerald-400" />
-                    <span className="text-emerald-700 dark:text-emerald-300">تصدير</span>
-                  </Button>
-                  <Button
-                    onClick={() => setShowAddModal(true)}
-                    className="flex-1 sm:flex-initial gap-1.5 sm:gap-2 bg-orange-600 hover:bg-orange-700 text-white text-xs sm:text-sm"
-                    data-testid="button-add"
-                  >
-                    <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                    <span>إضافة</span>
-                  </Button>
-                </div>
+
+                <Button variant="outline" className="border-white/10 bg-white/5 text-slate-300 hover:bg-white/10" type="button">
+                  <Filter className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  onClick={handleExport}
+                  variant="outline"
+                  className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                  data-testid="button-export"
+                >
+                  <FileSpreadsheet className="h-4 w-4 ml-2" />
+                  تصدير
+                </Button>
+
+                <Button
+                  onClick={() => setShowAddModal(true)}
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white"
+                  data-testid="button-add"
+                >
+                  <Plus className="h-4 w-4 ml-2" />
+                  إضافة جهاز
+                </Button>
               </div>
             </div>
           </div>
-        </CardHeader>
+        </section>
 
-        <CardContent>
-          {filteredDevices && filteredDevices.length > 0 ? (
-            <>
-              {/* Mobile Card View */}
-              <div className="block lg:hidden space-y-3">
-                {filteredDevices.map((device, index) => (
-                  <div key={device.id} className="bg-card border border-border rounded-lg p-4 shadow-sm">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-sm text-foreground">{device.technicianName}</h3>
-                          <span className="text-xs text-muted-foreground">• {device.city}</span>
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="border-amber-500/25 bg-slate-900/50">
+            <div className="p-5 flex items-start justify-between">
+              <div>
+                <p className="text-sm text-slate-400 mb-1">قيد المراجعة</p>
+                <h3 className="text-3xl font-bold text-white">{stats.pending}</h3>
+              </div>
+              <div className="h-10 w-10 rounded-lg bg-amber-500/15 text-amber-300 flex items-center justify-center">
+                <TriangleAlert className="h-5 w-5" />
+              </div>
+            </div>
+          </Card>
+
+          <Card className="border-emerald-500/25 bg-slate-900/50">
+            <div className="p-5 flex items-start justify-between">
+              <div>
+                <p className="text-sm text-slate-400 mb-1">موافق عليها</p>
+                <h3 className="text-3xl font-bold text-white">{stats.approved}</h3>
+              </div>
+              <div className="h-10 w-10 rounded-lg bg-emerald-500/15 text-emerald-300 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+            </div>
+          </Card>
+
+          <Card className="border-rose-500/25 bg-slate-900/50">
+            <div className="p-5 flex items-start justify-between">
+              <div>
+                <p className="text-sm text-slate-400 mb-1">مرفوضة</p>
+                <h3 className="text-3xl font-bold text-white">{stats.rejected}</h3>
+              </div>
+              <div className="h-10 w-10 rounded-lg bg-rose-500/15 text-rose-300 flex items-center justify-center">
+                <XCircle className="h-5 w-5" />
+              </div>
+            </div>
+          </Card>
+        </section>
+
+        <section className="border-b border-slate-700/60 flex gap-1 overflow-x-auto">
+          {([
+            { key: "pending", label: "قيد المراجعة", count: stats.pending },
+            { key: "approved", label: "موافق", count: stats.approved },
+            { key: "rejected", label: "مرفوضة", count: stats.rejected },
+          ] as const).map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={
+                activeTab === tab.key
+                  ? "px-5 py-3 text-sm font-bold text-cyan-300 border-b-2 border-cyan-300 whitespace-nowrap"
+                  : "px-5 py-3 text-sm font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap"
+              }
+            >
+              {tab.label} ({tab.count})
+            </button>
+          ))}
+        </section>
+
+        {filteredDevices.length > 0 ? (
+          <section className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            {filteredDevices.map((device) => {
+              const cfg = statusConfig[device.reviewStatus as DeviceReviewStatus];
+              const StatusIcon = cfg.icon;
+              const hasBattery = hasAccessory(device.battery);
+              const hasCable = hasAccessory(device.chargerCable);
+              const hasHead = hasAccessory(device.chargerHead);
+              const hasSim = hasAccessory(device.hasSim);
+
+              return (
+                <Card key={device.id} className={`bg-slate-900/50 border ${cfg.cardClass} overflow-hidden`} data-testid={`card-device-${device.id}`}>
+                  <div className="p-5 space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded border ${cfg.badgeClass}`}>
+                            <StatusIcon className="h-3.5 w-3.5" />
+                            {cfg.text}
+                          </span>
+                          <span className="text-xs text-slate-400">التاريخ: {formatCardDate(device.createdAt)}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground">جهاز: {device.terminalId}</p>
-                        <p className="text-xs text-muted-foreground">تسلسلي: {device.serialNumber}</p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(device)}
-                          className="h-8 w-8 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950 dark:hover:text-blue-400"
-                          data-testid={`button-edit-${device.id}`}
-                        >
-                          <Edit className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(device.id)}
-                          className="h-8 w-8 hover:bg-destructive/10"
-                          data-testid={`button-delete-${device.id}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
+                        <h4 className="text-base md:text-lg font-bold text-cyan-300" dir="ltr">
+                          ID: {device.terminalId} | SN: {device.serialNumber}
+                        </h4>
                       </div>
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <span className="text-muted-foreground">البطارية: </span>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold
-                          ${device.battery === 'جيدة' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 
-                            device.battery === 'متوسطة' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' : 
-                            device.battery === 'سيئة' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                            'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'}`}>
-                          {device.battery}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">كابل: </span>
-                        <span className="text-foreground">{device.chargerCable}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">رأس: </span>
-                        <span className="text-foreground">{device.chargerHead}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">شريحة: </span>
-                        <span className="text-foreground">{device.hasSim}</span>
-                      </div>
+
+                    <div className="flex items-center gap-2 text-sm text-slate-300">
+                      <User className="h-4 w-4 text-cyan-300" />
+                      <span>{device.technicianName}</span>
+                      <span className="text-slate-500">•</span>
+                      <span>{device.city}</span>
                     </div>
-                    
-                    {(device.simCardType || device.damagePart || device.notes) && (
-                      <div className="mt-3 pt-3 border-t border-border space-y-1 text-xs">
-                        {device.simCardType && (
-                          <p><span className="text-muted-foreground">نوع الشريحة:</span> {device.simCardType}</p>
-                        )}
-                        {device.damagePart && (
-                          <p><span className="text-muted-foreground">الضرر:</span> {device.damagePart}</p>
-                        )}
-                        {device.notes && (
-                          <p><span className="text-muted-foreground">ملاحظات:</span> {device.notes}</p>
-                        )}
+
+                    <div className="bg-slate-950/35 border border-white/10 rounded-lg p-3">
+                      <p className="text-xs text-slate-400 mb-2 font-medium">الملحقات المرفقة:</p>
+                      <div className="flex flex-wrap gap-4 text-sm">
+                        <div className="flex items-center gap-1.5 text-slate-300">
+                          {hasBattery ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <XCircle className="h-4 w-4 text-rose-400" />}
+                          <span className={!hasBattery ? "line-through text-slate-500" : ""}>بطارية</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-slate-300">
+                          {hasCable ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <XCircle className="h-4 w-4 text-rose-400" />}
+                          <span className={!hasCable ? "line-through text-slate-500" : ""}>كابل</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-slate-300">
+                          {hasHead ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <XCircle className="h-4 w-4 text-rose-400" />}
+                          <span className={!hasHead ? "line-through text-slate-500" : ""}>رأس</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-slate-300">
+                          {hasSim ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <XCircle className="h-4 w-4 text-rose-400" />}
+                          <span className={!hasSim ? "line-through text-slate-500" : ""}>SIM</span>
+                        </div>
+                      </div>
+                      {device.simCardType && (
+                        <div className="mt-2 text-xs text-slate-400 flex items-center gap-1.5">
+                          <Smartphone className="h-3.5 w-3.5" />
+                          نوع الشريحة: {device.simCardType}
+                        </div>
+                      )}
+                    </div>
+
+                    {device.damagePart && (
+                      <div className="flex items-start gap-2 text-sm bg-rose-500/10 text-rose-300 p-3 rounded-lg border border-rose-500/20">
+                        <TriangleAlert className="h-4 w-4 mt-0.5" />
+                        <div>
+                          <p className="font-semibold mb-1">ملاحظات الأضرار:</p>
+                          <p>{device.damagePart}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {device.notes && (
+                      <div className="bg-slate-950/35 border border-white/10 rounded-lg p-3 text-sm text-slate-300">
+                        <p className="text-xs text-slate-400 mb-1">ملاحظات:</p>
+                        <p>{device.notes}</p>
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
 
-              {/* Desktop Table View */}
-              <div className="hidden lg:block overflow-x-auto -mx-4 sm:mx-0 rounded-lg">
-                <div className="inline-block min-w-full align-middle">
-                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900">
-                    <tr>
-                      <th className="hidden sm:table-cell whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">#</th>
-                      <th className="hidden md:table-cell whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">المدينة</th>
-                      <th className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">الفني</th>
-                      <th className="whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">الجهاز</th>
-                      <th className="hidden lg:table-cell whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">التسلسلي</th>
-                      <th className="whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">البطارية</th>
-                      <th className="hidden xl:table-cell whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">كابل</th>
-                      <th className="hidden xl:table-cell whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">رأس</th>
-                      <th className="hidden lg:table-cell whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">شريحة</th>
-                      <th className="hidden xl:table-cell whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">نوع</th>
-                      <th className="hidden xl:table-cell whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">ضرر</th>
-                      <th className="hidden xl:table-cell whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">ملاحظات</th>
-                      <th className="whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border bg-background">
-                    {filteredDevices.map((device, index) => (
-                      <tr key={device.id} className="hover:bg-muted/30 transition-colors" data-testid={`row-device-${device.id}`}>
-                        <td className="hidden sm:table-cell whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-sm">
-                          {index + 1}
-                        </td>
-                        <td className="hidden md:table-cell whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-sm">
-                          {device.city}
-                        </td>
-                        <td className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-sm font-medium">
-                          {device.technicianName}
-                        </td>
-                        <td className="whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-sm">
-                          {device.terminalId}
-                        </td>
-                        <td className="hidden lg:table-cell whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-sm">
-                          {device.serialNumber}
-                        </td>
-                        <td className="whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-sm">
-                          <span className={`inline-flex items-center px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[9px] sm:text-xs font-semibold
-                            ${device.battery === 'جيدة' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 
-                              device.battery === 'متوسطة' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' : 
-                              device.battery === 'سيئة' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                              'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'}`}>
-                            {device.battery}
-                          </span>
-                        </td>
-                        <td className="hidden xl:table-cell whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-sm">
-                          {device.chargerCable}
-                        </td>
-                        <td className="hidden xl:table-cell whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-sm">
-                          {device.chargerHead}
-                        </td>
-                        <td className="hidden lg:table-cell whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-sm">
-                          {device.hasSim}
-                        </td>
-                        <td className="hidden xl:table-cell whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-sm">
-                          {device.simCardType || '-'}
-                        </td>
-                        <td className="hidden xl:table-cell px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-sm max-w-xs truncate">
-                          {device.damagePart || '-'}
-                        </td>
-                        <td className="hidden xl:table-cell px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-sm max-w-xs truncate">
-                          {device.notes || '-'}
-                        </td>
-                        <td className="whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3">
-                          <div className="flex items-center justify-center gap-0.5 sm:gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEdit(device)}
-                              className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950 dark:hover:text-blue-400"
-                              title="تعديل"
-                              data-testid={`button-edit-${device.id}`}
-                            >
-                              <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(device.id)}
-                              className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-destructive/10 hover:text-destructive"
-                              title="حذف"
-                              data-testid={`button-delete-${device.id}`}
-                            >
-                              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            </>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground text-lg mb-4">
-                لا توجد أجهزة مسحوبة مسجلة
-              </p>
-              <Button onClick={() => setShowAddModal(true)} className="gap-2">
-                <Plus className="h-4 w-4" />
-                <span>إضافة أول جهاز</span>
+                  <div className="p-4 bg-slate-950/40 border-t border-white/10 flex justify-end gap-2">
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20"
+                      data-testid={`button-details-${device.id}`}
+                    >
+                      <Link href={`/withdrawn-devices/${device.id}`}>
+                        <CircleEllipsis className="h-4 w-4 ml-1" />
+                        تفاصيل
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleDelete(device.id)}
+                      className="border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+                      data-testid={`button-delete-${device.id}`}
+                    >
+                      <Trash2 className="h-4 w-4 ml-1" />
+                      حذف
+                    </Button>
+                    <Button
+                      onClick={() => handleEdit(device)}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white"
+                      data-testid={`button-edit-${device.id}`}
+                    >
+                      <Pencil className="h-4 w-4 ml-1" />
+                      تعديل
+                    </Button>
+                  </div>
+                </Card>
+              );
+            })}
+          </section>
+        ) : (
+          <Card className="bg-slate-900/40 border-white/10">
+            <div className="py-14 text-center">
+              <p className="text-slate-300 text-lg mb-3">لا توجد أجهزة ضمن هذا التصنيف حالياً</p>
+              <p className="text-slate-500 text-sm mb-5">جرّب تغيير الفلتر أو إضافة جهاز جديد</p>
+              <Button onClick={() => setShowAddModal(true)} className="bg-cyan-600 hover:bg-cyan-500 text-white">
+                <Plus className="h-4 w-4 ml-2" />
+                إضافة أول جهاز
               </Button>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </Card>
+        )}
+      </div>
 
       <AddWithdrawnDeviceModal open={showAddModal} onOpenChange={setShowAddModal} />
       <EditWithdrawnDeviceModal 

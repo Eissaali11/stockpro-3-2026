@@ -1,32 +1,38 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import ExcelJS from "exceljs";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle,
+  Edit,
+  FileSpreadsheet,
+  KeyRound,
+  MapPin,
+  Plus,
+  Search,
+  Trash2,
+  UserCheck,
+  UserPlus,
+  Users,
+  XCircle,
+} from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Plus, Users, MapPin, Activity, Trash2, Edit, ArrowRight, LayoutDashboard, TrendingUp, Database, AlertTriangle, BarChart3, PieChart as PieChartIcon, Shield, CheckCircle, XCircle, Search, FileSpreadsheet } from "lucide-react";
-import ExcelJS from 'exceljs';
-import type { RegionWithStats, UserSafe, AdminStats, Region, InsertRegion, InsertUser, SystemLog } from "@shared/schema";
-import { ROLES, ROLE_LABELS_AR } from "@shared/roles";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useState } from "react";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { motion } from "framer-motion";
-import { StatsKpiCard } from "@/components/dashboard/stats-kpi-card";
-import { TrendLineChart } from "@/components/dashboard/trend-line-chart";
-import { StockCompositionPie } from "@/components/dashboard/stock-composition-pie";
-import { RegionsBarChart } from "@/components/dashboard/regions-bar-chart";
-import backgroundImage from "@assets/Gemini_Generated_Image_1iknau1iknau1ikn_1762469188250.png";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { AdminStats, InsertRegion, InsertUser, Region, RegionWithStats, UserSafe } from "@shared/schema";
+import { ROLE_LABELS_AR, ROLES } from "@shared/roles";
 
 const regionFormSchema = z.object({
   name: z.string().min(1, "اسم المنطقة مطلوب"),
@@ -44,14 +50,34 @@ const userFormSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+type RoleFilter = "all" | "managers" | "technicians";
+
+function userInitials(fullName: string): string {
+  const parts = fullName.split(" ").filter(Boolean);
+  return (parts[0]?.[0] || "م") + (parts[1]?.[0] || "");
+}
+
+function arNumber(value: number): string {
+  return new Intl.NumberFormat("ar-SA").format(value);
+}
+
+function roleBadgeClass(role: string): string {
+  if (role === "admin") return "border-purple-500/25 bg-purple-500/10 text-purple-300";
+  if (role === "supervisor") return "border-amber-500/25 bg-amber-500/10 text-amber-300";
+  return "border-blue-500/25 bg-blue-500/10 text-blue-300";
+}
+
 export default function AdminPage() {
   const { toast } = useToast();
+
   const [showRegionModal, setShowRegionModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingRegion, setEditingRegion] = useState<Region | null>(null);
   const [editingUser, setEditingUser] = useState<UserSafe | null>(null);
   const [regionSearchTerm, setRegionSearchTerm] = useState("");
   const [userSearchTerm, setUserSearchTerm] = useState("");
+  const [selectedRegionId, setSelectedRegionId] = useState("all");
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
 
   const { data: adminStats } = useQuery<AdminStats>({
     queryKey: ["/api/admin/stats"],
@@ -63,10 +89,6 @@ export default function AdminPage() {
 
   const { data: users = [] } = useQuery<UserSafe[]>({
     queryKey: ["/api/users"],
-  });
-
-  const { data: systemLogs = [] } = useQuery<SystemLog[]>({
-    queryKey: ["/api/system-logs"],
   });
 
   const regionForm = useForm<z.infer<typeof regionFormSchema>>({
@@ -86,17 +108,17 @@ export default function AdminPage() {
       password: "",
       fullName: "",
       role: ROLES.TECHNICIAN,
+      regionId: "",
       isActive: true,
     },
   });
 
   const createRegionMutation = useMutation({
-    mutationFn: (data: InsertRegion) => apiRequest("POST", `/api/regions`, data),
+    mutationFn: (data: InsertRegion) => apiRequest("POST", "/api/regions", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/regions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
-      setShowRegionModal(false);
-      regionForm.reset();
+      handleCloseRegionModal();
       toast({ title: "تم إنشاء المنطقة بنجاح" });
     },
     onError: () => {
@@ -105,13 +127,10 @@ export default function AdminPage() {
   });
 
   const updateRegionMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<InsertRegion> }) =>
-      apiRequest("PATCH", `/api/regions/${id}`, data),
+    mutationFn: ({ id, data }: { id: string; data: Partial<InsertRegion> }) => apiRequest("PATCH", `/api/regions/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/regions"] });
-      setShowRegionModal(false);
-      setEditingRegion(null);
-      regionForm.reset();
+      handleCloseRegionModal();
       toast({ title: "تم تحديث المنطقة بنجاح" });
     },
     onError: () => {
@@ -130,47 +149,50 @@ export default function AdminPage() {
       let message = "فشل في حذف المنطقة";
       if (error instanceof Error) {
         if (error.message.includes("Cannot delete region that has assigned users")) {
-          message = "لا يمكن حذف هذه المنطقة لأنها مرتبطة بموظفين. يرجى نقل الموظفين إلى منطقة أخرى أولاً.";
+          message = "لا يمكن حذف المنطقة لأنها مرتبطة بموظفين.";
         } else if (error.message.includes("Cannot delete region")) {
-          message = "لا يمكن حذف هذه المنطقة لأنها مرتبطة ببيانات أخرى في النظام.";
-        } else {
-          message = error.message;
+          message = "لا يمكن حذف المنطقة لأنها مرتبطة ببيانات أخرى.";
         }
       }
-      toast({ 
-        title: "تعذر حذف المنطقة", 
-        description: message,
-        variant: "destructive" 
-      });
+      toast({ title: "تعذر حذف المنطقة", description: message, variant: "destructive" });
     },
   });
 
   const createUserMutation = useMutation({
-    mutationFn: (data: InsertUser) => apiRequest("POST", `/api/users`, data),
+    mutationFn: (data: InsertUser) => apiRequest("POST", "/api/users", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
-      setShowUserModal(false);
-      userForm.reset();
-      toast({ title: "تم إنشاء حساب الموظف بنجاح" });
+      handleCloseUserModal();
+      toast({ title: "تم إنشاء المستخدم بنجاح" });
     },
     onError: () => {
-      toast({ title: "فشل في إنشاء حساب الموظف", variant: "destructive" });
+      toast({ title: "فشل في إنشاء المستخدم", variant: "destructive" });
     },
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<InsertUser> }) =>
-      apiRequest("PATCH", `/api/users/${id}`, data),
+    mutationFn: ({ id, data }: { id: string; data: Partial<InsertUser> }) => apiRequest("PATCH", `/api/users/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      setShowUserModal(false);
-      setEditingUser(null);
-      userForm.reset();
-      toast({ title: "تم تحديث بيانات الموظف بنجاح" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      handleCloseUserModal();
+      toast({ title: "تم تحديث بيانات المستخدم" });
     },
     onError: () => {
-      toast({ title: "فشل في تحديث بيانات الموظف", variant: "destructive" });
+      toast({ title: "فشل في تحديث بيانات المستخدم", variant: "destructive" });
+    },
+  });
+
+  const toggleUserStatusMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) => apiRequest("PATCH", `/api/users/${id}`, { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      toast({ title: "تم تحديث حالة المستخدم" });
+    },
+    onError: () => {
+      toast({ title: "فشل في تحديث حالة المستخدم", variant: "destructive" });
     },
   });
 
@@ -179,29 +201,31 @@ export default function AdminPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
-      toast({ title: "تم حذف حساب الموظف بنجاح" });
+      toast({ title: "تم حذف المستخدم" });
     },
     onError: () => {
-      toast({ title: "فشل في حذف حساب الموظف", variant: "destructive" });
+      toast({ title: "فشل في حذف المستخدم", variant: "destructive" });
     },
   });
 
-  const handleRegionSubmit = (values: z.infer<typeof regionFormSchema>) => {
-    if (editingRegion) {
-      updateRegionMutation.mutate({ id: editingRegion.id, data: values });
-    } else {
-      createRegionMutation.mutate(values);
-    }
+  const handleCloseRegionModal = () => {
+    setShowRegionModal(false);
+    setEditingRegion(null);
+    regionForm.reset({ name: "", description: "", isActive: true });
   };
 
-  const handleUserSubmit = (values: z.infer<typeof userFormSchema>) => {
-    if (editingUser) {
-      const { password, ...updateData } = values;
-      const data = password ? values : updateData;
-      updateUserMutation.mutate({ id: editingUser.id, data });
-    } else {
-      createUserMutation.mutate(values);
-    }
+  const handleCloseUserModal = () => {
+    setShowUserModal(false);
+    setEditingUser(null);
+    userForm.reset({
+      username: "",
+      email: "",
+      password: "",
+      fullName: "",
+      role: ROLES.TECHNICIAN,
+      regionId: "",
+      isActive: true,
+    });
   };
 
   const handleEditRegion = (region: Region) => {
@@ -228,1047 +252,662 @@ export default function AdminPage() {
     setShowUserModal(true);
   };
 
-  const handleCloseRegionModal = () => {
-    setShowRegionModal(false);
-    setEditingRegion(null);
-    regionForm.reset();
+  const handleRegionSubmit = (values: z.infer<typeof regionFormSchema>) => {
+    if (editingRegion) {
+      updateRegionMutation.mutate({ id: editingRegion.id, data: values });
+      return;
+    }
+
+    createRegionMutation.mutate(values);
   };
 
-  const handleCloseUserModal = () => {
-    setShowUserModal(false);
-    setEditingUser(null);
-    userForm.reset();
+  const handleUserSubmit = (values: z.infer<typeof userFormSchema>) => {
+    const normalizedData = {
+      ...values,
+      regionId: values.regionId || undefined,
+    };
+
+    if (editingUser) {
+      const { password, ...rest } = normalizedData;
+      const data = password ? normalizedData : rest;
+      updateUserMutation.mutate({ id: editingUser.id, data });
+      return;
+    }
+
+    createUserMutation.mutate(normalizedData as InsertUser);
   };
 
-  const filteredRegions = regions.filter(region =>
-    region.name.toLowerCase().includes(regionSearchTerm.toLowerCase()) ||
-    (region.description && region.description.toLowerCase().includes(regionSearchTerm.toLowerCase()))
-  );
+  const filteredRegions = useMemo(() => {
+    const normalized = regionSearchTerm.trim().toLowerCase();
+    if (!normalized) return regions;
 
-  const filteredUsers = users.filter(user =>
-    user.username.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-    user.fullName.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(userSearchTerm.toLowerCase())
-  );
+    return regions.filter((region) => {
+      const name = (region.name || "").toLowerCase();
+      const description = (region.description || "").toLowerCase();
+      return name.includes(normalized) || description.includes(normalized);
+    });
+  }, [regions, regionSearchTerm]);
+
+  const filteredUsers = useMemo(() => {
+    return users.filter((user) => {
+      const normalized = userSearchTerm.trim().toLowerCase();
+      const matchesSearch =
+        !normalized ||
+        user.username.toLowerCase().includes(normalized) ||
+        user.fullName.toLowerCase().includes(normalized) ||
+        user.email.toLowerCase().includes(normalized);
+
+      const matchesRole =
+        roleFilter === "all" ||
+        (roleFilter === "technicians" && user.role === "technician") ||
+        (roleFilter === "managers" && (user.role === "admin" || user.role === "supervisor"));
+
+      const matchesRegion = selectedRegionId === "all" || user.regionId === selectedRegionId;
+
+      return matchesSearch && matchesRole && matchesRegion;
+    });
+  }, [users, userSearchTerm, roleFilter, selectedRegionId]);
+
+  const totalUsers = adminStats?.totalUsers ?? users.length;
+  const activeUsers = adminStats?.activeUsers ?? users.filter((user) => user.isActive).length;
+  const registrationRequests = Math.max(0, totalUsers - activeUsers);
+  const managersCount = users.filter((user) => user.role === "admin" || user.role === "supervisor").length;
+  const techniciansCount = users.filter((user) => user.role === "technician").length;
+  const displayedFrom = filteredUsers.length > 0 ? 1 : 0;
+  const displayedTo = filteredUsers.length;
 
   const handleExportUsers = async () => {
-    if (!filteredUsers || filteredUsers.length === 0) {
+    if (filteredUsers.length === 0) {
       toast({
         title: "لا توجد بيانات للتصدير",
-        description: "يجب أن يكون هناك موظفين لتصديرهم",
+        description: "لا يوجد مستخدمون في نتائج البحث الحالية",
         variant: "destructive",
       });
       return;
     }
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('بيانات الموظفين');
-    
-    const currentDate = new Date().toLocaleDateString('ar-EG', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    
-    worksheet.mergeCells('A1:H1');
-    const titleCell = worksheet.getCell('A1');
-    titleCell.value = 'تقرير بيانات الموظفين';
-    titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
-    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF18B2B0' } };
-    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    worksheet.getRow(1).height = 35;
-    
-    worksheet.mergeCells('A2:H2');
-    const dateCell = worksheet.getCell('A2');
-    dateCell.value = `تاريخ التقرير: ${currentDate}`;
-    dateCell.font = { size: 12, bold: true };
-    dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    dateCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
-    worksheet.getRow(2).height = 25;
-    
-    const headerRow = worksheet.getRow(4);
-    headerRow.values = [
-      '#',
-      'اسم المستخدم',
-      'البريد الإلكتروني',
-      'الاسم الكامل',
-      'الدور',
-      'المنطقة',
-      'الحالة',
-      'تاريخ الإنشاء'
-    ];
-    headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF475569' } };
-    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
-    headerRow.height = 25;
-    
-    headerRow.eachCell((cell) => {
-      cell.border = {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' }
-      };
-    });
-    
+    const worksheet = workbook.addWorksheet("المستخدمون");
+
+    worksheet.addRow(["#", "اسم المستخدم", "الاسم الكامل", "البريد", "الدور", "المنطقة", "الحالة"]);
+
     filteredUsers.forEach((user, index) => {
-      const region = regions.find(r => r.id === user.regionId);
-      const row = worksheet.addRow([
+      const regionName = regions.find((region) => region.id === user.regionId)?.name || "-";
+      worksheet.addRow([
         index + 1,
         user.username,
-        user.email,
         user.fullName,
+        user.email,
         ROLE_LABELS_AR[user.role as keyof typeof ROLE_LABELS_AR],
-        region?.name || '-',
-        user.isActive ? 'نشط' : 'غير نشط',
-        user.createdAt ? new Date(user.createdAt).toLocaleDateString('ar-EG') : '-'
+        regionName,
+        user.isActive ? "نشط" : "غير نشط",
       ]);
-      
-      row.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      row.height = 22;
-      
-      if (index % 2 === 0) {
-        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
-      }
-      
-      row.eachCell((cell) => {
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-          right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-        };
-      });
-      
-      row.getCell(2).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(3).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' };
-      
-      if (!user.isActive) {
-        row.getCell(7).font = { color: { argb: 'FFEF4444' }, bold: true };
-      } else {
-        row.getCell(7).font = { color: { argb: 'FF10B981' }, bold: true };
-      }
     });
-    
-    const statsStartRow = worksheet.lastRow!.number + 2;
-    
-    worksheet.mergeCells(`A${statsStartRow}:H${statsStartRow}`);
-    const statsTitle = worksheet.getCell(`A${statsStartRow}`);
-    statsTitle.value = 'الإحصائيات الإجمالية';
-    statsTitle.font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
-    statsTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
-    statsTitle.alignment = { horizontal: 'center', vertical: 'middle' };
-    worksheet.getRow(statsStartRow).height = 30;
-    
-    const statsData = [
-      ['', 'إجمالي عدد الموظفين', filteredUsers.length],
-      ['', 'الموظفين النشطين', filteredUsers.filter(u => u.isActive).length],
-      ['', 'الموظفين غير النشطين', filteredUsers.filter(u => !u.isActive).length],
-      ['', 'المدراء', filteredUsers.filter(u => u.role === 'admin').length],
-      ['', 'المشرفين', filteredUsers.filter(u => u.role === 'supervisor').length],
-      ['', 'الفنيين', filteredUsers.filter(u => u.role === 'technician').length],
-    ];
-    
-    statsData.forEach((stat, index) => {
-      const statsRow = worksheet.getRow(statsStartRow + 1 + index);
-      statsRow.values = stat;
-      statsRow.height = 25;
-      statsRow.getCell(2).font = { bold: true };
-      statsRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F2FE' } };
-      statsRow.getCell(2).alignment = { horizontal: 'right', vertical: 'middle' };
-      statsRow.getCell(3).font = { bold: true, color: { argb: 'FF1E40AF' } };
-      statsRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
-    });
-    
-    worksheet.columns = [
-      { width: 6 },
-      { width: 20 },
-      { width: 30 },
-      { width: 25 },
-      { width: 15 },
-      { width: 20 },
-      { width: 12 },
-      { width: 18 },
-    ];
-    
+
     const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
-    link.download = `تقرير_الموظفين_${new Date().toISOString().split('T')[0]}.xlsx`;
+    link.download = `users_${new Date().toISOString().slice(0, 10)}.xlsx`;
     link.click();
     window.URL.revokeObjectURL(url);
-    
+
     toast({
-      title: "تم تصدير التقرير بنجاح",
-      description: `تم تصدير بيانات ${filteredUsers.length} موظف بتنسيق احترافي`,
+      title: "تم التصدير بنجاح",
+      description: `تم تصدير ${filteredUsers.length} مستخدم`,
     });
   };
 
   return (
-    <div 
-      className="min-h-screen relative overflow-hidden" 
-      dir="rtl"
-      style={{
-        backgroundImage: `url(${backgroundImage})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed'
-      }}
-    >
-      {/* Glassmorphic Overlay */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#050508]/90 via-[#050508]/85 to-[#050508]/90 backdrop-blur-[2px] z-0" />
+      <div className="-m-8 min-h-[calc(100vh-5rem)] bg-[#050a0a] p-6 md:p-8 relative overflow-hidden" dir="rtl">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-cyan-400/5 rounded-full blur-[120px]" />
+          <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] bg-blue-500/5 rounded-full blur-[100px]" />
+        </div>
 
-      {/* Header with Glassmorphic Design */}
-      <div className="relative z-10 border-b border-white/10 bg-gradient-to-r from-[#0a0a0f]/90 via-[#0f0f15]/90 to-[#0a0a0f]/90 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4 w-full md:w-auto">
-              <Link href="/home">
-                <Button 
-                  variant="ghost" 
-                  className="bg-white/10 backdrop-blur-xl border border-white/20 text-white hover:bg-white/20 hover:border-white/40 hover:shadow-[0_0_20px_rgba(24,178,176,0.3)] transition-all duration-300"
-                  data-testid="button-back-dashboard"
+        <div className="relative z-10 space-y-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-1 h-8 bg-gradient-to-b from-cyan-300 to-blue-500 rounded-full" />
+              <h1 className="text-2xl md:text-3xl font-black text-white">إدارة المستخدمين والمناطق</h1>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => {
+                  setEditingUser(null);
+                  setShowUserModal(true);
+                }}
+                className="bg-gradient-to-r from-cyan-300 to-blue-500 text-[#061113] hover:opacity-90 font-bold"
+                data-testid="button-add-user"
+              >
+                <UserPlus className="h-4 w-4 ml-2" />
+                إضافة مستخدم جديد
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="group relative overflow-hidden rounded-3xl border border-cyan-400/15 bg-[#0a1314]/80 backdrop-blur-xl p-6 flex items-center justify-between transition-all hover:border-cyan-300/35">
+              <div className="absolute inset-0 bg-cyan-400/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div>
+                <p className="text-slate-400 text-sm">إجمالي المستخدمين</p>
+                <p className="text-4xl font-black text-white mt-2">{arNumber(totalUsers)}</p>
+              </div>
+              <div className="size-14 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 text-cyan-300 flex items-center justify-center">
+                <Users className="h-7 w-7" />
+              </div>
+            </div>
+
+            <div className="group relative overflow-hidden rounded-3xl border border-green-500/20 bg-[#0a1314]/80 backdrop-blur-xl p-6 flex items-center justify-between transition-all hover:border-green-400/40">
+              <div className="absolute inset-0 bg-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div>
+                <p className="text-slate-400 text-sm">المستخدمين النشطين</p>
+                <p className="text-4xl font-black text-white mt-2 flex items-center gap-2">
+                  {arNumber(activeUsers)}
+                  <span className="size-2.5 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.9)]" />
+                </p>
+              </div>
+              <div className="size-14 rounded-2xl border border-green-500/30 bg-green-500/10 text-green-400 flex items-center justify-center">
+                <UserCheck className="h-7 w-7" />
+              </div>
+            </div>
+
+            <div className="group relative overflow-hidden rounded-3xl border border-orange-500/20 bg-[#0a1314]/80 backdrop-blur-xl p-6 flex items-center justify-between transition-all hover:border-orange-400/40">
+              <div className="absolute inset-0 bg-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div>
+                <p className="text-slate-400 text-sm">طلبات التسجيل</p>
+                <p className="text-4xl font-black text-white mt-2">{arNumber(registrationRequests)}</p>
+              </div>
+              <div className="size-14 rounded-2xl border border-orange-500/30 bg-orange-500/10 text-orange-400 flex items-center justify-center">
+                <UserPlus className="h-7 w-7" />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
+            <div className="lg:col-span-3 rounded-3xl border border-cyan-400/15 bg-[#0a1314]/80 backdrop-blur-xl p-5 h-[calc(100vh-320px)] flex flex-col relative overflow-hidden">
+              <div className="absolute inset-0 bg-cyan-400/5 pointer-events-none" />
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white font-bold flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-cyan-300" />
+                  إدارة المناطق
+                </h3>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="border-cyan-400/30 text-cyan-300 hover:bg-cyan-400/15"
+                  onClick={() => {
+                    setEditingRegion(null);
+                    setShowRegionModal(true);
+                  }}
+                  data-testid="button-add-region"
                 >
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                  العودة
+                  <Plus className="h-4 w-4" />
                 </Button>
-              </Link>
-              
-              <div className="flex items-center gap-3">
-                <motion.div 
-                  className="p-3 bg-gradient-to-br from-[#18B2B0] to-[#0ea5a3] rounded-2xl shadow-lg"
-                  animate={{ rotate: [0, 5, 0, -5, 0] }}
-                  transition={{ duration: 4, repeat: Infinity }}
+              </div>
+
+              <div className="relative mb-4">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                <Input
+                  value={regionSearchTerm}
+                  onChange={(event) => setRegionSearchTerm(event.target.value)}
+                  placeholder="ابحث عن منطقة"
+                  className="bg-black/30 border-white/10 pr-10 pl-10 text-white"
+                />
+                {regionSearchTerm.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setRegionSearchTerm("")}
+                    aria-label="مسح البحث"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    <XCircle className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 relative z-10">
+                <button
+                  type="button"
+                  onClick={() => setSelectedRegionId("all")}
+                  className={
+                    selectedRegionId === "all"
+                      ? "w-full text-right p-4 rounded-xl border border-cyan-400/35 bg-cyan-400/10"
+                      : "w-full text-right p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10"
+                  }
                 >
-                  <Shield className="h-7 w-7 text-white drop-shadow-md" />
-                </motion.div>
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-[#18B2B0]">لوحة الإدارة</h1>
-                  <p className="text-sm text-gray-400">التحكم الكامل في النظام</p>
+                  <p className="text-sm font-bold text-white">كل المناطق</p>
+                  <p className="text-xs text-slate-400">{arNumber(users.length)} مستخدم</p>
+                </button>
+
+                {filteredRegions.map((region) => {
+                  const usersCount = users.filter((user) => user.regionId === region.id).length;
+                  const isSelected = selectedRegionId === region.id;
+
+                  return (
+                    <div
+                      key={region.id}
+                      className={
+                        isSelected
+                          ? "p-4 rounded-xl border border-cyan-400/35 bg-cyan-400/10 shadow-[0_0_15px_rgba(13,223,242,0.12)]"
+                          : "p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10"
+                      }
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedRegionId(region.id)}
+                          className="text-right flex-1"
+                        >
+                          <p className={isSelected ? "text-cyan-300 font-bold text-sm" : "text-slate-300 font-bold text-sm"}>{region.name}</p>
+                          <p className={isSelected ? "text-cyan-300/80 text-xs" : "text-slate-500 text-xs"}>{arNumber(usersCount)} مستخدم</p>
+                        </button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-slate-400 hover:text-cyan-300 hover:bg-cyan-400/10"
+                          onClick={() => handleEditRegion(region)}
+                          data-testid={`button-edit-region-${region.id}`}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {filteredRegions.length === 0 && (
+                  <div className="text-center text-sm text-slate-500 py-6 border border-dashed border-white/10 rounded-xl">
+                    لا توجد مناطق مطابقة
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="lg:col-span-7 rounded-3xl border border-cyan-400/15 bg-[#0a1314]/80 backdrop-blur-xl p-5 flex flex-col min-h-[calc(100vh-320px)]">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-4 rounded-2xl border border-white/10 bg-black/20 p-3">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={roleFilter === "all" ? "default" : "ghost"}
+                    onClick={() => setRoleFilter("all")}
+                    className={roleFilter === "all" ? "bg-cyan-400/20 text-cyan-300 border border-cyan-400/30" : "text-slate-400 hover:text-white hover:bg-white/5"}
+                  >
+                    الكل ({arNumber(filteredUsers.length)})
+                  </Button>
+                  <Button
+                    variant={roleFilter === "managers" ? "default" : "ghost"}
+                    onClick={() => setRoleFilter("managers")}
+                    className={roleFilter === "managers" ? "bg-cyan-400/20 text-cyan-300 border border-cyan-400/30" : "text-slate-400 hover:text-white hover:bg-white/5"}
+                  >
+                    المسؤولين ({arNumber(managersCount)})
+                  </Button>
+                  <Button
+                    variant={roleFilter === "technicians" ? "default" : "ghost"}
+                    onClick={() => setRoleFilter("technicians")}
+                    className={roleFilter === "technicians" ? "bg-cyan-400/20 text-cyan-300 border border-cyan-400/30" : "text-slate-400 hover:text-white hover:bg-white/5"}
+                  >
+                    الفنيين ({arNumber(techniciansCount)})
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-2 w-full xl:w-auto">
+                  <div className="relative w-full xl:w-80">
+                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                    <Input
+                      value={userSearchTerm}
+                      onChange={(event) => setUserSearchTerm(event.target.value)}
+                      placeholder="البحث عن مستخدم، بريد، أو دور..."
+                      className="bg-white/5 border-white/10 pr-10 pl-10 text-white"
+                      data-testid="input-search-user"
+                    />
+                    {userSearchTerm.trim().length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setUserSearchTerm("")}
+                        aria-label="مسح البحث"
+                        className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  <Button
+                    onClick={handleExportUsers}
+                    variant="outline"
+                    className="border-emerald-500/30 text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20"
+                    data-testid="button-export-users"
+                  >
+                    <FileSpreadsheet className="h-4 w-4 ml-2" />
+                    تصدير
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-[2fr_1.3fr_1.2fr_1fr_1fr] gap-4 px-4 py-3 text-xs font-bold tracking-wider text-slate-400 border-b border-white/10">
+                <div>المستخدم</div>
+                <div>المسمى الوظيفي</div>
+                <div>المنطقة</div>
+                <div className="text-center">الحالة</div>
+                <div className="text-center">الإجراءات</div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto pr-1 py-3 space-y-2">
+                {filteredUsers.map((user) => {
+                  const regionName = user.regionId ? regions.find((region) => region.id === user.regionId)?.name || "غير محدد" : "بدون منطقة";
+
+                  return (
+                    <div
+                      key={user.id}
+                      className="grid grid-cols-[2fr_1.3fr_1.2fr_1fr_1fr] gap-4 items-center px-4 py-3 rounded-2xl border border-white/5 bg-white/[0.03] hover:border-cyan-400/20 hover:bg-cyan-400/[0.04] hover:-translate-y-[1px] hover:shadow-[0_10px_25px_-10px_rgba(13,223,242,0.25)] transition-all"
+                      data-testid={`row-user-${user.id}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="size-10 rounded-full border border-cyan-400/30 bg-cyan-400/10 text-cyan-200 flex items-center justify-center font-bold text-xs shrink-0">
+                          {userInitials(user.fullName)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-white truncate">{user.fullName}</p>
+                          <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <Badge variant="outline" className={roleBadgeClass(user.role)}>
+                          {ROLE_LABELS_AR[user.role as keyof typeof ROLE_LABELS_AR]}
+                        </Badge>
+                      </div>
+
+                      <div className="text-sm text-slate-300">{regionName}</div>
+
+                      <div className="flex items-center justify-center gap-2">
+                        <span className={user.isActive ? "w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]" : "w-2.5 h-2.5 rounded-full bg-slate-500"} />
+                        <span className={user.isActive ? "text-xs text-green-400 font-bold" : "text-xs text-slate-400 font-bold"}>
+                          {user.isActive ? "متصل" : "غير متصل"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-slate-400 hover:text-cyan-300 hover:bg-cyan-400/10"
+                          onClick={() => handleEditUser(user)}
+                          title="تعديل الصلاحيات"
+                        >
+                          <KeyRound className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-slate-400 hover:text-cyan-300 hover:bg-cyan-400/10"
+                          onClick={() => handleEditUser(user)}
+                          data-testid={`button-edit-user-${user.id}`}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={user.isActive ? "text-slate-400 hover:text-orange-300 hover:bg-orange-400/10" : "text-slate-400 hover:text-green-300 hover:bg-green-400/10"}
+                          onClick={() => toggleUserStatusMutation.mutate({ id: user.id, isActive: !user.isActive })}
+                          data-testid={`button-toggle-user-${user.id}`}
+                        >
+                          {user.isActive ? <XCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-slate-400 hover:text-red-300 hover:bg-red-400/10"
+                          onClick={() => {
+                            if (window.confirm(`هل أنت متأكد من حذف المستخدم \"${user.fullName}\"؟`)) {
+                              deleteUserMutation.mutate(user.id);
+                            }
+                          }}
+                          data-testid={`button-delete-user-${user.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {filteredUsers.length === 0 && (
+                  <div className="text-center text-sm text-slate-500 py-10 border border-dashed border-white/10 rounded-xl">
+                    لا توجد نتائج مستخدمين مطابقة للفلاتر الحالية
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-white/10 flex flex-col items-center gap-3">
+                <span className="text-xs text-slate-500">عرض {arNumber(displayedFrom)} - {arNumber(displayedTo)} من أصل {arNumber(totalUsers)} مستخدم</span>
+                <div className="flex items-center gap-1 bg-black/30 border border-white/10 rounded-2xl p-1">
+                  <button type="button" className="w-9 h-9 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 flex items-center justify-center">
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  <button type="button" className="w-9 h-9 rounded-xl bg-gradient-to-r from-cyan-300 to-blue-500 text-[#061113] font-bold">
+                    ١
+                  </button>
+                  <button type="button" className="w-9 h-9 rounded-xl text-slate-500">٢</button>
+                  <button type="button" className="w-9 h-9 rounded-xl text-slate-500">٣</button>
+                  <button type="button" className="w-9 h-9 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 flex items-center justify-center">
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="relative z-10 p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
-        {/* Premium Glassmorphic Tabs */}
-        <Tabs defaultValue="dashboard" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 bg-white/5 backdrop-blur-xl p-2 rounded-2xl shadow-2xl border border-white/20">
-            <TabsTrigger 
-              value="dashboard" 
-              data-testid="tab-dashboard"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#18B2B0] data-[state=active]:to-teal-500 data-[state=active]:text-gray-900 data-[state=active]:shadow-xl font-bold rounded-xl transition-all duration-300 hover:bg-white/10 text-gray-300"
-            >
-              <LayoutDashboard className="h-4 w-4 ml-2" />
-              لوحة المعلومات
-            </TabsTrigger>
-            <TabsTrigger 
-              value="regions" 
-              data-testid="tab-regions"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#18B2B0] data-[state=active]:to-teal-500 data-[state=active]:text-gray-900 data-[state=active]:shadow-xl font-bold rounded-xl transition-all duration-300 hover:bg-white/10 text-gray-300"
-            >
-              <MapPin className="h-4 w-4 ml-2" />
-              إدارة المناطق
-            </TabsTrigger>
-            <TabsTrigger 
-              value="users" 
-              data-testid="tab-users"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#18B2B0] data-[state=active]:to-teal-500 data-[state=active]:text-gray-900 data-[state=active]:shadow-xl font-bold rounded-xl transition-all duration-300 hover:bg-white/10 text-gray-300"
-            >
-              <Users className="h-4 w-4 ml-2" />
-              إدارة الموظفين
-            </TabsTrigger>
-            <TabsTrigger 
-              value="transactions" 
-              data-testid="tab-transactions"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#18B2B0] data-[state=active]:to-teal-500 data-[state=active]:text-gray-900 data-[state=active]:shadow-xl font-bold rounded-xl transition-all duration-300 hover:bg-white/10 text-gray-300"
-            >
-              <Activity className="h-4 w-4 ml-2" />
-              عمليات النظام
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Dashboard Tab */}
-          <TabsContent value="dashboard" className="space-y-8 mt-6">
-            {/* Hero Stats Section */}
-            {adminStats && (
-              <motion.div 
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-              >
-                {/* المناطق */}
-                <motion.div
-                  whileHover={{ scale: 1.03, y: -8 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                  className="group relative overflow-hidden"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#18B2B0]/20 via-[#18B2B0]/10 to-transparent rounded-3xl blur-2xl group-hover:blur-3xl transition-all duration-500"></div>
-                  <Card className="relative h-full shadow-2xl border border-white/20 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl hover:border-[#18B2B0]/40 transition-all duration-300">
-                    <CardContent className="p-8">
-                      <div className="flex items-center justify-between mb-6">
-                        <div className="p-4 rounded-2xl bg-gradient-to-br from-[#18B2B0]/30 to-[#18B2B0]/10 border border-[#18B2B0]/20 group-hover:shadow-[0_0_30px_rgba(24,178,176,0.4)] transition-all duration-300">
-                          <MapPin className="h-8 w-8 text-[#18B2B0]" />
-                        </div>
-                      </div>
-                      <h3 className="text-gray-300 text-sm font-bold mb-2">إجمالي المناطق</h3>
-                      <p className="text-[#18B2B0] text-5xl font-black mb-2">{adminStats.totalRegions}</p>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-green-400 flex items-center gap-1">
-                          <TrendingUp className="h-3 w-3" />
-                          نشط
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-
-                {/* الموظفين */}
-                <motion.div
-                  whileHover={{ scale: 1.03, y: -8 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                  className="group relative overflow-hidden"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 via-purple-500/10 to-transparent rounded-3xl blur-2xl group-hover:blur-3xl transition-all duration-500"></div>
-                  <Card className="relative h-full shadow-2xl border border-white/20 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl hover:border-purple-400/40 transition-all duration-300">
-                    <CardContent className="p-8">
-                      <div className="flex items-center justify-between mb-6">
-                        <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-500/30 to-purple-500/10 border border-purple-400/20 group-hover:shadow-[0_0_30px_rgba(168,85,247,0.4)] transition-all duration-300">
-                          <Users className="h-8 w-8 text-purple-400" />
-                        </div>
-                      </div>
-                      <h3 className="text-gray-300 text-sm font-bold mb-2">إجمالي الموظفين</h3>
-                      <p className="text-purple-400 text-5xl font-black mb-2">{adminStats.totalUsers}</p>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-purple-400 flex items-center gap-1">
-                          <Users className="h-3 w-3" />
-                          مستخدم
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-
-                {/* النشطين */}
-                <motion.div
-                  whileHover={{ scale: 1.03, y: -8 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                  className="group relative overflow-hidden"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-br from-green-500/20 via-green-500/10 to-transparent rounded-3xl blur-2xl group-hover:blur-3xl transition-all duration-500"></div>
-                  <Card className="relative h-full shadow-2xl border border-white/20 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl hover:border-green-400/40 transition-all duration-300">
-                    <CardContent className="p-8">
-                      <div className="flex items-center justify-between mb-6">
-                        <div className="p-4 rounded-2xl bg-gradient-to-br from-green-500/30 to-green-500/10 border border-green-400/20 group-hover:shadow-[0_0_30px_rgba(34,197,94,0.4)] transition-all duration-300">
-                          <CheckCircle className="h-8 w-8 text-green-400" />
-                        </div>
-                      </div>
-                      <h3 className="text-gray-300 text-sm font-bold mb-2">الموظفين النشطين</h3>
-                      <p className="text-green-400 text-5xl font-black mb-2">{adminStats.activeUsers}</p>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-green-400 flex items-center gap-1">
-                          <TrendingUp className="h-3 w-3" />
-                          {Math.round((adminStats.activeUsers / adminStats.totalUsers) * 100)}%
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-
-                {/* العمليات */}
-                <motion.div
-                  whileHover={{ scale: 1.03, y: -8 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                  className="group relative overflow-hidden"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-br from-amber-500/20 via-amber-500/10 to-transparent rounded-3xl blur-2xl group-hover:blur-3xl transition-all duration-500"></div>
-                  <Card className="relative h-full shadow-2xl border border-white/20 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl hover:border-amber-400/40 transition-all duration-300">
-                    <CardContent className="p-8">
-                      <div className="flex items-center justify-between mb-6">
-                        <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/30 to-amber-500/10 border border-amber-400/20 group-hover:shadow-[0_0_30px_rgba(245,158,11,0.4)] transition-all duration-300">
-                          <Activity className="h-8 w-8 text-amber-400" />
-                        </div>
-                      </div>
-                      <h3 className="text-gray-300 text-sm font-bold mb-2">إجمالي العمليات</h3>
-                      <p className="text-amber-400 text-5xl font-black mb-2">{adminStats.totalTransactions}</p>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-amber-400 flex items-center gap-1">
-                          <Activity className="h-3 w-3" />
-                          عملية
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              </motion.div>
-            )}
-
-            {/* Charts Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {regions && regions.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  <RegionsBarChart
-                    title="إحصائيات المناطق"
-                    description="مقارنة المستخدمين والأصناف حسب المنطقة"
-                    data={regions.map(r => ({
-                      name: r.name,
-                      users: users.filter(u => u.regionId === r.id).length,
-                      items: r.itemCount || 0,
-                    }))}
-                  />
-                </motion.div>
-              )}
-
-              {adminStats && (
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  <StockCompositionPie
-                    title="حالة المستخدمين"
-                    description="توزيع المستخدمين النشطين وغير النشطين"
-                    data={[
-                      { name: 'نشط', value: adminStats.activeUsers },
-                      { name: 'غير نشط', value: adminStats.totalUsers - adminStats.activeUsers },
-                    ]}
-                    colors={['#10B981', '#EF4444']}
-                  />
-                </motion.div>
-              )}
-            </div>
-
-            {/* Trend Chart */}
-            {adminStats && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-              >
-                <TrendLineChart
-                  title="اتجاه العمليات"
-                  description="نمو العمليات والمستخدمين عبر الوقت"
-                  data={[
-                    { name: 'يناير', عمليات: Math.floor(adminStats.totalTransactions * 0.3), مستخدمين: Math.floor(adminStats.totalUsers * 0.6) },
-                    { name: 'فبراير', عمليات: Math.floor(adminStats.totalTransactions * 0.5), مستخدمين: Math.floor(adminStats.totalUsers * 0.7) },
-                    { name: 'مارس', عمليات: Math.floor(adminStats.totalTransactions * 0.7), مستخدمين: Math.floor(adminStats.totalUsers * 0.85) },
-                    { name: 'أبريل', عمليات: Math.floor(adminStats.totalTransactions * 0.85), مستخدمين: Math.floor(adminStats.totalUsers * 0.95) },
-                    { name: 'مايو', عمليات: adminStats.totalTransactions, مستخدمين: adminStats.totalUsers },
-                  ]}
-                  dataKeys={[
-                    { key: 'عمليات', color: '#18B2B0', name: 'العمليات' },
-                    { key: 'مستخدمين', color: '#A855F7', name: 'المستخدمين' },
-                  ]}
-                />
-              </motion.div>
-            )}
-          </TabsContent>
-
-          {/* Regions Tab */}
-          <TabsContent value="regions" className="space-y-4 mt-6">
-            <motion.div 
-              className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl p-4 rounded-2xl border border-white/20 shadow-2xl"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <div className="flex items-center gap-4 flex-1">
-                <h2 className="text-2xl font-black text-[#18B2B0]">المناطق</h2>
-                <div className="relative flex-1 max-w-md">
-                  <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[#18B2B0]/50 h-5 w-5" />
-                  <Input
-                    type="text"
-                    placeholder="ابحث عن منطقة..."
-                    value={regionSearchTerm}
-                    onChange={(e) => setRegionSearchTerm(e.target.value)}
-                    className="pr-10 bg-white/5 border-white/20 text-white placeholder:text-gray-400 focus:border-[#18B2B0]/50"
-                    data-testid="input-search-region"
-                  />
-                </div>
-              </div>
-              <Dialog open={showRegionModal} onOpenChange={setShowRegionModal}>
-                <DialogTrigger asChild>
-                  <Button 
-                    onClick={() => setShowRegionModal(true)} 
-                    data-testid="button-add-region"
-                    className="bg-gradient-to-r from-[#18B2B0] to-teal-500 hover:from-[#16a09e] hover:to-teal-600 text-white shadow-lg hover:shadow-2xl transition-all duration-300 font-bold"
-                  >
-                    <Plus className="h-4 w-4 ml-2" />
-                    إضافة منطقة جديدة
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl border border-white/20" data-testid="modal-region">
-                  <DialogHeader>
-                    <DialogTitle className="text-2xl text-[#18B2B0] font-black">{editingRegion ? "تحديث المنطقة" : "إضافة منطقة جديدة"}</DialogTitle>
-                    <DialogDescription className="text-gray-300">
-                      أدخل بيانات المنطقة
-                    </DialogDescription>
-                  </DialogHeader>
-                  <Form {...regionForm}>
-                    <form onSubmit={regionForm.handleSubmit(handleRegionSubmit)} className="space-y-4">
-                      <FormField
-                        control={regionForm.control}
-                        name="name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-[#18B2B0] font-bold">اسم المنطقة</FormLabel>
-                            <FormControl>
-                              <Input placeholder="أدخل اسم المنطقة" {...field} data-testid="input-region-name" className="border-white/20 focus:border-white/40 focus:ring-2 focus:ring-[#18B2B0]/30 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl text-[#18B2B0] placeholder:text-gray-400" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={regionForm.control}
-                        name="description"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-[#18B2B0] font-bold">الوصف (اختياري)</FormLabel>
-                            <FormControl>
-                              <Textarea placeholder="أدخل وصف المنطقة" {...field} data-testid="input-region-description" className="border-white/20 focus:border-white/40 focus:ring-2 focus:ring-[#18B2B0]/30 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl text-[#18B2B0] placeholder:text-gray-400" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={regionForm.control}
-                        name="isActive"
-                        render={({ field }) => (
-                          <FormItem className="flex flex-row items-center justify-between rounded-lg border border-white/20 p-3 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl">
-                            <div className="space-y-0.5">
-                              <FormLabel className="text-[#18B2B0] font-bold">منطقة نشطة</FormLabel>
-                            </div>
-                            <FormControl>
-                              <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="switch-region-active" />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <div className="flex gap-2 pt-4">
-                        <Button 
-                          type="submit" 
-                          disabled={createRegionMutation.isPending || updateRegionMutation.isPending} 
-                          data-testid="button-save-region"
-                          className="bg-gradient-to-r from-[#18B2B0] to-teal-500 hover:from-[#16a09e] hover:to-teal-600 font-bold"
-                        >
-                          {editingRegion ? "تحديث" : "إضافة"}
-                        </Button>
-                        <Button type="button" variant="outline" onClick={handleCloseRegionModal} data-testid="button-cancel-region" className="border-white/20 text-gray-300 hover:bg-white/10 hover:text-[#18B2B0]">
-                          إلغاء
-                        </Button>
-                      </div>
-                    </form>
-                  </Form>
-                </DialogContent>
-              </Dialog>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-            >
-              <Card className="shadow-2xl border border-white/20 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl">
-                <CardHeader className="bg-gradient-to-r from-white/10 to-transparent border-b border-white/10">
-                  <CardTitle className="text-[#18B2B0] text-2xl font-black">قائمة المناطق</CardTitle>
-                  <CardDescription className="text-gray-300">جميع المناطق المسجلة في النظام</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="overflow-x-auto rounded-xl">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="border-white/10 hover:bg-transparent">
-                          <TableHead className="text-right font-bold text-[#18B2B0]">اسم المنطقة</TableHead>
-                          <TableHead className="text-right font-bold text-[#18B2B0]">الوصف</TableHead>
-                          <TableHead className="text-right font-bold text-[#18B2B0]">عدد الأصناف</TableHead>
-                          <TableHead className="text-right font-bold text-[#18B2B0]">إجمالي الكمية</TableHead>
-                          <TableHead className="text-right font-bold text-[#18B2B0]">الحالة</TableHead>
-                          <TableHead className="text-right font-bold text-[#18B2B0]">الإجراءات</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredRegions.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={6} className="text-center py-12">
-                              <div className="flex flex-col items-center gap-3">
-                                <Search className="w-12 h-12 text-gray-500" />
-                                <p className="text-gray-400 text-lg">
-                                  {regionSearchTerm ? 'لا توجد مناطق تطابق بحثك' : 'لا توجد مناطق'}
-                                </p>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          filteredRegions.map((region, index) => (
-                          <motion.tr 
-                            key={region.id} 
-                            data-testid={`row-region-${region.id}`}
-                            className="border-white/5 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(24,178,176,0.1)] transition-all duration-300"
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: index * 0.05 }}
-                          >
-                            <TableCell className="font-bold text-right text-[#18B2B0]">{region.name}</TableCell>
-                            <TableCell className="text-right text-gray-300">{region.description || "لا يوجد وصف"}</TableCell>
-                            <TableCell className="text-right">
-                              <Badge variant="outline" className="border-white/30 text-[#18B2B0] bg-[#18B2B0]/10">
-                                {region.itemCount || 0}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Badge variant="outline" className="border-white/30 text-green-400 bg-green-500/10">
-                                {region.totalQuantity || 0}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {region.isActive ? (
-                                <Badge className="bg-green-500/20 text-green-400 border border-white/20">
-                                  <CheckCircle className="h-3 w-3 ml-1" />
-                                  نشط
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="border-white/20 text-gray-400 bg-gray-500/10">
-                                  <XCircle className="h-3 w-3 ml-1" />
-                                  غير نشط
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex gap-2 justify-end">
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  onClick={() => handleEditRegion(region)} 
-                                  data-testid={`button-edit-region-${region.id}`}
-                                  className="text-[#18B2B0] hover:bg-[#18B2B0]/20 hover:text-[#18B2B0]"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  onClick={() => {
-                                    if (window.confirm(`هل أنت متأكد من حذف المنطقة "${region.name}"؟`)) {
-                                      deleteRegionMutation.mutate(region.id);
-                                    }
-                                  }} 
-                                  data-testid={`button-delete-region-${region.id}`}
-                                  className="text-red-400 hover:bg-red-500/20 hover:text-red-400"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </motion.tr>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </TabsContent>
-
-          {/* Users Tab */}
-          <TabsContent value="users" className="space-y-4 mt-6">
-            <motion.div 
-              className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl p-4 rounded-2xl border border-white/20 shadow-2xl"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <div className="flex items-center gap-4 flex-1">
-                <h2 className="text-2xl font-black text-[#18B2B0]">الموظفين</h2>
-                <div className="relative flex-1 max-w-md">
-                  <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[#18B2B0]/50 h-5 w-5" />
-                  <Input
-                    type="text"
-                    placeholder="ابحث عن موظف..."
-                    value={userSearchTerm}
-                    onChange={(e) => setUserSearchTerm(e.target.value)}
-                    className="pr-10 bg-white/5 border-white/20 text-white placeholder:text-gray-400 focus:border-[#18B2B0]/50"
-                    data-testid="input-search-user"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                <Button 
-                  onClick={handleExportUsers}
-                  variant="outline"
-                  data-testid="button-export-users"
-                  className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white border-0 shadow-lg hover:shadow-2xl transition-all duration-300 font-bold"
-                >
-                  <FileSpreadsheet className="h-4 w-4 ml-2" />
-                  تصدير Excel
-                </Button>
-                <Dialog open={showUserModal} onOpenChange={setShowUserModal}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      onClick={() => setShowUserModal(true)} 
-                      data-testid="button-add-user"
-                      className="bg-gradient-to-r from-[#18B2B0] to-teal-500 hover:from-[#16a09e] hover:to-teal-600 text-white shadow-lg hover:shadow-2xl transition-all duration-300 font-bold"
-                    >
-                      <Plus className="h-4 w-4 ml-2" />
-                      إضافة موظف جديد
-                    </Button>
-                  </DialogTrigger>
-                <DialogContent className="max-w-md bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl border border-white/20" data-testid="modal-user">
-                  <DialogHeader>
-                    <DialogTitle className="text-2xl text-[#18B2B0] font-black">{editingUser ? "تحديث بيانات الموظف" : "إضافة موظف جديد"}</DialogTitle>
-                    <DialogDescription className="text-gray-300">
-                      أدخل بيانات الموظف
-                    </DialogDescription>
-                  </DialogHeader>
-                  <Form {...userForm}>
-                    <form onSubmit={userForm.handleSubmit(handleUserSubmit)} className="space-y-4">
-                      <FormField
-                        control={userForm.control}
-                        name="username"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-[#18B2B0] font-bold">اسم المستخدم</FormLabel>
-                            <FormControl>
-                              <Input placeholder="أدخل اسم المستخدم" {...field} data-testid="input-user-username" className="border-white/20 focus:border-white/40 focus:ring-2 focus:ring-[#18B2B0]/30 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl text-[#18B2B0] placeholder:text-gray-400" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={userForm.control}
-                        name="fullName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-[#18B2B0] font-bold">الاسم الكامل</FormLabel>
-                            <FormControl>
-                              <Input placeholder="أدخل الاسم الكامل" {...field} data-testid="input-user-fullname" className="border-white/20 focus:border-white/40 focus:ring-2 focus:ring-[#18B2B0]/30 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl text-[#18B2B0] placeholder:text-gray-400" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={userForm.control}
-                        name="email"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-[#18B2B0] font-bold">البريد الإلكتروني</FormLabel>
-                            <FormControl>
-                              <Input type="email" placeholder="أدخل البريد الإلكتروني" {...field} data-testid="input-user-email" className="border-white/20 focus:border-white/40 focus:ring-2 focus:ring-[#18B2B0]/30 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl text-[#18B2B0] placeholder:text-gray-400" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={userForm.control}
-                        name="password"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-[#18B2B0] font-bold">كلمة المرور {editingUser && "(اتركها فارغة للإبقاء على كلمة المرور الحالية)"}</FormLabel>
-                            <FormControl>
-                              <Input type="password" placeholder="أدخل كلمة المرور" {...field} data-testid="input-user-password" className="border-white/20 focus:border-white/40 focus:ring-2 focus:ring-[#18B2B0]/30 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl text-[#18B2B0] placeholder:text-gray-400" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={userForm.control}
-                        name="role"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-[#18B2B0] font-bold">الدور</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value} data-testid="select-user-role">
-                              <FormControl>
-                                <SelectTrigger className="border-white/20 focus:border-white/40 focus:ring-2 focus:ring-[#18B2B0]/30 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl text-[#18B2B0]">
-                                  <SelectValue placeholder="اختر دور الموظف" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent className="bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl border-white/20">
-                                <SelectItem value="admin" className="text-[#18B2B0] hover:bg-white/10">{ROLE_LABELS_AR.admin}</SelectItem>
-                                <SelectItem value="supervisor" className="text-[#18B2B0] hover:bg-white/10">{ROLE_LABELS_AR.supervisor}</SelectItem>
-                                <SelectItem value="technician" className="text-[#18B2B0] hover:bg-white/10">{ROLE_LABELS_AR.technician}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={userForm.control}
-                        name="regionId"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-[#18B2B0] font-bold">المنطقة (للمشرفين والفنيين)</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value} data-testid="select-user-region">
-                              <FormControl>
-                                <SelectTrigger className="border-white/20 focus:border-white/40 focus:ring-2 focus:ring-[#18B2B0]/30 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl text-[#18B2B0]">
-                                  <SelectValue placeholder="اختر المنطقة" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent className="bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl border-white/20">
-                                {regions.map(region => (
-                                  <SelectItem key={region.id} value={region.id} className="text-[#18B2B0] hover:bg-white/10">{region.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={userForm.control}
-                        name="isActive"
-                        render={({ field }) => (
-                          <FormItem className="flex flex-row items-center justify-between rounded-lg border border-white/20 p-3 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl">
-                            <div className="space-y-0.5">
-                              <FormLabel className="text-[#18B2B0] font-bold">حساب نشط</FormLabel>
-                            </div>
-                            <FormControl>
-                              <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="switch-user-active" />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <div className="flex gap-2 pt-4">
-                        <Button 
-                          type="submit" 
-                          disabled={createUserMutation.isPending || updateUserMutation.isPending} 
-                          data-testid="button-save-user"
-                          className="bg-gradient-to-r from-[#18B2B0] to-teal-500 hover:from-[#16a09e] hover:to-teal-600 font-bold"
-                        >
-                          {editingUser ? "تحديث" : "إضافة"}
-                        </Button>
-                        <Button type="button" variant="outline" onClick={handleCloseUserModal} data-testid="button-cancel-user" className="border-white/20 text-gray-300 hover:bg-white/10 hover:text-[#18B2B0]">
-                          إلغاء
-                        </Button>
-                      </div>
-                    </form>
-                  </Form>
-                </DialogContent>
-              </Dialog>
-              </div>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-            >
-              <Card className="shadow-2xl border border-white/20 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl">
-                <CardHeader className="bg-gradient-to-r from-white/10 to-transparent border-b border-white/10">
-                  <CardTitle className="text-[#18B2B0] text-2xl font-black">قائمة الموظفين</CardTitle>
-                  <CardDescription className="text-gray-300">جميع الموظفين المسجلين في النظام</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="overflow-x-auto rounded-xl">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="border-white/10 hover:bg-transparent">
-                          <TableHead className="text-right font-bold text-[#18B2B0]">اسم المستخدم</TableHead>
-                          <TableHead className="text-right font-bold text-[#18B2B0]">الاسم الكامل</TableHead>
-                          <TableHead className="text-right font-bold text-[#18B2B0]">البريد الإلكتروني</TableHead>
-                          <TableHead className="text-right font-bold text-[#18B2B0]">الدور</TableHead>
-                          <TableHead className="text-right font-bold text-[#18B2B0]">المنطقة</TableHead>
-                          <TableHead className="text-right font-bold text-[#18B2B0]">الحالة</TableHead>
-                          <TableHead className="text-right font-bold text-[#18B2B0]">الإجراءات</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredUsers.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={7} className="text-center py-12">
-                              <div className="flex flex-col items-center gap-3">
-                                <Search className="w-12 h-12 text-gray-500" />
-                                <p className="text-gray-400 text-lg">
-                                  {userSearchTerm ? 'لا يوجد موظفون يطابقون بحثك' : 'لا يوجد موظفون'}
-                                </p>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          filteredUsers.map((user, index) => (
-                          <motion.tr 
-                            key={user.id} 
-                            data-testid={`row-user-${user.id}`}
-                            className="border-white/5 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(24,178,176,0.1)] transition-all duration-300"
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: index * 0.05 }}
-                          >
-                            <TableCell className="font-bold text-right text-[#18B2B0]">{user.username}</TableCell>
-                            <TableCell className="text-right text-gray-300">{user.fullName}</TableCell>
-                            <TableCell className="text-right text-gray-300">{user.email}</TableCell>
-                            <TableCell className="text-right">
-                              <Badge variant="outline" className="border-white/30 text-[#18B2B0] bg-[#18B2B0]/10">
-                                {ROLE_LABELS_AR[user.role as keyof typeof ROLE_LABELS_AR]}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right text-gray-300">
-                              {user.regionId ? regions.find(r => r.id === user.regionId)?.name || "غير محدد" : "بدون منطقة"}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {user.isActive ? (
-                                <Badge className="bg-green-500/20 text-green-400 border border-green-500/30">
-                                  <CheckCircle className="h-3 w-3 ml-1" />
-                                  نشط
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="border-white/20 text-gray-400 bg-gray-500/10">
-                                  <XCircle className="h-3 w-3 ml-1" />
-                                  غير نشط
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex gap-2 justify-end">
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  onClick={() => handleEditUser(user)} 
-                                  data-testid={`button-edit-user-${user.id}`}
-                                  className="text-[#18B2B0] hover:bg-[#18B2B0]/20 hover:text-[#18B2B0]"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  onClick={() => {
-                                    if (window.confirm(`هل أنت متأكد من حذف حساب "${user.fullName}"؟`)) {
-                                      deleteUserMutation.mutate(user.id);
-                                    }
-                                  }} 
-                                  data-testid={`button-delete-user-${user.id}`}
-                                  className="text-red-400 hover:bg-red-500/20 hover:text-red-400"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </motion.tr>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </TabsContent>
-
-          {/* Transactions Tab */}
-          <TabsContent value="transactions" className="space-y-4 mt-6">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <Card className="shadow-2xl border border-white/20 bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl">
-                <CardHeader className="bg-gradient-to-r from-white/10 to-transparent border-b border-white/10">
-                  <CardTitle className="text-[#18B2B0] text-2xl font-black">عمليات النظام</CardTitle>
-                  <CardDescription className="text-gray-300">سجل شامل لجميع العمليات التي تمت داخل النظام</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  {systemLogs.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Activity className="h-16 w-16 text-gray-500 mx-auto mb-4" />
-                      <p className="text-gray-400 text-lg">لا توجد عمليات مسجلة في النظام</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {systemLogs.slice(0, 20).map((log, index) => (
-                        <motion.div
-                          key={log.id}
-                          className="bg-gradient-to-br from-white/10 to-white/[0.03] backdrop-blur-xl p-5 rounded-2xl border border-white/20 hover:border-white/30 hover:shadow-[0_0_20px_rgba(24,178,176,0.2)] transition-all duration-300"
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.02 }}
-                          data-testid={`system-log-${log.id}`}
-                        >
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-4 flex-1">
-                              <div className={`p-3 rounded-xl border ${
-                                log.severity === 'error' ? 'bg-gradient-to-br from-red-500/30 to-red-500/10 border-red-500/20' :
-                                log.severity === 'warn' ? 'bg-gradient-to-br from-yellow-500/30 to-yellow-500/10 border-yellow-500/20' :
-                                'bg-gradient-to-br from-[#18B2B0]/30 to-[#18B2B0]/10 border-[#18B2B0]/20'
-                              }`}>
-                                <Activity className={`h-6 w-6 ${
-                                  log.severity === 'error' ? 'text-red-400' :
-                                  log.severity === 'warn' ? 'text-yellow-400' :
-                                  'text-[#18B2B0]'
-                                }`} />
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-[#18B2B0] font-bold text-lg mb-1">{log.description}</p>
-                                <div className="flex items-center gap-3 text-sm">
-                                  <span className="text-gray-300 flex items-center gap-1">
-                                    <Shield className="h-3 w-3 text-[#18B2B0]" />
-                                    {log.userName} ({log.userRole === 'admin' ? 'مدير' : log.userRole === 'supervisor' ? 'مشرف' : 'فني'})
-                                  </span>
-                                  {log.entityName && (
-                                    <span className="text-gray-400 flex items-center gap-1">
-                                      <span className="text-[#18B2B0]">•</span>
-                                      {log.entityName}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-left space-y-2">
-                              <Badge variant="outline" className={`text-sm px-3 py-1 font-bold ${
-                                log.action === 'create' ? 'border-white/30 text-green-400 bg-green-500/10' :
-                                log.action === 'update' ? 'border-white/30 text-blue-400 bg-blue-500/10' :
-                                log.action === 'delete' ? 'border-white/30 text-red-400 bg-red-500/10' :
-                                'border-white/30 text-[#18B2B0] bg-[#18B2B0]/10'
-                              }`}>
-                                {log.action === 'create' ? 'إنشاء' : 
-                                 log.action === 'update' ? 'تحديث' : 
-                                 log.action === 'delete' ? 'حذف' :
-                                 log.action === 'approve' ? 'موافقة' :
-                                 log.action === 'reject' ? 'رفض' :
-                                 log.action === 'login' ? 'تسجيل دخول' :
-                                 log.action === 'logout' ? 'تسجيل خروج' :
-                                 log.action}
-                              </Badge>
-                              <p className="text-gray-400 text-xs flex items-center justify-end gap-1">
-                                <span className="text-white/40">📅</span>
-                                {log.createdAt ? new Date(log.createdAt).toLocaleDateString('ar-SA', { 
-                                  year: 'numeric', 
-                                  month: 'short', 
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                }) : 'غير محدد'}
-                              </p>
-                            </div>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
+        <Dialog
+          open={showRegionModal}
+          onOpenChange={(open) => {
+            if (!open) {
+              handleCloseRegionModal();
+            } else {
+              setShowRegionModal(true);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md bg-[#0a1314] border border-cyan-400/20 text-white">
+            <DialogHeader>
+              <DialogTitle>{editingRegion ? "تحديث المنطقة" : "إضافة منطقة جديدة"}</DialogTitle>
+              <DialogDescription className="text-slate-400">أدخل بيانات المنطقة</DialogDescription>
+            </DialogHeader>
+            <Form {...regionForm}>
+              <form onSubmit={regionForm.handleSubmit(handleRegionSubmit)} className="space-y-4">
+                <FormField
+                  control={regionForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>اسم المنطقة</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="أدخل اسم المنطقة" className="bg-black/30 border-white/15" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
                   )}
-                </CardContent>
-              </Card>
-            </motion.div>
-          </TabsContent>
-        </Tabs>
+                />
+                <FormField
+                  control={regionForm.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>الوصف (اختياري)</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} placeholder="أدخل وصف المنطقة" className="bg-black/30 border-white/15" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={regionForm.control}
+                  name="isActive"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border border-white/10 p-3 bg-black/20">
+                      <FormLabel>منطقة نشطة</FormLabel>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <div className="flex gap-2 pt-2">
+                  <Button type="submit" disabled={createRegionMutation.isPending || updateRegionMutation.isPending}>
+                    {editingRegion ? "تحديث" : "إضافة"}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleCloseRegionModal}>
+                    إلغاء
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={showUserModal}
+          onOpenChange={(open) => {
+            if (!open) {
+              handleCloseUserModal();
+            } else {
+              setShowUserModal(true);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md bg-[#0a1314] border border-cyan-400/20 text-white">
+            <DialogHeader>
+              <DialogTitle>{editingUser ? "تحديث بيانات المستخدم" : "إضافة مستخدم جديد"}</DialogTitle>
+              <DialogDescription className="text-slate-400">أدخل بيانات المستخدم</DialogDescription>
+            </DialogHeader>
+            <Form {...userForm}>
+              <form onSubmit={userForm.handleSubmit(handleUserSubmit)} className="space-y-4">
+                <FormField
+                  control={userForm.control}
+                  name="username"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>اسم المستخدم</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="اسم المستخدم" className="bg-black/30 border-white/15" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={userForm.control}
+                  name="fullName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>الاسم الكامل</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="الاسم الكامل" className="bg-black/30 border-white/15" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={userForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>البريد الإلكتروني</FormLabel>
+                      <FormControl>
+                        <Input {...field} type="email" placeholder="البريد الإلكتروني" className="bg-black/30 border-white/15" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={userForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>كلمة المرور {editingUser ? "(اختياري عند التعديل)" : ""}</FormLabel>
+                      <FormControl>
+                        <Input {...field} type="password" placeholder="كلمة المرور" className="bg-black/30 border-white/15" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={userForm.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>الدور</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="bg-black/30 border-white/15">
+                            <SelectValue placeholder="اختر الدور" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="admin">{ROLE_LABELS_AR.admin}</SelectItem>
+                          <SelectItem value="supervisor">{ROLE_LABELS_AR.supervisor}</SelectItem>
+                          <SelectItem value="technician">{ROLE_LABELS_AR.technician}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={userForm.control}
+                  name="regionId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>المنطقة</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="bg-black/30 border-white/15">
+                            <SelectValue placeholder="اختر المنطقة" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {regions.map((region) => (
+                            <SelectItem key={region.id} value={region.id}>
+                              {region.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={userForm.control}
+                  name="isActive"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border border-white/10 p-3 bg-black/20">
+                      <FormLabel>حساب نشط</FormLabel>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <div className="flex gap-2 pt-2">
+                  <Button type="submit" disabled={createUserMutation.isPending || updateUserMutation.isPending}>
+                    {editingUser ? "تحديث" : "إضافة"}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleCloseUserModal}>
+                    إلغاء
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </div>
-    </div>
+    
   );
 }

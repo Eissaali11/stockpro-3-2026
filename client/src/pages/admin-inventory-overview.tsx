@@ -1,24 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Home, ArrowRight, AlertTriangle, CheckCircle, XCircle, Package, TrendingUp, User, BarChart3, FileDown, Search, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, FileDown, Filter, Search, XCircle } from "lucide-react";
 import { useLocation } from "wouter";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { Navbar } from "@/components/dashboard/Navbar";
-import { GridBackground } from "@/components/dashboard/GridBackground";
-import dashboardBg from "@assets/image_1762515061799.png";
 import { useAuth } from "@/lib/auth";
-import { useActiveItemTypes, getItemTypeVisuals, getInventoryValueForItemType, legacyFieldMapping, type ItemType, type InventoryEntry } from "@/hooks/use-item-types";
+import { useActiveItemTypes, getInventoryValueForItemType, type InventoryEntry } from "@/hooks/use-item-types";
 
 interface TechnicianInventoryData {
   technicianId: string;
@@ -82,7 +69,7 @@ function getInventoryValue(inventory: any, entries: InventoryEntry[] | undefined
 export default function AdminInventoryOverview() {
   const [, setLocation] = useLocation();
   const [searchName, setSearchName] = useState("");
-  const [searchCity, setSearchCity] = useState("");
+  const [selectedRegion, setSelectedRegion] = useState("all");
   const { user } = useAuth();
 
   const { data: itemTypes } = useActiveItemTypes();
@@ -98,33 +85,29 @@ export default function AdminInventoryOverview() {
   
   const technicians = allTechnicians.filter(tech => {
     const nameMatch = searchName === "" || tech.technicianName.toLowerCase().includes(searchName.toLowerCase());
-    const cityMatch = searchCity === "" || tech.city.toLowerCase().includes(searchCity.toLowerCase());
-    return nameMatch && cityMatch;
+    const regionMatch = selectedRegion === "all" || tech.city === selectedRegion;
+    return nameMatch && regionMatch;
   });
 
   const getAlertBadge = (level: 'good' | 'warning' | 'critical') => {
     if (level === 'critical') {
-      return (
-        <Badge className="gap-1 bg-red-500 border-0" data-testid={`badge-alert-critical`}>
-          <XCircle className="w-3 h-3" />
-          حرج
-        </Badge>
-      );
+      return {
+        label: "حرج",
+        className: "bg-red-500/15 text-red-300 border border-red-400/30",
+      };
     }
+
     if (level === 'warning') {
-      return (
-        <Badge className="gap-1 bg-amber-500 border-0 text-white" data-testid={`badge-alert-warning`}>
-          <AlertTriangle className="w-3 h-3" />
-          تحذير
-        </Badge>
-      );
+      return {
+        label: "مشغول",
+        className: "bg-amber-500/15 text-amber-300 border border-amber-400/30",
+      };
     }
-    return (
-      <Badge className="gap-1 bg-green-500 border-0 text-white" data-testid={`badge-alert-good`}>
-        <CheckCircle className="w-3 h-3" />
-        جيد
-      </Badge>
-    );
+
+    return {
+      label: "نشط",
+      className: "bg-emerald-500/15 text-emerald-300 border border-emerald-400/30",
+    };
   };
 
   const getTotalForItem = (boxes: number, units: number) => {
@@ -152,6 +135,25 @@ export default function AdminInventoryOverview() {
   const criticalTechs = technicians.filter(t => t.alertLevel === 'critical').length;
   const warningTechs = technicians.filter(t => t.alertLevel === 'warning').length;
   const goodTechs = technicians.filter(t => t.alertLevel === 'good').length;
+
+  const regionOptions = useMemo(() => {
+    return Array.from(new Set(allTechnicians.map((technician) => technician.city).filter(Boolean))).sort((first, second) =>
+      first.localeCompare(second, "ar"),
+    );
+  }, [allTechnicians]);
+
+  const totalFixedInventory = technicians.reduce((sum, technician) => sum + calculateFixedTotal(technician.fixedInventory), 0);
+  const totalMovingInventory = technicians.reduce((sum, technician) => sum + calculateMovingTotal(technician.movingInventory), 0);
+  const totalTechniciansInventory = totalFixedInventory + totalMovingInventory;
+
+  const maxFixedInventory = Math.max(
+    ...technicians.map((technician) => calculateFixedTotal(technician.fixedInventory)),
+    1,
+  );
+  const maxMovingInventory = Math.max(
+    ...technicians.map((technician) => calculateMovingTotal(technician.movingInventory)),
+    1,
+  );
 
   const createInventoryWorksheet = (
     workbook: ExcelJS.Workbook, 
@@ -489,334 +491,191 @@ export default function AdminInventoryOverview() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden">
-        <GridBackground />
-        <div className="flex items-center justify-center min-h-screen relative z-10">
-          <div className="text-center">
-            <motion.div
-              className="relative w-20 h-20 mx-auto mb-6"
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            >
-              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-[#18B2B0] border-r-[#18B2B0] shadow-lg shadow-[#18B2B0]/50"></div>
-            </motion.div>
-            <p className="text-white text-lg font-medium">جاري التحميل...</p>
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center space-y-3">
+            <div className="mx-auto size-12 rounded-full border-2 border-cyan-400/50 border-t-transparent animate-spin" />
+            <p className="text-slate-200 text-sm">جاري تحميل بيانات الفنيين...</p>
           </div>
         </div>
-      </div>
     );
   }
 
+  const todayAr = new Date().toLocaleDateString("ar-SA", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden" dir="rtl">
-      <GridBackground />
-      
-      <div
-        className="absolute inset-0 opacity-5 bg-center bg-cover"
-        style={{
-          backgroundImage: `url(${dashboardBg})`,
-          backgroundBlendMode: 'overlay'
-        }}
-      />
-
-      <div className="relative z-10">
-        <Navbar />
-
-        <div className="container mx-auto px-4 sm:px-6 py-8 max-w-7xl">
-          
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-8"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-              <div className="flex items-center gap-4">
-                <div className="p-4 bg-gradient-to-br from-[#18B2B0] to-[#16a09e] rounded-2xl shadow-lg shadow-[#18B2B0]/30">
-                  <BarChart3 className="h-8 w-8 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-3xl sm:text-4xl font-bold text-white mb-1">
-                    لوحة مخزون الفنيين
-                  </h1>
-                  <p className="text-gray-400 text-sm">
-                    عرض شامل لمخزون جميع الفنيين
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={exportToExcel}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#18B2B0] to-[#16a09e] text-white font-medium rounded-xl hover:shadow-lg hover:shadow-[#18B2B0]/50 transition-all duration-300 transform hover:scale-105"
-                  type="button"
-                  data-testid="button-export-all"
-                >
-                  <FileDown className="h-4 w-4" />
-                  <span>تصدير إلى Excel</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Search Section */}
-            <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl p-4 sm:p-6 mb-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Search className="h-5 w-5 text-[#18B2B0]" />
-                <h2 className="text-lg font-bold text-white">البحث والتصفية</h2>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="relative">
-                  <Input
-                    type="text"
-                    placeholder="ابحث باسم الفني..."
-                    value={searchName}
-                    onChange={(e) => setSearchName(e.target.value)}
-                    className="pr-10 bg-white/10 backdrop-blur-xl border border-white/20 text-white placeholder:text-gray-400 focus:border-[#18B2B0] focus:ring-[#18B2B0] rounded-xl shadow-sm text-right"
-                    data-testid="input-search-name"
-                  />
-                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  {searchName && (
-                    <button
-                      onClick={() => setSearchName("")}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
-                      data-testid="button-clear-name"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-                <div className="relative">
-                  <Input
-                    type="text"
-                    placeholder="ابحث بالمنطقة/المدينة..."
-                    value={searchCity}
-                    onChange={(e) => setSearchCity(e.target.value)}
-                    className="pr-10 bg-white/10 backdrop-blur-xl border border-white/20 text-white placeholder:text-gray-400 focus:border-[#18B2B0] focus:ring-[#18B2B0] rounded-xl shadow-sm text-right"
-                    data-testid="input-search-city"
-                  />
-                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  {searchCity && (
-                    <button
-                      onClick={() => setSearchCity("")}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
-                      data-testid="button-clear-city"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              {(searchName || searchCity) && (
-                <div className="mt-3 text-sm text-gray-300">
-                  النتائج: {technicians.length} من {allTechnicians.length} فني
-                </div>
-              )}
-            </div>
-          </motion.div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="relative overflow-hidden bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl shadow-lg p-5"
-          >
-            <div className="absolute top-0 left-0 w-32 h-32 bg-red-500/10 rounded-full blur-2xl"></div>
-            <div className="relative">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 bg-gradient-to-br from-red-500 to-red-600 rounded-lg shadow-md">
-                  <XCircle className="w-5 h-5 text-white" />
-                </div>
-                <h3 className="text-sm font-medium text-white">حالة حرجة</h3>
-              </div>
-              <p className="text-3xl font-bold text-red-400" data-testid="text-critical-count">
-                {criticalTechs}
-              </p>
-              <p className="text-xs text-gray-300 mt-1">فني</p>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="relative overflow-hidden bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl shadow-lg p-5"
-          >
-            <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl"></div>
-            <div className="relative">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 bg-gradient-to-br from-amber-500 to-amber-600 rounded-lg shadow-md">
-                  <AlertTriangle className="w-5 h-5 text-white" />
-                </div>
-                <h3 className="text-sm font-medium text-white">تحذير</h3>
-              </div>
-              <p className="text-3xl font-bold text-amber-400" data-testid="text-warning-count">
-                {warningTechs}
-              </p>
-              <p className="text-xs text-gray-300 mt-1">فني</p>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="relative overflow-hidden bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl shadow-lg p-5"
-          >
-            <div className="absolute top-0 left-0 w-32 h-32 bg-[#18B2B0]/10 rounded-full blur-2xl"></div>
-            <div className="relative">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 bg-gradient-to-br from-[#18B2B0] to-[#16a09e] rounded-lg shadow-md">
-                  <CheckCircle className="w-5 h-5 text-white" />
-                </div>
-                <h3 className="text-sm font-medium text-white">جيد</h3>
-              </div>
-              <p className="text-3xl font-bold text-[#18B2B0]" data-testid="text-good-count">
-                {goodTechs}
-              </p>
-              <p className="text-xs text-gray-300 mt-1">فني</p>
-            </div>
-          </motion.div>
+      <div className="space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold text-slate-100">لوحة مخزون الفنيين</h1>
+            <p className="text-sm text-slate-400">عرض شامل لحالة العهدة الثابتة والمتحركة</p>
+          </div>
+          <div className="flex items-center gap-2 text-cyan-300 text-sm">
+            <CalendarDays className="h-4 w-4" />
+            <span>{todayAr}</span>
+          </div>
         </div>
 
-        {/* Technicians List */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="relative overflow-hidden bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-lg p-4 sm:p-6"
-        >
-          <div className="absolute bottom-0 left-0 w-40 h-40 bg-[#18B2B0]/10 rounded-full blur-3xl"></div>
-          <div className="relative">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2.5 bg-gradient-to-br from-[#18B2B0] to-[#16a09e] rounded-xl shadow-lg shadow-[#18B2B0]/30">
-                <User className="h-5 w-5 text-white" />
-              </div>
-              <h2 className="text-lg sm:text-xl font-bold text-white">
-                قائمة الفنيين ({technicians.length})
-              </h2>
-            </div>
-
-            <Accordion type="multiple" className="w-full space-y-3">
-            {technicians.map((tech, index) => (
-              <AccordionItem 
-                key={tech.technicianId}
-                value={tech.technicianId} 
-                className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl overflow-hidden"
-                data-testid={`accordion-tech-${index}`}
-              >
-                <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-white/10 transition-colors">
-                  <div className="flex items-center gap-3 w-full">
-                    <div className="flex-1 text-right">
-                      <div className="font-bold text-base text-white" data-testid={`text-tech-name-${index}`}>
-                        {tech.technicianName}
-                      </div>
-                      <div className="text-sm text-gray-300" data-testid={`text-tech-city-${index}`}>
-                        📍 {tech.city}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap justify-end">
-                      {getAlertBadge(tech.alertLevel)}
-                      <div className="flex items-center gap-2">
-                        <div className="text-center bg-blue-500/20 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-blue-400/30">
-                          <div className="flex items-center gap-1 text-blue-300">
-                            <Package className="w-4 h-4" />
-                            <span className="font-bold text-sm">{calculateFixedTotal(tech.fixedInventory)}</span>
-                          </div>
-                          <div className="text-xs text-blue-200">ثابت</div>
-                        </div>
-                        <div className="text-center bg-green-500/20 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-green-400/30">
-                          <div className="flex items-center gap-1 text-green-300">
-                            <TrendingUp className="w-4 h-4" />
-                            <span className="font-bold text-sm">{calculateMovingTotal(tech.movingInventory)}</span>
-                          </div>
-                          <div className="text-xs text-green-200">متحرك</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </AccordionTrigger>
-                
-                <AccordionContent className="px-4 pb-4 bg-white/5 backdrop-blur-sm">
-                  <div className="space-y-4 pt-4">
-                    {/* Fixed Inventory */}
-                    <div className="bg-blue-500/10 backdrop-blur-sm p-4 rounded-xl border border-blue-400/30">
-                      <h4 className="font-bold text-blue-300 mb-3 flex items-center gap-2">
-                        <Package className="w-4 h-4" />
-                        المخزون الثابت
-                      </h4>
-                      {tech.fixedInventory ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          {activeItemTypes.map((itemType) => (
-                            <InventoryItem 
-                              key={itemType.id}
-                              label={itemType.nameAr || itemType.nameEn} 
-                              boxes={getInventoryValue(tech.fixedInventory, tech.fixedInventory?.entries, itemType.id, 'boxes')} 
-                              units={getInventoryValue(tech.fixedInventory, tech.fixedInventory?.entries, itemType.id, 'units')}
-                              testId={`fixed-${itemType.id}-${index}`}
-                              color="blue"
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-gray-300">لا توجد بيانات</p>
-                      )}
-                    </div>
-
-                    {/* Moving Inventory */}
-                    <div className="bg-green-500/10 backdrop-blur-sm p-4 rounded-xl border border-green-400/30">
-                      <h4 className="font-bold text-green-300 mb-3 flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4" />
-                        المخزون المتحرك
-                      </h4>
-                      {tech.movingInventory ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          {activeItemTypes.map((itemType) => (
-                            <InventoryItem 
-                              key={itemType.id}
-                              label={itemType.nameAr || itemType.nameEn}
-                              boxes={getInventoryValue(tech.movingInventory, tech.movingInventory?.entries, itemType.id, 'boxes')}
-                              units={getInventoryValue(tech.movingInventory, tech.movingInventory?.entries, itemType.id, 'units')}
-                              testId={`moving-${itemType.id}-${index}`}
-                              color="green"
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-gray-300">لا توجد بيانات</p>
-                      )}
-                    </div>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-            </Accordion>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="rounded-2xl border border-cyan-400/15 bg-slate-900/40 p-5 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-cyan-400" />
+            <p className="text-xs text-slate-400 mb-2">إجمالي عهد الفنيين</p>
+            <p className="text-3xl font-bold text-slate-100">{totalTechniciansInventory.toLocaleString("ar-SA")}</p>
           </div>
-        </motion.div>
+          <div className="rounded-2xl border border-emerald-400/15 bg-slate-900/40 p-5 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-emerald-400" />
+            <p className="text-xs text-slate-400 mb-2">القطع النشطة</p>
+            <p className="text-3xl font-bold text-emerald-300">{totalFixedInventory.toLocaleString("ar-SA")}</p>
+          </div>
+          <div className="rounded-2xl border border-orange-400/15 bg-slate-900/40 p-5 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-orange-400" />
+            <p className="text-xs text-slate-400 mb-2">القطع المعلقة</p>
+            <p className="text-3xl font-bold text-orange-300">{totalMovingInventory.toLocaleString("ar-SA")}</p>
+          </div>
+          <div className="rounded-2xl border border-sky-400/15 bg-slate-900/40 p-5 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-sky-400" />
+            <p className="text-xs text-slate-400 mb-2">فنيين قيد العمل</p>
+            <p className="text-3xl font-bold text-sky-300">{technicians.length.toLocaleString("ar-SA")}</p>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-cyan-400/10 bg-slate-900/30 p-4 flex flex-col lg:flex-row gap-3 lg:items-center">
+          <div className="relative flex-1">
+            <Search className="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 text-cyan-300/70" />
+            <input
+              type="text"
+              placeholder="بحث عن اسم الفني أو الرقم الوظيفي..."
+              value={searchName}
+              onChange={(event) => setSearchName(event.target.value)}
+              data-testid="input-search-name"
+              className="w-full bg-[#102222] border border-cyan-400/20 rounded-xl pr-9 pl-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-cyan-400/40"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedRegion}
+              onChange={(event) => setSelectedRegion(event.target.value)}
+              className="bg-[#102222] border border-cyan-400/20 rounded-xl px-3 py-2.5 text-sm text-slate-200 min-w-[150px] outline-none focus:ring-2 focus:ring-cyan-400/40"
+            >
+              <option value="all">كل المناطق</option>
+              {regionOptions.map((regionName) => (
+                <option key={regionName} value={regionName}>{regionName}</option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              className="p-2.5 rounded-xl border border-cyan-400/25 bg-cyan-400/10 text-cyan-300"
+              aria-label="تصفية"
+            >
+              <Filter className="h-4 w-4" />
+            </button>
+
+            <button
+              onClick={exportToExcel}
+              className="inline-flex items-center gap-2 px-3 py-2.5 rounded-xl bg-cyan-400/10 text-cyan-300 border border-cyan-400/30 hover:bg-cyan-400 hover:text-[#102222] transition-colors text-sm font-semibold"
+              type="button"
+              data-testid="button-export-all"
+            >
+              <FileDown className="h-4 w-4" />
+              تصدير
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 text-xs text-slate-300">
+          <span className="px-3 py-1 rounded-full bg-red-500/10 text-red-300 border border-red-400/25" data-testid="text-critical-count">حرج: {criticalTechs}</span>
+          <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-400/25" data-testid="text-warning-count">تحذير: {warningTechs}</span>
+          <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-400/25" data-testid="text-good-count">نشط: {goodTechs}</span>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-5 pb-2">
+          {technicians.map((technician) => {
+            const fixedTotal = calculateFixedTotal(technician.fixedInventory);
+            const movingTotal = calculateMovingTotal(technician.movingInventory);
+            const fixedPercent = Math.min(100, Math.round((fixedTotal / maxFixedInventory) * 100));
+            const movingPercent = Math.min(100, Math.round((movingTotal / maxMovingInventory) * 100));
+            const badge = getAlertBadge(technician.alertLevel);
+
+            return (
+              <div key={technician.technicianId} className="rounded-2xl border border-cyan-400/10 bg-slate-900/40 p-5 hover:border-cyan-400/35 transition-colors">
+                <div className="flex items-start justify-between mb-5">
+                  <span className={`px-3 py-1 rounded-full text-[11px] font-semibold ${badge.className}`}>{badge.label}</span>
+
+                  <div className="flex items-center gap-3">
+                    <div className="text-right min-w-0">
+                      <h3 className="text-lg font-bold text-slate-100 truncate">{technician.technicianName}</h3>
+                      <p className="text-xs text-cyan-300 truncate">فني اتصالات - {technician.city}</p>
+                      <p className="text-[11px] text-slate-500">ID: #{technician.technicianId.slice(0, 8).toUpperCase()}</p>
+                    </div>
+                    <div className="size-14 rounded-2xl bg-slate-800 border border-cyan-300/25 flex items-center justify-center text-cyan-200 font-bold">
+                      {(technician.technicianName || "ف").slice(0, 1)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-5">
+                  <RingMetric label="مخزون ثابت" percent={fixedPercent} value={fixedTotal} color="cyan" />
+                  <RingMetric label="مخزون متحرك" percent={movingPercent} value={movingTotal} color="orange" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setLocation(`/technician-details/${technician.technicianId}`)}
+                  className="w-full py-2.5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-[#102222] font-semibold text-sm transition-colors"
+                >
+                  عرض العهدة بالكامل
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {technicians.length === 0 && (
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/40 p-8 text-center text-slate-400">
+            لا توجد نتائج مطابقة للفلترة الحالية.
+          </div>
+        )}
       </div>
-    </div>
-    </div>
+    
   );
 }
 
-function InventoryItem({ label, boxes, units, testId, color }: { label: string; boxes: number; units: number; testId: string; color: 'blue' | 'green' }) {
-  const total = (boxes || 0) + (units || 0);
-  const bgColor = color === 'blue' ? 'bg-blue-500/20' : 'bg-green-500/20';
-  const borderColor = color === 'blue' ? 'border-blue-400/40' : 'border-green-400/40';
-  const textColor = color === 'blue' ? 'text-blue-200' : 'text-green-200';
-  
+function RingMetric({ label, percent, value, color }: { label: string; percent: number; value: number; color: "cyan" | "orange" }) {
+  const strokeClass = color === "cyan" ? "text-cyan-400" : "text-orange-400";
+
   return (
-    <div 
-      className={`${bgColor} backdrop-blur-sm p-2.5 rounded-lg border ${borderColor}`}
-      data-testid={testId}
-    >
-      <div className="text-xs font-medium text-gray-300 mb-1">{label}</div>
-      <div className="text-sm">
-        <span className={`font-bold text-xl ${textColor}`}>{total}</span>
-        <span className="text-xs text-gray-400 block mt-0.5">
-          {boxes || 0} كرتون + {units || 0} مفرد
-        </span>
+    <div className="rounded-xl border border-cyan-400/10 bg-[#102222]/70 p-4 flex flex-col items-center gap-2">
+      <div className="relative w-16 h-16">
+        <svg className="w-16 h-16 -rotate-90" viewBox="0 0 36 36">
+          <path
+            className="text-slate-700"
+            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+          />
+          <path
+            className={strokeClass}
+            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+            fill="none"
+            stroke="currentColor"
+            strokeDasharray={`${percent}, 100`}
+            strokeLinecap="round"
+            strokeWidth="3"
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-slate-100">
+          {percent.toLocaleString("ar-SA")}٪
+        </div>
       </div>
+
+      <div className="text-[11px] text-slate-400">{label}</div>
+      <div className="text-sm font-semibold text-slate-200">{value.toLocaleString("ar-SA")}</div>
     </div>
   );
 }

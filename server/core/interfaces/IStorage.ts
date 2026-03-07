@@ -154,6 +154,7 @@ export interface IStorage {
     regionId?: string;
     action?: string;
     entityType?: string;
+    entityId?: string;
     severity?: string;
   }): Promise<SystemLog[]>;
   createSystemLog(log: InsertSystemLog): Promise<SystemLog>;

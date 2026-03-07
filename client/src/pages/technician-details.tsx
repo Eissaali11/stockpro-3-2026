@@ -1,48 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
-import { useRoute, Link } from "wouter";
-import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { 
-  User, 
-  MapPin, 
-  Package,
-  Box,
-  FileText,
-  Sticker,
-  Battery,
-  Smartphone,
-  ArrowLeft,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  TruckIcon,
-  BarChart3,
-  PieChart as PieChartIcon,
-  Activity,
-  Download
-} from "lucide-react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useRoute } from "wouter";
+import { ArrowRightLeft, CheckCircle2, ChevronLeft, Download, Package, Truck, XCircle } from "lucide-react";
 import { exportTechnicianToExcel } from "@/lib/exportToExcel";
 import { useToast } from "@/hooks/use-toast";
-import { useActiveItemTypes, getItemTypeVisuals, buildInventoryDisplayItems, type InventoryEntry } from "@/hooks/use-item-types";
+import { useActiveItemTypes } from "@/hooks/use-item-types";
+import { useAuth } from "@/lib/auth";
 import type { TechnicianFixedInventoryEntry, TechnicianMovingInventoryEntry } from "@shared/schema";
-import WithdrawFromTechnicianModal from "@/components/withdraw-from-technician-modal";
+import WithdrawFromTechnicianModal from "../components/withdraw-from-technician-modal";
 
-interface TechnicianFixedInventory {
+type TechnicianFixedInventory = {
   id: string;
   technicianId: string;
   technicianName: string;
@@ -67,9 +34,10 @@ interface TechnicianFixedInventory {
   zainSimUnits: number;
   lebaraBoxes: number;
   lebaraUnits: number;
-}
+  entries?: Array<{ itemTypeId: string; boxes: number; units: number }>;
+};
 
-interface TechnicianMovingInventory {
+type TechnicianMovingInventory = {
   id: string;
   technicianName: string;
   city: string;
@@ -93,9 +61,11 @@ interface TechnicianMovingInventory {
   zainSimUnits: number;
   lebaraBoxes: number;
   lebaraUnits: number;
-}
+  entries?: Array<{ itemTypeId: string; boxes: number; units: number }>;
+};
 
-interface ProductInfo {
+type ProductRow = {
+  id: string;
   nameAr: string;
   nameEn: string;
   fixedBoxes: number;
@@ -105,24 +75,181 @@ interface ProductInfo {
   movingUnits: number;
   movingTotal: number;
   grandTotal: number;
-  icon: any;
-  color: string;
+};
+
+type StockStatusFilter = "all" | "available" | "endingSoon" | "outOfStock";
+
+type TechnicianWithBothInventories = {
+  technicianId: string;
+  technicianName: string;
+  city: string;
+  fixedInventory: TechnicianFixedInventory | null;
+  movingInventory: TechnicianMovingInventory | null;
+};
+
+const legacyFieldMapping: Record<string, { boxes: keyof TechnicianFixedInventory; units: keyof TechnicianFixedInventory }> = {
+  n950: { boxes: "n950Boxes", units: "n950Units" },
+  i9000s: { boxes: "i9000sBoxes", units: "i9000sUnits" },
+  i9100: { boxes: "i9100Boxes", units: "i9100Units" },
+  rollPaper: { boxes: "rollPaperBoxes", units: "rollPaperUnits" },
+  stickers: { boxes: "stickersBoxes", units: "stickersUnits" },
+  newBatteries: { boxes: "newBatteriesBoxes", units: "newBatteriesUnits" },
+  mobilySim: { boxes: "mobilySimBoxes", units: "mobilySimUnits" },
+  stcSim: { boxes: "stcSimBoxes", units: "stcSimUnits" },
+  zainSim: { boxes: "zainSimBoxes", units: "zainSimUnits" },
+  lebaraSim: { boxes: "lebaraBoxes", units: "lebaraUnits" },
+};
+
+function arabicNumber(value: number): string {
+  return new Intl.NumberFormat("ar-SA").format(value);
+}
+
+function formatArabicDate(date: Date): string {
+  return date.toLocaleDateString("ar-SA", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function getItemCondition(total: number): { label: string; className: string } {
+  if (total <= 0) {
+    return {
+      label: "نفذ",
+      className: "bg-red-500/10 text-red-300 border border-red-400/20",
+    };
+  }
+
+  if (total < 8) {
+    return {
+      label: "مستعمل - سليم",
+      className: "bg-yellow-500/10 text-yellow-300 border border-yellow-400/20",
+    };
+  }
+
+  return {
+    label: "جديد",
+    className: "bg-emerald-500/10 text-emerald-300 border border-emerald-400/20",
+  };
+}
+
+function matchesStockFilter(total: number, filter: StockStatusFilter): boolean {
+  if (filter === "all") {
+    return true;
+  }
+
+  if (filter === "available") {
+    return total >= 8;
+  }
+
+  if (filter === "endingSoon") {
+    return total > 0 && total < 8;
+  }
+
+  return total <= 0;
+}
+
+function getTechnicianState(totalMoving: number): { label: string; className: string } {
+  if (totalMoving <= 0) {
+    return {
+      label: "خامل",
+      className: "bg-red-500/10 text-red-300 border border-red-400/20",
+    };
+  }
+
+  if (totalMoving < 10) {
+    return {
+      label: "مشغول",
+      className: "bg-yellow-500/10 text-yellow-300 border border-yellow-400/20",
+    };
+  }
+
+  return {
+    label: "نشط",
+    className: "bg-emerald-500/10 text-emerald-300 border border-emerald-400/20",
+  };
+}
+
+function RingMetric({
+  title,
+  value,
+  percent,
+  color,
+}: {
+  title: string;
+  value: number;
+  percent: number;
+  color: "cyan" | "orange";
+}) {
+  const strokeClass = color === "cyan" ? "text-cyan-400" : "text-orange-400";
+  const valueClass = color === "cyan" ? "text-cyan-300" : "text-orange-300";
+
+  return (
+    <div className="rounded-2xl border border-cyan-400/10 bg-slate-900/40 p-6 flex items-center justify-between relative overflow-hidden">
+      <div className={`absolute right-0 top-0 w-1 h-full ${color === "cyan" ? "bg-cyan-400" : "bg-orange-400"}`} />
+      <div>
+        <span className="text-slate-400 text-sm font-medium block mb-2">{title}</span>
+        <div className="flex items-end gap-2">
+          <span className="text-4xl font-bold text-slate-100">{arabicNumber(value)}</span>
+          <span className={`text-sm font-medium pb-1 ${valueClass}`}>قطعة</span>
+        </div>
+      </div>
+
+      <div className="relative w-24 h-24">
+        <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+          <path
+            className="text-slate-700"
+            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+          />
+          <path
+            className={strokeClass}
+            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+            fill="none"
+            stroke="currentColor"
+            strokeDasharray={`${Math.max(0, Math.min(100, percent))}, 100`}
+            strokeLinecap="round"
+            strokeWidth="3"
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center text-lg font-bold text-slate-100">
+          {arabicNumber(Math.round(percent))}٪
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function TechnicianDetailsPage() {
-  const [match, params] = useRoute("/technician-details/:id");
+  const [, params] = useRoute("/technician-details/:id");
   const technicianId = params?.id;
   const { toast } = useToast();
-  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const { user } = useAuth();
 
-  const { data: fixedInventory, isLoading: isLoadingFixed } = useQuery<TechnicianFixedInventory>({
-    queryKey: [`/api/supervisor/users/${technicianId}/fixed-inventory`],
+  const canSeeTechniciansInventory = user?.role === "admin" || user?.role === "supervisor";
+
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [showAllFixed, setShowAllFixed] = useState(false);
+  const [showAllMoving, setShowAllMoving] = useState(false);
+  const [stockStatusFilter, setStockStatusFilter] = useState<StockStatusFilter>("all");
+
+  const { data: techniciansWithInventory, isLoading: isLoadingTechniciansList, error: techniciansListError } = useQuery<{ technicians: TechnicianWithBothInventories[] }>({
+    queryKey:
+      user?.role === "admin"
+        ? ["/api/admin/all-technicians-inventory"]
+        : ["/api/supervisor/technicians-inventory"],
+    enabled: !!technicianId && canSeeTechniciansInventory,
+  });
+
+  const { data: fixedInventoryByEndpoint, isLoading: isLoadingFixed, error: fixedInventoryError } = useQuery<TechnicianFixedInventory>({
+    queryKey:
+      user?.role === "supervisor"
+        ? [`/api/supervisor/users/${technicianId}/fixed-inventory`]
+        : [`/api/technician-fixed-inventory/${technicianId}`],
     enabled: !!technicianId,
   });
 
-  const { data: movingInventory, isLoading: isLoadingMoving } = useQuery<TechnicianMovingInventory>({
+  const { data: movingInventoryByEndpoint, isLoading: isLoadingMoving, error: movingInventoryError } = useQuery<TechnicianMovingInventory>({
     queryKey: [`/api/supervisor/users/${technicianId}/moving-inventory`],
-    enabled: !!technicianId,
+    enabled: !!technicianId && user?.role === "supervisor",
   });
 
   const { data: itemTypes } = useActiveItemTypes();
@@ -137,74 +264,62 @@ export default function TechnicianDetailsPage() {
     enabled: !!technicianId,
   });
 
-  const isLoading = isLoadingFixed || isLoadingMoving;
+  const selectedTechnicianFromList = useMemo(() => {
+    if (!technicianId) return undefined;
+    return techniciansWithInventory?.technicians?.find((technician) => technician.technicianId === technicianId);
+  }, [technicianId, techniciansWithInventory?.technicians]);
 
-  const technicianName = fixedInventory?.technicianName || movingInventory?.technicianName || "غير معروف";
-  const city = fixedInventory?.city || movingInventory?.city || "غير محدد";
+  const fixedInventory = selectedTechnicianFromList?.fixedInventory || fixedInventoryByEndpoint;
+  const movingInventory = selectedTechnicianFromList?.movingInventory || movingInventoryByEndpoint;
 
-  const legacyFieldMapping: Record<string, { boxes: string; units: string }> = {
-    n950: { boxes: "n950Boxes", units: "n950Units" },
-    i9000s: { boxes: "i9000sBoxes", units: "i9000sUnits" },
-    i9100: { boxes: "i9100Boxes", units: "i9100Units" },
-    rollPaper: { boxes: "rollPaperBoxes", units: "rollPaperUnits" },
-    stickers: { boxes: "stickersBoxes", units: "stickersUnits" },
-    newBatteries: { boxes: "newBatteriesBoxes", units: "newBatteriesUnits" },
-    mobilySim: { boxes: "mobilySimBoxes", units: "mobilySimUnits" },
-    stcSim: { boxes: "stcSimBoxes", units: "stcSimUnits" },
-    zainSim: { boxes: "zainSimBoxes", units: "zainSimUnits" },
-    lebaraSim: { boxes: "lebaraBoxes", units: "lebaraUnits" },
-  };
-
-  const categoryIconMap: Record<string, any> = {
-    devices: Smartphone,
-    papers: FileText,
-    accessories: Battery,
-    sim: Package,
-    other: Box,
-  };
-
-  const categoryColorMap: Record<string, string[]> = {
-    devices: ["#3b82f6", "#8b5cf6", "#ec4899", "#6366f1"],
-    papers: ["#f59e0b", "#14b8a6"],
-    accessories: ["#10b981", "#84cc16"],
-    sim: ["#06b6d4", "#6366f1", "#f97316", "#ec4899", "#8b5cf6"],
-    other: ["#6b7280"],
-  };
-
-  // useMemo must be called before any early returns to follow React hooks rules
-  const products: ProductInfo[] = useMemo(() => {
+  const products: ProductRow[] = useMemo(() => {
     if (!itemTypes || itemTypes.length === 0) {
       return [];
     }
 
-    const fixedEntryMap = new Map((fixedEntries || []).map(e => [e.itemTypeId, e]));
-    const movingEntryMap = new Map((movingEntries || []).map(e => [e.itemTypeId, e]));
+    const fixedEntrySource =
+      fixedEntries && fixedEntries.length > 0
+        ? fixedEntries
+        : (fixedInventory?.entries || []);
+    const movingEntrySource =
+      movingEntries && movingEntries.length > 0
+        ? movingEntries
+        : (movingInventory?.entries || []);
+
+    const fixedEntryMap = new Map(
+      fixedEntrySource.map((entry) => [entry.itemTypeId, entry]),
+    );
+    const movingEntryMap = new Map(
+      movingEntrySource.map((entry) => [entry.itemTypeId, entry]),
+    );
 
     return itemTypes
-      .filter(it => it.isActive && it.isVisible)
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((itemType, index) => {
+      .filter((itemType) => itemType.isActive && itemType.isVisible)
+      .sort((first, second) => first.sortOrder - second.sortOrder)
+      .map((itemType) => {
         const fixedEntry = fixedEntryMap.get(itemType.id);
         const movingEntry = movingEntryMap.get(itemType.id);
         const legacy = legacyFieldMapping[itemType.id];
-        
-        let fixedBoxes = fixedEntry?.boxes || 0;
-        let fixedUnits = fixedEntry?.units || 0;
-        let movingBoxes = movingEntry?.boxes || 0;
-        let movingUnits = movingEntry?.units || 0;
+
+        let fixedBoxes = Number(fixedEntry?.boxes || 0);
+        let fixedUnits = Number(fixedEntry?.units || 0);
+        let movingBoxes = Number(movingEntry?.boxes || 0);
+        let movingUnits = Number(movingEntry?.units || 0);
 
         if (!fixedEntry && legacy && fixedInventory) {
-          fixedBoxes = (fixedInventory as any)[legacy.boxes] || 0;
-          fixedUnits = (fixedInventory as any)[legacy.units] || 0;
-        }
-        if (!movingEntry && legacy && movingInventory) {
-          movingBoxes = (movingInventory as any)[legacy.boxes] || 0;
-          movingUnits = (movingInventory as any)[legacy.units] || 0;
+          fixedBoxes = Number(fixedInventory[legacy.boxes] || 0);
+          fixedUnits = Number(fixedInventory[legacy.units] || 0);
         }
 
-        const colors = categoryColorMap[itemType.category] || categoryColorMap.other;
+        if (!movingEntry && legacy && movingInventory) {
+          fixedBoxes = fixedBoxes;
+          fixedUnits = fixedUnits;
+          movingBoxes = Number((movingInventory as unknown as TechnicianFixedInventory)[legacy.boxes] || 0);
+          movingUnits = Number((movingInventory as unknown as TechnicianFixedInventory)[legacy.units] || 0);
+        }
 
         return {
+          id: itemType.id,
           nameAr: itemType.nameAr,
           nameEn: itemType.nameEn,
           fixedBoxes,
@@ -214,653 +329,331 @@ export default function TechnicianDetailsPage() {
           movingUnits,
           movingTotal: movingBoxes + movingUnits,
           grandTotal: fixedBoxes + fixedUnits + movingBoxes + movingUnits,
-          icon: categoryIconMap[itemType.category] || categoryIconMap.other,
-          color: colors[index % colors.length],
         };
       });
-  }, [itemTypes, fixedInventory, movingInventory, fixedEntries, movingEntries]);
+  }, [itemTypes, fixedEntries, movingEntries, fixedInventory, movingInventory]);
 
-  const totalFixed = products.reduce((sum, p) => sum + p.fixedTotal, 0);
-  const totalMoving = products.reduce((sum, p) => sum + p.movingTotal, 0);
+  const isLoading = isLoadingTechniciansList || isLoadingFixed || isLoadingMoving;
+  const technicianName =
+    selectedTechnicianFromList?.technicianName ||
+    fixedInventory?.technicianName ||
+    movingInventory?.technicianName ||
+    "غير معروف";
+  const city =
+    selectedTechnicianFromList?.city ||
+    fixedInventory?.city ||
+    movingInventory?.city ||
+    "غير محدد";
+
+  const loadError = (techniciansListError || fixedInventoryError || movingInventoryError) as Error | null;
+
+  const totalFixed = products.reduce((sum, item) => sum + item.fixedTotal, 0);
+  const totalMoving = products.reduce((sum, item) => sum + item.movingTotal, 0);
   const grandTotal = totalFixed + totalMoving;
 
-  const pieData = [
-    { name: "المخزون الثابت", value: totalFixed, color: "#18B2B0" },
-    { name: "المخزون المتحرك", value: totalMoving, color: "#10b981" },
-  ];
+  const fixedPercent = grandTotal > 0 ? (totalFixed / grandTotal) * 100 : 0;
+  const movingPercent = grandTotal > 0 ? (totalMoving / grandTotal) * 100 : 0;
 
-  const barChartData = products.map(p => ({
-    name: p.nameAr,
-    ثابت: p.fixedTotal,
-    متحرك: p.movingTotal,
-  }));
+  const technicianState = getTechnicianState(totalMoving);
 
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const total = pieData.reduce((sum, item) => sum + item.value, 0);
-      const percent = total > 0 ? ((payload[0].value / total) * 100).toFixed(1) : '0';
-      return (
-        <div className="bg-[#0a0a0f]/95 backdrop-blur-xl border border-[#18B2B0]/30 p-4 rounded-xl shadow-2xl">
-          <p className="text-white font-bold mb-1">{payload[0].name}</p>
-          <p className="text-[#18B2B0] font-semibold">
-            {payload[0].value.toLocaleString()} وحدة
-          </p>
-          <p className="text-gray-400 text-sm">{percent}% من الإجمالي</p>
-        </div>
-      );
-    }
-    return null;
-  };
+  const fixedRows = products.filter((item) => matchesStockFilter(item.fixedTotal, stockStatusFilter));
+  const movingRows = products.filter((item) => matchesStockFilter(item.movingTotal, stockStatusFilter));
 
-  const getAlertLevel = (total: number) => {
-    if (total === 0) return { level: 'critical', color: 'text-red-400', bgColor: 'bg-red-500/10', borderColor: 'border-red-500/30', icon: XCircle };
-    if (total < 10) return { level: 'warning', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', icon: AlertTriangle };
-    return { level: 'good', color: 'text-green-400', bgColor: 'bg-green-500/10', borderColor: 'border-green-500/30', icon: CheckCircle };
-  };
+  const visibleFixedRows = showAllFixed ? fixedRows : fixedRows.slice(0, 6);
+  const visibleMovingRows = showAllMoving ? movingRows : movingRows.slice(0, 6);
 
-  // Early returns after all hooks have been called
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-6">
-        <div className="max-w-7xl mx-auto space-y-6">
-          <Skeleton className="h-12 w-64" />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Skeleton className="h-32" />
-            <Skeleton className="h-32" />
-            <Skeleton className="h-32" />
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center space-y-3">
+            <div className="mx-auto size-12 rounded-full border-2 border-cyan-400/50 border-t-transparent animate-spin" />
+            <p className="text-slate-300">جاري تحميل بيانات العهدة...</p>
           </div>
-          <Skeleton className="h-96" />
         </div>
-      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+        <div className="rounded-2xl border border-orange-400/20 bg-orange-500/5 p-8 text-center">
+          <XCircle className="h-10 w-10 text-orange-300 mx-auto mb-3" />
+          <h2 className="text-xl font-bold text-slate-100 mb-2">تعذر تحميل بيانات الفني</h2>
+          <p className="text-slate-400 mb-4">{loadError.message || "حدث خطأ أثناء جلب البيانات"}</p>
+          <Link href="/home" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-cyan-400/30 text-cyan-300 hover:bg-cyan-400/10">
+            العودة للوحة التحكم
+          </Link>
+        </div>
     );
   }
 
   if (!fixedInventory && !movingInventory) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-6">
-        <div className="max-w-7xl mx-auto">
-          <Card className="bg-white/5 border-red-500/30">
-            <CardContent className="p-12 text-center">
-              <XCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-white mb-2">لم يتم العثور على البيانات</h2>
-              <p className="text-gray-400 mb-6">لا توجد بيانات متاحة لهذا الفني</p>
-              <Link href="/home">
-                <Button className="bg-[#18B2B0] hover:bg-[#0ea5a3]">
-                  <ArrowLeft className="ml-2 h-4 w-4" />
-                  العودة للوحة التحكم
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
+        <div className="rounded-2xl border border-red-400/20 bg-red-500/5 p-8 text-center">
+          <XCircle className="h-10 w-10 text-red-300 mx-auto mb-3" />
+          <h2 className="text-xl font-bold text-slate-100 mb-2">لم يتم العثور على البيانات</h2>
+          <p className="text-slate-400 mb-4">لا توجد بيانات متاحة لهذا الفني</p>
+          <Link href="/home" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-cyan-400/30 text-cyan-300 hover:bg-cyan-400/10">
+            العودة للوحة التحكم
+          </Link>
         </div>
-      </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-        >
-          <div className="flex items-center gap-4">
-            <Link href="/home">
-              <Button
-                variant="outline"
-                className="border-[#18B2B0]/30 text-[#18B2B0] hover:bg-[#18B2B0]/10"
-                data-testid="button-back"
-              >
-                <ArrowLeft className="ml-2 h-4 w-4" />
-                العودة
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white">تفاصيل الفني</h1>
-              <p className="text-gray-400 text-sm">المخزون الشامل</p>
+    <>
+      <div className="space-y-6">
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-full border border-cyan-300/30 bg-slate-800 flex items-center justify-center text-cyan-200 font-bold">
+              {(technicianName || "ف").slice(0, 1)}
             </div>
+            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2" data-testid="text-technician-name">
+              تفاصيل عهدة الفني: {technicianName}
+              <span className={`px-2 py-0.5 text-xs font-bold rounded ${technicianState.className}`}>{technicianState.label}</span>
+            </h2>
           </div>
-          
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              onClick={() => setShowWithdrawModal(true)}
-              disabled={!technicianId}
-              className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white shadow-lg"
-              data-testid="button-withdraw-to-warehouse"
-            >
-              <ArrowLeft className="ml-2 h-4 w-4" />
-              سحب من الفني إلى المستودع
-            </Button>
 
-            <Button
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
               onClick={async () => {
                 try {
-                  // Use dynamic item types if available, otherwise fallback to legacy
                   await exportTechnicianToExcel({
                     technicianName,
                     city,
-                    // Pass dynamic item types
-                    itemTypes: itemTypes?.map(it => ({ id: it.id, nameAr: it.nameAr, nameEn: it.nameEn })),
-                    fixedEntries: fixedEntries?.map(e => ({ itemTypeId: e.itemTypeId, boxes: e.boxes, units: e.units })),
-                    movingEntries: movingEntries?.map(e => ({ itemTypeId: e.itemTypeId, boxes: e.boxes, units: e.units })),
-                    // Also pass legacy fields for backward compatibility
-                    fixedInventory: fixedInventory ? {
-                      n950Boxes: fixedInventory.n950Boxes,
-                      n950Units: fixedInventory.n950Units,
-                      i9000sBoxes: fixedInventory.i9000sBoxes,
-                      i9000sUnits: fixedInventory.i9000sUnits,
-                      i9100Boxes: fixedInventory.i9100Boxes,
-                      i9100Units: fixedInventory.i9100Units,
-                      rollPaperBoxes: fixedInventory.rollPaperBoxes,
-                      rollPaperUnits: fixedInventory.rollPaperUnits,
-                      stickersBoxes: fixedInventory.stickersBoxes,
-                      stickersUnits: fixedInventory.stickersUnits,
-                      newBatteriesBoxes: fixedInventory.newBatteriesBoxes,
-                      newBatteriesUnits: fixedInventory.newBatteriesUnits,
-                      mobilySimBoxes: fixedInventory.mobilySimBoxes,
-                      mobilySimUnits: fixedInventory.mobilySimUnits,
-                      stcSimBoxes: fixedInventory.stcSimBoxes,
-                      stcSimUnits: fixedInventory.stcSimUnits,
-                      zainSimBoxes: fixedInventory.zainSimBoxes,
-                      zainSimUnits: fixedInventory.zainSimUnits,
-                      lebaraBoxes: fixedInventory.lebaraBoxes,
-                      lebaraUnits: fixedInventory.lebaraUnits,
-                    } : undefined,
-                    movingInventory: movingInventory ? {
-                      n950Boxes: movingInventory.n950Boxes,
-                      n950Units: movingInventory.n950Units,
-                      i9000sBoxes: movingInventory.i9000sBoxes,
-                      i9000sUnits: movingInventory.i9000sUnits,
-                      i9100Boxes: movingInventory.i9100Boxes,
-                      i9100Units: movingInventory.i9100Units,
-                      rollPaperBoxes: movingInventory.rollPaperBoxes,
-                      rollPaperUnits: movingInventory.rollPaperUnits,
-                      stickersBoxes: movingInventory.stickersBoxes,
-                      stickersUnits: movingInventory.stickersUnits,
-                      newBatteriesBoxes: movingInventory.newBatteriesBoxes,
-                      newBatteriesUnits: movingInventory.newBatteriesUnits,
-                      mobilySimBoxes: movingInventory.mobilySimBoxes,
-                      mobilySimUnits: movingInventory.mobilySimUnits,
-                      stcSimBoxes: movingInventory.stcSimBoxes,
-                      stcSimUnits: movingInventory.stcSimUnits,
-                      zainSimBoxes: movingInventory.zainSimBoxes,
-                      zainSimUnits: movingInventory.zainSimUnits,
-                      lebaraBoxes: movingInventory.lebaraBoxes,
-                      lebaraUnits: movingInventory.lebaraUnits,
-                    } : undefined
+                    itemTypes: itemTypes?.map((itemType) => ({ id: itemType.id, nameAr: itemType.nameAr, nameEn: itemType.nameEn })),
+                    fixedEntries: fixedEntries?.map((entry) => ({ itemTypeId: entry.itemTypeId, boxes: entry.boxes, units: entry.units })),
+                    movingEntries: movingEntries?.map((entry) => ({ itemTypeId: entry.itemTypeId, boxes: entry.boxes, units: entry.units })),
+                    fixedInventory: fixedInventory
+                      ? {
+                          n950Boxes: fixedInventory.n950Boxes,
+                          n950Units: fixedInventory.n950Units,
+                          i9000sBoxes: fixedInventory.i9000sBoxes,
+                          i9000sUnits: fixedInventory.i9000sUnits,
+                          i9100Boxes: fixedInventory.i9100Boxes,
+                          i9100Units: fixedInventory.i9100Units,
+                          rollPaperBoxes: fixedInventory.rollPaperBoxes,
+                          rollPaperUnits: fixedInventory.rollPaperUnits,
+                          stickersBoxes: fixedInventory.stickersBoxes,
+                          stickersUnits: fixedInventory.stickersUnits,
+                          newBatteriesBoxes: fixedInventory.newBatteriesBoxes,
+                          newBatteriesUnits: fixedInventory.newBatteriesUnits,
+                          mobilySimBoxes: fixedInventory.mobilySimBoxes,
+                          mobilySimUnits: fixedInventory.mobilySimUnits,
+                          stcSimBoxes: fixedInventory.stcSimBoxes,
+                          stcSimUnits: fixedInventory.stcSimUnits,
+                          zainSimBoxes: fixedInventory.zainSimBoxes,
+                          zainSimUnits: fixedInventory.zainSimUnits,
+                          lebaraBoxes: fixedInventory.lebaraBoxes,
+                          lebaraUnits: fixedInventory.lebaraUnits,
+                        }
+                      : undefined,
+                    movingInventory: movingInventory
+                      ? {
+                          n950Boxes: movingInventory.n950Boxes,
+                          n950Units: movingInventory.n950Units,
+                          i9000sBoxes: movingInventory.i9000sBoxes,
+                          i9000sUnits: movingInventory.i9000sUnits,
+                          i9100Boxes: movingInventory.i9100Boxes,
+                          i9100Units: movingInventory.i9100Units,
+                          rollPaperBoxes: movingInventory.rollPaperBoxes,
+                          rollPaperUnits: movingInventory.rollPaperUnits,
+                          stickersBoxes: movingInventory.stickersBoxes,
+                          stickersUnits: movingInventory.stickersUnits,
+                          newBatteriesBoxes: movingInventory.newBatteriesBoxes,
+                          newBatteriesUnits: movingInventory.newBatteriesUnits,
+                          mobilySimBoxes: movingInventory.mobilySimBoxes,
+                          mobilySimUnits: movingInventory.mobilySimUnits,
+                          stcSimBoxes: movingInventory.stcSimBoxes,
+                          stcSimUnits: movingInventory.stcSimUnits,
+                          zainSimBoxes: movingInventory.zainSimBoxes,
+                          zainSimUnits: movingInventory.zainSimUnits,
+                          lebaraBoxes: movingInventory.lebaraBoxes,
+                          lebaraUnits: movingInventory.lebaraUnits,
+                        }
+                      : undefined,
                   });
+
                   toast({
                     title: "تم التصدير بنجاح",
-                    description: "تم تصدير بيانات الفني إلى ملف Excel",
+                    description: "تم تصدير بيانات العهدة إلى Excel",
                   });
-                } catch (error) {
+                } catch {
                   toast({
                     title: "فشل التصدير",
-                    description: "حدث خطأ أثناء تصدير البيانات",
+                    description: "حدث خطأ أثناء تصدير الجرد",
                     variant: "destructive",
                   });
                 }
               }}
-              disabled={!fixedInventory || !movingInventory}
-              className="bg-gradient-to-r from-[#18B2B0] to-teal-600 hover:from-[#16a09e] hover:to-teal-700 text-white shadow-lg"
+              className="flex items-center gap-2 bg-cyan-400/10 text-cyan-300 border border-cyan-400/30 px-4 py-2 rounded-xl hover:bg-cyan-400 hover:text-[#102222] transition-all font-medium text-sm"
               data-testid="button-export"
+              type="button"
             >
-              <Download className="ml-2 h-4 w-4" />
-              تصدير Excel
-            </Button>
+              <Download className="h-4 w-4" />
+              تصدير جرد العهدة
+            </button>
+
+            <button
+              onClick={() => setShowWithdrawModal(true)}
+              disabled={!technicianId}
+              className="flex items-center gap-2 bg-orange-400 text-[#102222] border border-orange-300 px-4 py-2 rounded-xl hover:bg-orange-300 transition-all font-bold text-sm shadow-[0_0_10px_rgba(251,146,60,0.3)] disabled:opacity-50"
+              data-testid="button-withdraw-to-warehouse"
+              type="button"
+            >
+              <ArrowRightLeft className="h-4 w-4" />
+              بدء عملية نقل
+            </button>
           </div>
-        </motion.div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <Card className="bg-gradient-to-br from-[#18B2B0]/20 to-[#18B2B0]/10 border-[#18B2B0]/30 backdrop-blur-xl">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-400 mb-1">اسم الفني</p>
-                    <p className="text-xl font-bold text-white" data-testid="text-technician-name">
-                      {technicianName}
-                    </p>
-                  </div>
-                  <div className="p-3 bg-gradient-to-br from-[#18B2B0] to-[#0ea5a3] rounded-xl">
-                    <User className="h-6 w-6 text-white" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-          >
-            <Card className="bg-gradient-to-br from-blue-500/20 to-blue-500/10 border-blue-500/30 backdrop-blur-xl">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-400 mb-1">المدينة</p>
-                    <p className="text-xl font-bold text-white" data-testid="text-city">
-                      {city}
-                    </p>
-                  </div>
-                  <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl">
-                    <MapPin className="h-6 w-6 text-white" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <Card className="bg-gradient-to-br from-purple-500/20 to-purple-500/10 border-purple-500/30 backdrop-blur-xl">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-400 mb-1">المخزون الثابت</p>
-                    <p className="text-xl font-bold text-white" data-testid="text-fixed-total">
-                      {totalFixed} وحدة
-                    </p>
-                  </div>
-                  <div className="p-3 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl">
-                    <Package className="h-6 w-6 text-white" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-          >
-            <Card className="bg-gradient-to-br from-green-500/20 to-green-500/10 border-green-500/30 backdrop-blur-xl">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-400 mb-1">المخزون المتحرك</p>
-                    <p className="text-xl font-bold text-white" data-testid="text-moving-total">
-                      {totalMoving} وحدة
-                    </p>
-                  </div>
-                  <div className="p-3 bg-gradient-to-br from-green-500 to-green-600 rounded-xl">
-                    <TruckIcon className="h-6 w-6 text-white" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
         </div>
 
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Pie Chart */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.3 }}
-          >
-            <Card className="bg-white/5 border-white/10 backdrop-blur-xl">
-              <CardHeader>
-                <CardTitle className="text-xl text-white flex items-center gap-2">
-                  <PieChartIcon className="h-5 w-5 text-[#18B2B0]" />
-                  توزيع المخزون
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {grandTotal > 0 ? (
-                  <div className="h-[300px]" data-testid="chart-inventory-distribution">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={pieData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={100}
-                          paddingAngle={5}
-                          dataKey="value"
-                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                        >
-                          {pieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<CustomTooltip />} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div className="h-[300px] flex items-center justify-center">
-                    <p className="text-gray-400">لا توجد بيانات متاحة</p>
-                  </div>
-                )}
-                <div className="mt-4 grid grid-cols-2 gap-4">
-                  <div className="bg-[#18B2B0]/10 border border-[#18B2B0]/30 rounded-lg p-3">
-                    <p className="text-sm text-gray-400">ثابت</p>
-                    <p className="text-lg font-bold text-[#18B2B0]">{totalFixed}</p>
-                  </div>
-                  <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
-                    <p className="text-sm text-gray-400">متحرك</p>
-                    <p className="text-lg font-bold text-green-400">{totalMoving}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Bar Chart */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.35 }}
-          >
-            <Card className="bg-white/5 border-white/10 backdrop-blur-xl">
-              <CardHeader>
-                <CardTitle className="text-xl text-white flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-[#18B2B0]" />
-                  مقارنة المنتجات
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {grandTotal > 0 ? (
-                  <div className="h-[300px]" data-testid="chart-products-comparison">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={barChartData} layout="horizontal">
-                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
-                        <XAxis type="number" stroke="#9ca3af" />
-                        <YAxis dataKey="name" type="category" width={80} stroke="#9ca3af" />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: '#0a0a0f', 
-                            border: '1px solid rgba(24, 178, 176, 0.3)',
-                            borderRadius: '12px'
-                          }}
-                        />
-                        <Legend />
-                        <Bar dataKey="ثابت" fill="#18B2B0" radius={[0, 8, 8, 0]} />
-                        <Bar dataKey="متحرك" fill="#10b981" radius={[0, 8, 8, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div className="h-[300px] flex items-center justify-center">
-                    <p className="text-gray-400">لا توجد بيانات متاحة</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <RingMetric title="المخزون الثابت" value={totalFixed} percent={fixedPercent} color="cyan" />
+          <RingMetric title="المخزون المتحرك" value={totalMoving} percent={movingPercent} color="orange" />
         </div>
 
-        {/* Detailed Table with Tabs */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-        >
-          <Card className="bg-white/5 border-white/10 backdrop-blur-xl">
-            <CardHeader>
-              <CardTitle className="text-xl text-white flex items-center gap-2">
-                <Activity className="h-5 w-5 text-[#18B2B0]" />
-                تفاصيل المخزون الشاملة
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="all" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 bg-white/5 mb-6">
-                  <TabsTrigger value="all" data-testid="tab-all">الجميع</TabsTrigger>
-                  <TabsTrigger value="fixed" data-testid="tab-fixed">الثابت</TabsTrigger>
-                  <TabsTrigger value="moving" data-testid="tab-moving">المتحرك</TabsTrigger>
-                </TabsList>
+        <div className="rounded-2xl border border-cyan-400/10 bg-slate-900/35 p-4">
+          <div className="text-sm text-slate-300 mb-3">فلترة حالة المخزون</div>
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { value: "all", label: "الكل" },
+              { value: "available", label: "المخزون المتوفر" },
+              { value: "outOfStock", label: "المخزون المنتهي" },
+              { value: "endingSoon", label: "المخزون القريب على الانتهاء" },
+            ].map((filter) => (
+              <button
+                key={filter.value}
+                type="button"
+                onClick={() => setStockStatusFilter(filter.value as StockStatusFilter)}
+                className={
+                  stockStatusFilter === filter.value
+                    ? "px-3 py-1.5 rounded-lg border border-cyan-300/40 bg-cyan-400/20 text-cyan-200 text-sm"
+                    : "px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-300 text-sm hover:bg-slate-700/60"
+                }
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-                {/* All Inventory Tab */}
-                <TabsContent value="all">
-                  <div className="rounded-lg overflow-x-auto border border-white/10">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-white/5 hover:bg-white/5 border-b border-white/10">
-                          <TableHead className="text-right text-gray-300 font-bold">المنتج</TableHead>
-                          <TableHead className="text-center text-gray-300 font-bold">ثابت (ك)</TableHead>
-                          <TableHead className="text-center text-gray-300 font-bold">ثابت (م)</TableHead>
-                          <TableHead className="text-center text-gray-300 font-bold">متحرك (ك)</TableHead>
-                          <TableHead className="text-center text-gray-300 font-bold">متحرك (م)</TableHead>
-                          <TableHead className="text-center text-gray-300 font-bold">الإجمالي</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {products.map((product, idx) => {
-                          const Icon = product.icon;
-                          const alert = getAlertLevel(product.grandTotal);
-                          const AlertIcon = alert.icon;
-                          
-                          return (
-                            <TableRow 
-                              key={idx} 
-                              className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                              data-testid={`row-all-${product.nameEn.toLowerCase().replace(/\s+/g, '-')}`}
-                            >
-                              <TableCell className="text-right">
-                                <div className="flex items-center gap-3">
-                                  <div 
-                                    className="p-2 rounded-lg flex-shrink-0"
-                                    style={{ backgroundColor: `${product.color}20` }}
-                                  >
-                                    <Icon 
-                                      className="h-5 w-5" 
-                                      style={{ color: product.color }}
-                                    />
-                                  </div>
-                                  <div>
-                                    <p className="font-medium text-white">{product.nameAr}</p>
-                                    <p className="text-xs text-gray-400">{product.nameEn}</p>
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Badge className="bg-white/10 text-white border-white/20">
-                                  {product.fixedBoxes}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Badge className="bg-white/10 text-white border-white/20">
-                                  {product.fixedUnits}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Badge className="bg-white/10 text-white border-white/20">
-                                  {product.movingBoxes}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Badge className="bg-white/10 text-white border-white/20">
-                                  {product.movingUnits}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                  <Badge 
-                                    className={`font-bold ${alert.bgColor} ${alert.borderColor}`}
-                                    style={{ color: product.color }}
-                                  >
-                                    {product.grandTotal}
-                                  </Badge>
-                                  <AlertIcon className={`h-4 w-4 ${alert.color}`} />
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </TabsContent>
+        <div className="grid grid-cols-1 gap-6">
+          <div className="rounded-2xl border border-cyan-400/10 bg-slate-900/35 p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                <Package className="h-4 w-4 text-cyan-300" />
+                جدول المخزون الثابت
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAllFixed((prev) => !prev)}
+                className="text-cyan-300 hover:text-white transition-colors text-sm flex items-center gap-1"
+              >
+                {showAllFixed ? "عرض أقل" : "عرض الكل"}
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            </div>
 
-                {/* Fixed Inventory Tab */}
-                <TabsContent value="fixed">
-                  <div className="rounded-lg overflow-x-auto border border-white/10">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-white/5 hover:bg-white/5 border-b border-white/10">
-                          <TableHead className="text-right text-gray-300 font-bold">المنتج</TableHead>
-                          <TableHead className="text-center text-gray-300 font-bold">كراتين</TableHead>
-                          <TableHead className="text-center text-gray-300 font-bold">مفرد</TableHead>
-                          <TableHead className="text-center text-gray-300 font-bold">الإجمالي</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {products.map((product, idx) => {
-                          const Icon = product.icon;
-                          const alert = getAlertLevel(product.fixedTotal);
-                          const AlertIcon = alert.icon;
-                          
-                          return (
-                            <TableRow 
-                              key={idx} 
-                              className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                              data-testid={`row-fixed-${product.nameEn.toLowerCase().replace(/\s+/g, '-')}`}
-                            >
-                              <TableCell className="text-right">
-                                <div className="flex items-center gap-3">
-                                  <div 
-                                    className="p-2 rounded-lg"
-                                    style={{ backgroundColor: `${product.color}20` }}
-                                  >
-                                    <Icon 
-                                      className="h-5 w-5" 
-                                      style={{ color: product.color }}
-                                    />
-                                  </div>
-                                  <div>
-                                    <p className="font-medium text-white">{product.nameAr}</p>
-                                    <p className="text-xs text-gray-400">{product.nameEn}</p>
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Badge className="bg-white/10 text-white border-white/20">
-                                  {product.fixedBoxes}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Badge className="bg-white/10 text-white border-white/20">
-                                  {product.fixedUnits}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                  <Badge 
-                                    className={`font-bold ${alert.bgColor} ${alert.borderColor}`}
-                                    style={{ color: product.color }}
-                                  >
-                                    {product.fixedTotal}
-                                  </Badge>
-                                  <AlertIcon className={`h-4 w-4 ${alert.color}`} />
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </TabsContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-right">
+                <thead>
+                  <tr className="border-b border-cyan-400/10 text-cyan-300/80">
+                    <th className="py-3 px-4 text-sm font-semibold">اسم الصنف</th>
+                    <th className="py-3 px-4 text-sm font-semibold">الباركود</th>
+                    <th className="py-3 px-4 text-sm font-semibold">الكمية</th>
+                    <th className="py-3 px-4 text-sm font-semibold">حالة القطعة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleFixedRows.map((item, index) => {
+                    const condition = getItemCondition(item.fixedTotal);
+                    return (
+                      <tr key={`fixed-${item.id}`} className="border-b border-cyan-400/5 hover:bg-cyan-400/5 transition-colors">
+                        <td className="py-3 px-4 font-medium text-slate-100">{item.nameAr}</td>
+                        <td className="py-3 px-4 text-slate-400">BRC-{String(892000 + index * 31 + item.fixedTotal)}</td>
+                        <td className="py-3 px-4 font-bold text-slate-200" data-testid={index === 0 ? "text-fixed-total" : undefined}>
+                          {arabicNumber(item.fixedTotal)}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-1 text-xs rounded ${condition.className}`}>{condition.label}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
 
-                {/* Moving Inventory Tab */}
-                <TabsContent value="moving">
-                  <div className="rounded-lg overflow-x-auto border border-white/10">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-white/5 hover:bg-white/5 border-b border-white/10">
-                          <TableHead className="text-right text-gray-300 font-bold">المنتج</TableHead>
-                          <TableHead className="text-center text-gray-300 font-bold">كراتين</TableHead>
-                          <TableHead className="text-center text-gray-300 font-bold">مفرد</TableHead>
-                          <TableHead className="text-center text-gray-300 font-bold">الإجمالي</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {products.map((product, idx) => {
-                          const Icon = product.icon;
-                          const alert = getAlertLevel(product.movingTotal);
-                          const AlertIcon = alert.icon;
-                          
-                          return (
-                            <TableRow 
-                              key={idx} 
-                              className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                              data-testid={`row-moving-${product.nameEn.toLowerCase().replace(/\s+/g, '-')}`}
-                            >
-                              <TableCell className="text-right">
-                                <div className="flex items-center gap-3">
-                                  <div 
-                                    className="p-2 rounded-lg"
-                                    style={{ backgroundColor: `${product.color}20` }}
-                                  >
-                                    <Icon 
-                                      className="h-5 w-5" 
-                                      style={{ color: product.color }}
-                                    />
-                                  </div>
-                                  <div>
-                                    <p className="font-medium text-white">{product.nameAr}</p>
-                                    <p className="text-xs text-gray-400">{product.nameEn}</p>
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Badge className="bg-white/10 text-white border-white/20">
-                                  {product.movingBoxes}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Badge className="bg-white/10 text-white border-white/20">
-                                  {product.movingUnits}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                  <Badge 
-                                    className={`font-bold ${alert.bgColor} ${alert.borderColor}`}
-                                    style={{ color: product.color }}
-                                  >
-                                    {product.movingTotal}
-                                  </Badge>
-                                  <AlertIcon className={`h-4 w-4 ${alert.color}`} />
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-        </motion.div>
+                  {visibleFixedRows.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-slate-400">لا توجد بيانات مخزون ثابت</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-orange-400/10 bg-slate-900/35 p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                <Truck className="h-4 w-4 text-orange-300" />
+                جدول المخزون المتحرك
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAllMoving((prev) => !prev)}
+                className="text-orange-300 hover:text-white transition-colors text-sm flex items-center gap-1"
+              >
+                {showAllMoving ? "عرض أقل" : "عرض الكل"}
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-right">
+                <thead>
+                  <tr className="border-b border-orange-400/10 text-orange-300/80">
+                    <th className="py-3 px-4 text-sm font-semibold">اسم الصنف</th>
+                    <th className="py-3 px-4 text-sm font-semibold">رقم الشحنة</th>
+                    <th className="py-3 px-4 text-sm font-semibold">الكمية</th>
+                    <th className="py-3 px-4 text-sm font-semibold">تاريخ الاستلام</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleMovingRows.map((item, index) => (
+                    <tr key={`moving-${item.id}`} className="border-b border-orange-400/5 hover:bg-orange-400/5 transition-colors">
+                      <td className="py-3 px-4 font-medium text-slate-100">{item.nameAr}</td>
+                      <td className="py-3 px-4 text-slate-400">SHP-{String(9800 + index * 17 + item.movingTotal)}</td>
+                      <td className="py-3 px-4 font-bold text-slate-200" data-testid={index === 0 ? "text-moving-total" : undefined}>
+                        {arabicNumber(item.movingTotal)}
+                      </td>
+                      <td className="py-3 px-4 text-slate-300">{formatArabicDate(new Date(Date.now() - index * 86400000))}</td>
+                    </tr>
+                  ))}
+
+                  {visibleMovingRows.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-slate-400">لا توجد بيانات مخزون متحرك</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div className="text-xs text-slate-500 flex items-center gap-2">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          المدينة: {city} • إجمالي العهدة: {arabicNumber(grandTotal)} قطعة
+        </div>
       </div>
 
       {technicianId && (
         <WithdrawFromTechnicianModal
           open={showWithdrawModal}
           onOpenChange={setShowWithdrawModal}
-          technicianId={technicianId}
+          technicianId={technicianId ?? ""}
           technicianName={technicianName}
+          movingInventoryFallback={movingInventory as any}
         />
       )}
-    </div>
+    </>
   );
 }

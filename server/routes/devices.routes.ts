@@ -4,7 +4,7 @@
 
 import type { Express } from "express";
 import { devicesController } from "../controllers/devices.controller";
-import { requireAuth, requireAdmin, requireSupervisor } from "../middleware/auth";
+import { requireAuth, requireAdmin, requireSupervisor, requireSupervisorOnly } from "../middleware/auth";
 import { validateBody } from "../middleware/validation";
 import {
   insertWithdrawnDeviceSchema,
@@ -15,6 +15,16 @@ import { z } from "zod";
 const updateDeviceStatusSchema = z.object({
   status: z.enum(["pending", "approved", "rejected"]),
   adminNotes: z.string().optional(),
+});
+
+const uploadDeliveryProofSchema = z.object({
+  fileUrl: z.string().trim().min(1),
+  fileName: z.string().trim().optional(),
+  customerName: z.string().trim().optional(),
+  notes: z.string().trim().optional(),
+  deliveredAt: z.string().datetime().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 });
 
 export function registerDevicesRoutes(app: Express): void {
@@ -71,7 +81,7 @@ export function registerDevicesRoutes(app: Express): void {
   app.get(
     "/api/received-devices/pending/count",
     requireAuth,
-    requireSupervisor,
+    requireSupervisorOnly,
     devicesController.getPendingReceivedDevicesCount
   );
 
@@ -90,11 +100,19 @@ export function registerDevicesRoutes(app: Express): void {
     devicesController.createReceivedDevice
   );
 
+  // Upload delivery proof from technician mobile app
+  app.post(
+    "/api/received-devices/:id/delivery-proof",
+    requireAuth,
+    validateBody(uploadDeliveryProofSchema),
+    devicesController.uploadReceivedDeviceDeliveryProof
+  );
+
   // Update received device status
   app.patch(
     "/api/received-devices/:id/status",
     requireAuth,
-    requireSupervisor,
+    requireSupervisorOnly,
     validateBody(updateDeviceStatusSchema),
     devicesController.updateReceivedDeviceStatus
   );

@@ -516,6 +516,7 @@ export class MemStorage implements IStorage {
       id,
       technicianId: insertDevice.technicianId,
       supervisorId: insertDevice.supervisorId ?? null,
+      itemTypeId: insertDevice.itemTypeId ?? null,
       terminalId: insertDevice.terminalId,
       serialNumber: insertDevice.serialNumber,
       battery: insertDevice.battery ?? false,
@@ -898,6 +899,7 @@ export class MemStorage implements IStorage {
     regionId?: string;
     action?: string;
     entityType?: string;
+    entityId?: string;
     severity?: string;
   }): Promise<SystemLog[]> {
     return [];

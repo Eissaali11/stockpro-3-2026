@@ -36,7 +36,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { UserSafe } from "@shared/schema";
 import { useActiveItemTypes, getItemTypeVisuals, type ItemType, type InventoryEntry } from "@/hooks/use-item-types";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search, XCircle, Plus, Minus, AlertTriangle } from "lucide-react";
 
 const formSchema = z.object({
   technicianId: z.string().min(1, "يجب اختيار فني"),
@@ -105,6 +105,22 @@ export default function TransferFromWarehouseModal({
       ? users.filter(user => user.role === "technician")
       : users);
 
+  const [technicianSearchQuery, setTechnicianSearchQuery] = useState("");
+  const [itemSearchQuery, setItemSearchQuery] = useState("");
+  const [showAvailableOnly, setShowAvailableOnly] = useState(false);
+
+  const filteredEmployees = useMemo(() => {
+    const normalized = technicianSearchQuery.trim().toLowerCase();
+    if (!normalized) return employees;
+
+    return employees.filter((employee: any) => {
+      const fullName = (employee.fullName || "").toLowerCase();
+      const username = (employee.username || "").toLowerCase();
+      const city = (employee.city || "").toLowerCase();
+      return fullName.includes(normalized) || username.includes(normalized) || city.includes(normalized);
+    });
+  }, [employees, technicianSearchQuery]);
+
   const [itemTransfers, setItemTransfers] = useState<{[key: string]: ItemTransfer}>({});
 
   const entryMap = useMemo(() => {
@@ -129,9 +145,18 @@ export default function TransferFromWarehouseModal({
     },
   });
 
+  const selectedTechnicianId = form.watch("technicianId");
+  const selectedTechnician = useMemo(
+    () => employees.find((employee: any) => employee.id === selectedTechnicianId),
+    [employees, selectedTechnicianId],
+  );
+
   useEffect(() => {
     if (!open) {
       form.reset();
+      setTechnicianSearchQuery("");
+      setItemSearchQuery("");
+      setShowAvailableOnly(false);
     }
   }, [open, form]);
 
@@ -250,6 +275,32 @@ export default function TransferFromWarehouseModal({
       });
   }, [itemTypes]);
 
+  const filteredVisibleItems = visibleItems.filter((item) => {
+    const availableBoxes = getAvailableStock(item.id, "box");
+    const availableUnits = getAvailableStock(item.id, "unit");
+    const hasAvailable = availableBoxes > 0 || availableUnits > 0;
+
+    if (showAvailableOnly && !hasAvailable) return false;
+
+    const normalized = itemSearchQuery.trim().toLowerCase();
+    if (!normalized) return true;
+
+    const nameAr = (item.nameAr || "").toLowerCase();
+    const nameEn = (item.nameEn || "").toLowerCase();
+    const category = (item.category || "").toLowerCase();
+    return nameAr.includes(normalized) || nameEn.includes(normalized) || category.includes(normalized);
+  });
+
+  const selectedTransfers = Object.entries(itemTransfers).filter(
+    ([_, transfer]) => transfer.selected && transfer.quantity > 0,
+  );
+  const selectedItemsCount = selectedTransfers.length;
+  const totalSelectedQuantity = selectedTransfers.reduce((sum, [_, transfer]) => sum + transfer.quantity, 0);
+  const overflowItemsCount = selectedTransfers.filter(([itemKey, transfer]) => {
+    const available = getAvailableStock(itemKey, transfer.packagingType);
+    return transfer.quantity > available;
+  }).length;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
@@ -273,39 +324,114 @@ export default function TransferFromWarehouseModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>اختر الفني</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <div className="relative mb-2">
+                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        value={technicianSearchQuery}
+                        onChange={(event) => setTechnicianSearchQuery(event.target.value)}
+                        placeholder="ابحث عن فني بالاسم أو المدينة"
+                        className="pr-10 pl-10"
+                      />
+                      {technicianSearchQuery.trim().length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setTechnicianSearchQuery("")}
+                          aria-label="مسح البحث"
+                          className="absolute left-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <Select onValueChange={field.onChange} value={field.value} disabled={employees.length === 0}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="اختر الفني" />
+                          <SelectValue placeholder={employees.length === 0 ? "لا يوجد فنيون متاحون" : "اختر الفني"} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {employees.map((employee: any) => (
+                        {filteredEmployees.map((employee: any) => (
                           <SelectItem key={employee.id} value={employee.id}>
                             {employee.fullName} - {employee.city}
                           </SelectItem>
                         ))}
+                        {filteredEmployees.length === 0 && (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">لا توجد نتائج مطابقة</div>
+                        )}
                       </SelectContent>
                     </Select>
+                    {selectedTechnician && (
+                      <div className="mt-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                        الفني المختار: <span className="font-semibold">{selectedTechnician.fullName}</span>
+                        {selectedTechnician.city ? <span className="text-muted-foreground"> - {selectedTechnician.city}</span> : null}
+                      </div>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={itemSearchQuery}
+                    onChange={(event) => setItemSearchQuery(event.target.value)}
+                    placeholder="ابحث عن صنف داخل القائمة"
+                    className="pr-10 pl-10"
+                  />
+                  {itemSearchQuery.trim().length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setItemSearchQuery("")}
+                      aria-label="مسح بحث الأصناف"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <label className="inline-flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                    <Checkbox
+                      checked={showAvailableOnly}
+                      onCheckedChange={(checked) => setShowAvailableOnly(checked === true)}
+                    />
+                    عرض الأصناف المتاحة فقط
+                  </label>
+                  <span className="text-xs text-muted-foreground">{filteredVisibleItems.length} صنف</span>
+                </div>
+              </div>
+
               <ScrollArea className="h-[400px] pr-4">
                 <div className="space-y-4">
-                  {visibleItems.map((item) => {
+                  {filteredVisibleItems.length === 0 ? (
+                    <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                      لا توجد أصناف مطابقة للبحث أو الفلتر الحالي
+                    </div>
+                  ) : filteredVisibleItems.map((item) => {
                     const Icon = item.icon;
                     const transfer = itemTransfers[item.id] || { selected: false, quantity: 0, packagingType: "unit" };
                     const availableBoxes = getAvailableStock(item.id, "box");
                     const availableUnits = getAvailableStock(item.id, "unit");
+                    const totalAvailable = availableBoxes + availableUnits;
+                    const isUnavailable = totalAvailable === 0;
+                    const selectedPackagingAvailable = getAvailableStock(item.id, transfer.packagingType);
+                    const hasQuantityError = transfer.selected && transfer.quantity > selectedPackagingAvailable;
 
                     return (
                       <div key={item.id} className="p-4 rounded-lg bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 border">
                         <div className="flex items-center gap-3 mb-3">
                           <Checkbox
+                            disabled={isUnavailable}
                             checked={transfer.selected}
-                            onCheckedChange={(checked) => updateItemTransfer(item.id, "selected", checked)}
+                            onCheckedChange={(checked) => {
+                              const isChecked = checked === true;
+                              updateItemTransfer(item.id, "selected", isChecked);
+                              if (!isChecked) updateItemTransfer(item.id, "quantity", 0);
+                            }}
                           />
                           <div className={`p-2 rounded-lg bg-gradient-to-r ${item.gradient} text-white`}>
                             <Icon className="h-5 w-5" />
@@ -315,6 +441,7 @@ export default function TransferFromWarehouseModal({
                             <p className="text-xs text-muted-foreground">
                               متاح: {availableBoxes} كرتون، {availableUnits} وحدة
                             </p>
+                            {isUnavailable && <p className="text-xs text-red-500 mt-1">غير متاح حاليًا</p>}
                           </div>
                         </div>
 
@@ -324,7 +451,7 @@ export default function TransferFromWarehouseModal({
                               <Label>نوع التغليف:</Label>
                               <RadioGroup
                                 value={transfer.packagingType}
-                                onValueChange={(value) => updateItemTransfer(item.id, "packagingType", value)}
+                                onValueChange={(value) => updateItemTransfer(item.id, "packagingType", value as "box" | "unit")}
                                 className="flex gap-4"
                               >
                                 <div className="flex items-center space-x-2 space-x-reverse">
@@ -339,15 +466,49 @@ export default function TransferFromWarehouseModal({
                             </div>
                             <div className="flex items-center gap-4">
                               <Label>الكمية:</Label>
-                              <Input
-                                type="number"
-                                min="0"
-                                max={getAvailableStock(item.id, transfer.packagingType)}
-                                value={transfer.quantity}
-                                onChange={(e) => updateItemTransfer(item.id, "quantity", parseInt(e.target.value) || 0)}
-                                className="w-32"
-                              />
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => updateItemTransfer(item.id, "quantity", Math.max(0, transfer.quantity - 1))}
+                                  disabled={transfer.quantity <= 0}
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </Button>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max={selectedPackagingAvailable}
+                                  value={transfer.quantity}
+                                  onChange={(e) => updateItemTransfer(item.id, "quantity", Math.max(0, parseInt(e.target.value) || 0))}
+                                  className="w-24 text-center"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => updateItemTransfer(item.id, "quantity", Math.min(selectedPackagingAvailable, transfer.quantity + 1))}
+                                  disabled={transfer.quantity >= selectedPackagingAvailable}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  onClick={() => updateItemTransfer(item.id, "quantity", selectedPackagingAvailable)}
+                                  disabled={selectedPackagingAvailable === 0}
+                                >
+                                  الحد الأقصى
+                                </Button>
+                              </div>
                             </div>
+                            {hasQuantityError && (
+                              <div className="inline-flex items-center gap-1 text-xs text-red-500">
+                                <AlertTriangle className="h-3.5 w-3.5" />
+                                الكمية المدخلة أكبر من المتاح ({selectedPackagingAvailable})
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -374,10 +535,27 @@ export default function TransferFromWarehouseModal({
                 )}
               />
 
+              <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">الأصناف المختارة</span>
+                  <span className="font-semibold">{selectedItemsCount}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">إجمالي الكمية</span>
+                  <span className="font-semibold">{totalSelectedQuantity}</span>
+                </div>
+                {overflowItemsCount > 0 && (
+                  <div className="inline-flex items-center gap-1 text-xs text-red-500">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    يوجد {overflowItemsCount} صنف بكميات أعلى من المخزون المتاح
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center space-x-3 space-x-reverse pt-4">
                 <Button
                   type="submit"
-                  disabled={transferMutation.isPending}
+                  disabled={transferMutation.isPending || selectedItemsCount === 0 || overflowItemsCount > 0}
                   className="flex-1"
                 >
                   {transferMutation.isPending ? "جاري النقل..." : "تأكيد النقل"}

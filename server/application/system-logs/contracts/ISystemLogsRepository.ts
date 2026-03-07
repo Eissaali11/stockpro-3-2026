@@ -7,6 +7,7 @@ export type SystemLogsFilters = {
   regionId?: string;
   action?: string;
   entityType?: string;
+  entityId?: string;
   severity?: string;
   startDate?: Date | string;
   endDate?: Date | string;

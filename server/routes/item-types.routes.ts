@@ -48,6 +48,13 @@ export function registerItemTypesRoutes(app: Express): void {
   // Get active item types only
   app.get("/api/item-types/active", requireAuth, itemTypesController.getActive);
 
+  // Get serial tracking rows for one item type
+  app.get(
+    "/api/item-types/:id/serial-tracking",
+    requireAuth,
+    itemTypesController.getSerialTracking
+  );
+
   // Get single item type
   app.get("/api/item-types/:id", requireAuth, itemTypesController.getById);
 

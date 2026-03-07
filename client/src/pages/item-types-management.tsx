@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,10 +39,6 @@ import {
   Package,
   Plus,
   Edit2,
-  Trash2,
-  Eye,
-  EyeOff,
-  ArrowUpDown,
   Smartphone,
   FileText,
   CreditCard,
@@ -49,8 +46,15 @@ import {
   Save,
   X,
   RefreshCw,
+  Search,
+  Filter,
+  Download,
+  CheckCircle2,
+  AlertTriangle,
+  Ban,
+  ScrollText,
+  ArrowUpLeft,
 } from "lucide-react";
-import Sidebar from "@/components/sidebar";
 import type { ItemType as SchemaItemType } from "@shared/schema";
 
 type ItemType = SchemaItemType;
@@ -67,6 +71,7 @@ export default function ItemTypesManagement() {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ItemType | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const [formData, setFormData] = useState({
     id: '',
     nameAr: '',
@@ -248,195 +253,346 @@ export default function ItemTypesManagement() {
     return acc;
   }, {} as Record<string, ItemType[]>);
 
-  const sortedItemTypes = [...itemTypes].sort((a, b) => a.sortOrder - b.sortOrder);
+  const sortedItemTypes = useMemo(
+    () => [...itemTypes].sort((a, b) => a.sortOrder - b.sortOrder),
+    [itemTypes],
+  );
+
+  const filteredItemTypes = useMemo(() => {
+    const keyword = searchTerm.trim().toLowerCase();
+    if (!keyword) return sortedItemTypes;
+
+    return sortedItemTypes.filter((item) => {
+      const catInfo = getCategoryInfo(item.category);
+      return (
+        item.id.toLowerCase().includes(keyword) ||
+        item.nameAr.toLowerCase().includes(keyword) ||
+        item.nameEn.toLowerCase().includes(keyword) ||
+        item.category.toLowerCase().includes(keyword) ||
+        catInfo.nameAr.toLowerCase().includes(keyword) ||
+        catInfo.nameEn.toLowerCase().includes(keyword)
+      );
+    });
+  }, [searchTerm, sortedItemTypes]);
+
+  const stats = useMemo(() => {
+    const total = itemTypes.length;
+    const active = itemTypes.filter((item) => item.isActive).length;
+    const lowVisibility = itemTypes.filter((item) => !item.isVisible).length;
+    const inactive = itemTypes.filter((item) => !item.isActive).length;
+    return { total, active, lowVisibility, inactive };
+  }, [itemTypes]);
+
+  const handleExportCsv = () => {
+    if (filteredItemTypes.length === 0) {
+      toast({
+        title: "لا توجد بيانات",
+        description: "لا توجد أصناف لتصديرها",
+      });
+      return;
+    }
+
+    const header = [
+      "id",
+      "nameAr",
+      "nameEn",
+      "category",
+      "unitsPerBox",
+      "sortOrder",
+      "isActive",
+      "isVisible",
+    ];
+
+    const escapeCsv = (value: unknown) => {
+      const text = String(value ?? "");
+      if (text.includes(",") || text.includes("\"") || text.includes("\n")) {
+        return `"${text.replace(/\"/g, '""')}"`;
+      }
+      return text;
+    };
+
+    const rows = filteredItemTypes.map((item) => [
+      item.id,
+      item.nameAr,
+      item.nameEn,
+      item.category,
+      item.unitsPerBox,
+      item.sortOrder,
+      item.isActive ? "true" : "false",
+      item.isVisible ? "true" : "false",
+    ]);
+
+    const csvContent = [header, ...rows]
+      .map((row) => row.map(escapeCsv).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `item-types_${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "تم التصدير",
+      description: "تم تصدير قائمة الأصناف بنجاح",
+    });
+  };
 
   if (user?.role !== 'admin') {
     return (
-      <div className="flex min-h-screen bg-[#0F0F15]">
-        <Sidebar />
-        <div className="flex-1 p-8 flex items-center justify-center">
-          <Card className="bg-red-500/10 border-red-500/20">
+      <div className="flex min-h-[60vh] items-center justify-center">
+          <Card className="bg-red-500/10 border-red-500/20 max-w-md w-full">
             <CardContent className="p-8 text-center">
               <Package className="h-16 w-16 text-red-400 mx-auto mb-4" />
               <h2 className="text-xl font-bold text-white mb-2">غير مصرح</h2>
               <p className="text-gray-400">هذه الصفحة متاحة فقط لمدير النظام</p>
             </CardContent>
           </Card>
-        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-[#0F0F15]">
-      <Sidebar />
-      
-      <div className="flex-1 p-8 overflow-y-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-7xl mx-auto"
-        >
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-2">إدارة الأصناف</h1>
-              <p className="text-gray-400">إضافة وتعديل وإدارة أنواع الأصناف في النظام</p>
-            </div>
-            
-            <div className="flex gap-3">
-              {itemTypes.length === 0 && (
-                <Button
-                  onClick={() => seedMutation.mutate()}
-                  disabled={seedMutation.isPending}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <RefreshCw className={`h-4 w-4 ml-2 ${seedMutation.isPending ? 'animate-spin' : ''}`} />
-                  تحميل الأصناف الافتراضية
-                </Button>
-              )}
+    <div className="space-y-8">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-6"
+      >
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">إدارة الأصناف</h1>
+            <p className="text-slate-400">إضافة وتعديل وإدارة أنواع الأصناف في النظام</p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Button asChild variant="outline" className="border-slate-600 bg-slate-800/60 hover:bg-slate-700 text-slate-200">
+              <Link href="/system-logs">
+                <ScrollText className="h-4 w-4 ml-2" />
+                سجل النظام
+              </Link>
+            </Button>
+
+            {itemTypes.length === 0 && (
               <Button
-                onClick={() => {
-                  setEditingItem(null);
-                  resetForm();
-                  setIsDialogOpen(true);
-                }}
-                className="bg-[#18B2B0] hover:bg-[#18B2B0]/90"
+                onClick={() => seedMutation.mutate()}
+                disabled={seedMutation.isPending}
+                className="bg-blue-600 hover:bg-blue-700"
               >
-                <Plus className="h-4 w-4 ml-2" />
-                إضافة صنف جديد
+                <RefreshCw className={`h-4 w-4 ml-2 ${seedMutation.isPending ? "animate-spin" : ""}`} />
+                تحميل الأصناف الافتراضية
               </Button>
-            </div>
+            )}
+
+            <Button
+              onClick={() => {
+                setEditingItem(null);
+                resetForm();
+                setIsDialogOpen(true);
+              }}
+              className="bg-cyan-400 hover:bg-cyan-300 text-slate-900 font-bold"
+            >
+              <Plus className="h-4 w-4 ml-2" />
+              إضافة صنف جديد
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-700/60 bg-slate-900/40 backdrop-blur-xl p-4 sm:p-5 flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
+          <div className="relative w-full lg:max-w-md">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="بحث عن صنف، معرف، أو فئة..."
+              className="pr-10 bg-slate-800/60 border-slate-700 text-white placeholder:text-slate-500"
+            />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            {CATEGORIES.map(cat => {
-              const count = groupedByCategory[cat.id]?.length || 0;
-              const activeCount = groupedByCategory[cat.id]?.filter(i => i.isActive).length || 0;
-              const Icon = cat.icon;
-              
-              return (
-                <Card key={cat.id} className="bg-[#1A1A24] border-white/10">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-[#18B2B0]/20">
-                        <Icon className="h-5 w-5 text-[#18B2B0]" />
-                      </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">{cat.nameAr}</p>
-                        <p className="text-white font-bold text-lg">{count} <span className="text-sm text-gray-500">({activeCount} نشط)</span></p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="border-slate-700 bg-slate-800/50 text-slate-300 hover:bg-slate-700">
+              <Filter className="h-4 w-4 ml-2" />
+              تصفية
+            </Button>
+            <Button variant="outline" className="border-slate-700 bg-slate-800/50 text-slate-300 hover:bg-slate-700" onClick={handleExportCsv}>
+              <Download className="h-4 w-4 ml-2" />
+              تصدير
+            </Button>
           </div>
+        </div>
 
-          {isLoading ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map(i => (
-                <Skeleton key={i} className="h-16 bg-white/5" />
-              ))}
-            </div>
-          ) : itemTypes.length === 0 ? (
-            <Card className="bg-[#1A1A24] border-white/10">
-              <CardContent className="p-12 text-center">
-                <Package className="h-16 w-16 text-gray-600 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-white mb-2">لا توجد أصناف</h3>
-                <p className="text-gray-400 mb-4">قم بإضافة أصناف جديدة أو تحميل الأصناف الافتراضية</p>
-                <Button
-                  onClick={() => seedMutation.mutate()}
-                  disabled={seedMutation.isPending}
-                  className="bg-[#18B2B0] hover:bg-[#18B2B0]/90"
-                >
-                  <RefreshCw className={`h-4 w-4 ml-2 ${seedMutation.isPending ? 'animate-spin' : ''}`} />
-                  تحميل الأصناف الافتراضية
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="bg-[#1A1A24] border-white/10">
-              <CardHeader className="border-b border-white/10">
-                <CardTitle className="text-white flex items-center gap-2">
-                  <Package className="h-5 w-5 text-[#18B2B0]" />
-                  جميع الأصناف ({itemTypes.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="rounded-2xl bg-slate-900/45 border-slate-700/60 backdrop-blur-xl overflow-hidden">
+            <div className="h-1 bg-cyan-400/80" />
+            <CardContent className="p-6 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400 mb-1">الأصناف النشطة</p>
+                <p className="text-3xl font-bold text-white">{stats.active}</p>
+              </div>
+              <div className="size-12 rounded-xl bg-cyan-400/15 border border-cyan-400/30 flex items-center justify-center text-cyan-300">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl bg-slate-900/45 border-slate-700/60 backdrop-blur-xl overflow-hidden">
+            <div className="h-1 bg-amber-400/80" />
+            <CardContent className="p-6 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400 mb-1">أصناف مخفية</p>
+                <p className="text-3xl font-bold text-white">{stats.lowVisibility}</p>
+              </div>
+              <div className="size-12 rounded-xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center text-amber-300">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl bg-slate-900/45 border-slate-700/60 backdrop-blur-xl overflow-hidden">
+            <div className="h-1 bg-red-400/80" />
+            <CardContent className="p-6 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400 mb-1">أصناف غير مفعلة</p>
+                <p className="text-3xl font-bold text-white">{stats.inactive}</p>
+              </div>
+              <div className="size-12 rounded-xl bg-red-400/15 border border-red-400/30 flex items-center justify-center text-red-300">
+                <Ban className="h-6 w-6" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="rounded-2xl bg-slate-900/45 border-slate-700/60 backdrop-blur-xl overflow-hidden">
+          <CardHeader className="border-b border-slate-700/60 bg-slate-900/40">
+            <CardTitle className="text-white flex items-center justify-between gap-3">
+              <span className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-cyan-300" />
+                قائمة الأصناف
+              </span>
+              <Badge className="bg-cyan-400/15 text-cyan-300 border-cyan-400/25">
+                {filteredItemTypes.length} / {stats.total}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent className="p-0">
+            {isLoading ? (
+              <div className="p-6 space-y-3">
+                {[1, 2, 3, 4].map((idx) => (
+                  <Skeleton key={idx} className="h-12 bg-slate-800/60" />
+                ))}
+              </div>
+            ) : filteredItemTypes.length === 0 ? (
+              <div className="p-12 text-center">
+                <Package className="h-14 w-14 text-slate-600 mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-white mb-2">لا توجد أصناف مطابقة</h3>
+                <p className="text-slate-400">جرّب تغيير كلمات البحث أو إضافة صنف جديد</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-white/10 hover:bg-white/5">
-                      <TableHead className="text-right text-gray-400">الترتيب</TableHead>
-                      <TableHead className="text-right text-gray-400">المعرف</TableHead>
-                      <TableHead className="text-right text-gray-400">الاسم العربي</TableHead>
-                      <TableHead className="text-right text-gray-400">الاسم الإنجليزي</TableHead>
-                      <TableHead className="text-right text-gray-400">الفئة</TableHead>
-                      <TableHead className="text-right text-gray-400">وحدات/كرتون</TableHead>
-                      <TableHead className="text-right text-gray-400">التفعيل</TableHead>
-                      <TableHead className="text-right text-gray-400">الإظهار</TableHead>
-                      <TableHead className="text-right text-gray-400">الإجراءات</TableHead>
+                    <TableRow className="border-slate-700/60 hover:bg-transparent bg-slate-900/25">
+                      <TableHead className="text-right text-slate-400">الصنف</TableHead>
+                      <TableHead className="text-right text-slate-400">الفئة</TableHead>
+                      <TableHead className="text-right text-slate-400">وحدات/كرتون</TableHead>
+                      <TableHead className="text-right text-slate-400">الحالة</TableHead>
+                      <TableHead className="text-right text-slate-400">الظهور</TableHead>
+                      <TableHead className="text-right text-slate-400">الترتيب</TableHead>
+                      <TableHead className="text-right text-slate-400">الإجراءات</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedItemTypes.map((item) => {
+                    {filteredItemTypes.map((item) => {
                       const catInfo = getCategoryInfo(item.category);
                       const CatIcon = catInfo.icon;
-                      
+
                       return (
-                        <TableRow key={item.id} className="border-white/10 hover:bg-white/5">
-                          <TableCell className="text-gray-400">
-                            <Badge variant="outline" className="border-white/20">
-                              {item.sortOrder}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-white font-mono text-sm">{item.id}</TableCell>
-                          <TableCell className="text-white font-medium">{item.nameAr}</TableCell>
-                          <TableCell className="text-gray-400">{item.nameEn}</TableCell>
+                        <TableRow key={item.id} className="border-slate-700/50 hover:bg-slate-800/35 transition-colors">
                           <TableCell>
-                            <Badge className="bg-[#18B2B0]/20 text-[#18B2B0] border-[#18B2B0]/30">
+                            <div className="flex flex-col">
+                              <Link href={`/item-types/${item.id}/details`} className="font-bold text-white hover:text-cyan-300 transition-colors w-fit">
+                                {item.nameAr}
+                              </Link>
+                              <span className="text-xs text-slate-400 font-mono" dir="ltr">SKU: {item.id}</span>
+                            </div>
+                          </TableCell>
+
+                          <TableCell>
+                            <Badge className="bg-cyan-400/15 text-cyan-300 border-cyan-400/25">
                               <CatIcon className="h-3 w-3 ml-1" />
                               {catInfo.nameAr}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-white">{item.unitsPerBox}</TableCell>
+
+                          <TableCell className="text-white font-semibold">{item.unitsPerBox}</TableCell>
+
                           <TableCell>
-                            <Switch
-                              checked={item.isActive}
-                              onCheckedChange={(checked) => 
-                                toggleActiveMutation.mutate({ id: item.id, isActive: checked })
-                              }
-                              className="data-[state=checked]:bg-green-500"
-                            />
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={item.isActive}
+                                onCheckedChange={(checked) =>
+                                  toggleActiveMutation.mutate({ id: item.id, isActive: checked })
+                                }
+                                className="data-[state=checked]:bg-emerald-500"
+                              />
+                              <span className={`text-xs font-bold ${item.isActive ? "text-emerald-400" : "text-red-400"}`}>
+                                {item.isActive ? "مفعل" : "غير مفعل"}
+                              </span>
+                            </div>
                           </TableCell>
+
                           <TableCell>
-                            <Switch
-                              checked={item.isVisible}
-                              onCheckedChange={(checked) => 
-                                toggleVisibilityMutation.mutate({ id: item.id, isVisible: checked })
-                              }
-                              className="data-[state=checked]:bg-blue-500"
-                            />
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={item.isVisible}
+                                onCheckedChange={(checked) =>
+                                  toggleVisibilityMutation.mutate({ id: item.id, isVisible: checked })
+                                }
+                                className="data-[state=checked]:bg-cyan-500"
+                              />
+                              <span className={`text-xs font-bold ${item.isVisible ? "text-cyan-300" : "text-slate-400"}`}>
+                                {item.isVisible ? "مرئي" : "مخفي"}
+                              </span>
+                            </div>
                           </TableCell>
+
                           <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(item)}
-                              className="text-[#18B2B0] hover:text-[#18B2B0]/80 hover:bg-[#18B2B0]/10"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
+                            <Badge variant="outline" className="border-slate-600 text-slate-300">{item.sortOrder}</Badge>
+                          </TableCell>
+
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Button asChild variant="ghost" size="sm" className="text-cyan-300 hover:text-cyan-200 hover:bg-cyan-500/10">
+                                <Link href={`/item-types/${item.id}/details`}>
+                                  <ArrowUpLeft className="h-4 w-4" />
+                                </Link>
+                              </Button>
+
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEdit(item)}
+                                className="text-cyan-300 hover:text-cyan-200 hover:bg-cyan-500/10"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
                     })}
                   </TableBody>
                 </Table>
-              </CardContent>
-            </Card>
-          )}
-        </motion.div>
-      </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="bg-[#1A1A24] border-white/10 text-white max-w-md">

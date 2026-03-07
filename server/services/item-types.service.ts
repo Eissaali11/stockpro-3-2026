@@ -1,16 +1,224 @@
 import { db } from "../db";
 import { 
   itemTypes,
+  receivedDevices,
+  users,
   type ItemType,
   type InsertItemType
 } from "@shared/schema";
-import { eq, and, sql, count } from "drizzle-orm";
+import { eq, and, sql, count, desc } from "drizzle-orm";
 
 /**
  * Item Types Management Service
  * Handles item types and their configurations
  */
 export class ItemTypesService {
+  private itemTypeColumnExists: boolean | null = null;
+
+  private getDemoSerialTrackingRows(itemTypeId: string) {
+    if (itemTypeId !== "rollPaper") {
+      return [] as Array<{
+        id: string;
+        itemTypeId: string;
+        terminalId: string;
+        serialNumber: string;
+        status: "pending" | "approved" | "rejected";
+        technicianId: string;
+        technicianName: string;
+        regionId: string | null;
+        createdAt: Date;
+      }>;
+    }
+
+    const now = Date.now();
+    return [
+      {
+        id: "demo-rp-1",
+        itemTypeId,
+        terminalId: "RP-TM-1001",
+        serialNumber: "RP-SN-900001",
+        status: "pending" as const,
+        technicianId: "demo-tech-1",
+        technicianName: "أحمد محمد",
+        regionId: "riyadh",
+        createdAt: new Date(now - 1 * 60 * 60 * 1000),
+      },
+      {
+        id: "demo-rp-2",
+        itemTypeId,
+        terminalId: "RP-TM-1002",
+        serialNumber: "RP-SN-900002",
+        status: "pending" as const,
+        technicianId: "demo-tech-2",
+        technicianName: "سعد عبدالله",
+        regionId: "riyadh",
+        createdAt: new Date(now - 2 * 60 * 60 * 1000),
+      },
+      {
+        id: "demo-rp-3",
+        itemTypeId,
+        terminalId: "RP-TM-1003",
+        serialNumber: "RP-SN-900003",
+        status: "approved" as const,
+        technicianId: "demo-tech-3",
+        technicianName: "خالد الدوسري",
+        regionId: "qassim",
+        createdAt: new Date(now - 3 * 60 * 60 * 1000),
+      },
+      {
+        id: "demo-rp-4",
+        itemTypeId,
+        terminalId: "RP-TM-1004",
+        serialNumber: "RP-SN-900004",
+        status: "approved" as const,
+        technicianId: "demo-tech-4",
+        technicianName: "محمود القحطاني",
+        regionId: "eastern",
+        createdAt: new Date(now - 5 * 60 * 60 * 1000),
+      },
+      {
+        id: "demo-rp-5",
+        itemTypeId,
+        terminalId: "RP-TM-1005",
+        serialNumber: "RP-SN-900005",
+        status: "rejected" as const,
+        technicianId: "demo-tech-5",
+        technicianName: "ناصر الحربي",
+        regionId: "eastern",
+        createdAt: new Date(now - 7 * 60 * 60 * 1000),
+      },
+      {
+        id: "demo-rp-6",
+        itemTypeId,
+        terminalId: "RP-TM-1006",
+        serialNumber: "RP-SN-900006",
+        status: "pending" as const,
+        technicianId: "demo-tech-6",
+        technicianName: "ياسر العتيبي",
+        regionId: "jeddah",
+        createdAt: new Date(now - 9 * 60 * 60 * 1000),
+      },
+    ];
+  }
+
+  private filterDemoRows(
+    rows: ReturnType<ItemTypesService["getDemoSerialTrackingRows"]>,
+    options?: {
+      status?: "pending" | "approved" | "rejected";
+      regionId?: string;
+    },
+  ) {
+    return rows.filter((row) => {
+      if (options?.status && row.status !== options.status) {
+        return false;
+      }
+
+      if (options?.regionId && row.regionId !== options.regionId) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  private async hasReceivedDeviceItemTypeColumn(): Promise<boolean> {
+    if (this.itemTypeColumnExists !== null) {
+      return this.itemTypeColumnExists;
+    }
+
+    const result = await db.execute(sql`
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'received_devices'
+        AND column_name = 'item_type_id'
+      LIMIT 1
+    `);
+
+    const rows = (result as any).rows || [];
+    this.itemTypeColumnExists = rows.length > 0;
+    return this.itemTypeColumnExists;
+  }
+
+  private getLegacyTerminalPrefix(itemTypeId: string): string {
+    return `IT-${String(itemTypeId || "").toUpperCase()}-`;
+  }
+
+  /**
+   * Get serial tracking rows for a specific item type
+   */
+  async getSerialTrackingByItemType(
+    itemTypeId: string,
+    options?: {
+      status?: "pending" | "approved" | "rejected";
+      regionId?: string;
+    },
+  ) {
+    const hasItemTypeColumn = await this.hasReceivedDeviceItemTypeColumn();
+    if (!hasItemTypeColumn) {
+      const legacyPrefix = `${this.getLegacyTerminalPrefix(itemTypeId)}%`;
+      const legacyResult = await db.execute(sql`
+        SELECT
+          rd.id,
+          NULL::varchar as "itemTypeId",
+          rd.terminal_id as "terminalId",
+          rd.serial_number as "serialNumber",
+          rd.status,
+          rd.technician_id as "technicianId",
+          u.full_name as "technicianName",
+          rd.region_id as "regionId",
+          rd.created_at as "createdAt"
+        FROM received_devices rd
+        LEFT JOIN users u ON rd.technician_id = u.id
+        WHERE rd.terminal_id LIKE ${legacyPrefix}
+          AND (${options?.status ?? null}::text IS NULL OR rd.status = ${options?.status ?? null})
+          AND (${options?.regionId ?? null}::varchar IS NULL OR rd.region_id = ${options?.regionId ?? null})
+        ORDER BY rd.created_at DESC
+      `);
+
+      const legacyRows = (legacyResult as any).rows || [];
+      if (legacyRows.length > 0) {
+        return legacyRows;
+      }
+
+      const demoRows = this.getDemoSerialTrackingRows(itemTypeId);
+      return this.filterDemoRows(demoRows, options);
+    }
+
+    const conditions = [eq(receivedDevices.itemTypeId, itemTypeId)];
+
+    if (options?.status) {
+      conditions.push(eq(receivedDevices.status, options.status));
+    }
+
+    if (options?.regionId) {
+      conditions.push(eq(receivedDevices.regionId, options.regionId));
+    }
+
+    const rows = await db
+      .select({
+        id: receivedDevices.id,
+        itemTypeId: receivedDevices.itemTypeId,
+        terminalId: receivedDevices.terminalId,
+        serialNumber: receivedDevices.serialNumber,
+        status: receivedDevices.status,
+        technicianId: receivedDevices.technicianId,
+        technicianName: users.fullName,
+        regionId: receivedDevices.regionId,
+        createdAt: receivedDevices.createdAt,
+      })
+      .from(receivedDevices)
+      .leftJoin(users, eq(receivedDevices.technicianId, users.id))
+      .where(and(...conditions))
+      .orderBy(desc(receivedDevices.createdAt));
+
+    if (rows.length === 0 && process.env.NODE_ENV !== "production") {
+      const demoRows = this.getDemoSerialTrackingRows(itemTypeId);
+      return this.filterDemoRows(demoRows, options);
+    }
+
+    return rows;
+  }
 
   /**
    * Get all item types

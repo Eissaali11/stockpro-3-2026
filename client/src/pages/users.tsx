@@ -12,9 +12,9 @@ import type { UserSafe } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { AddUserModal } from "@/components/add-user-modal";
 import { EditUserModal } from "@/components/edit-user-modal";
-import rasscoLogo from "@assets/image_1762442473114.png";
-import neoleapLogo from "@assets/image_1762442479737.png";
-import madaDevice from "@assets/image_1762442486277.png";
+import rasscoLogo from "@assets/39bff80c-2b7d-48a8-80ed-34b372af4da3_transparent_1762470013152.png";
+import neoleapLogo from "@assets/image_1762469922998.png";
+import madaDevice from "@assets/image_1762469811135.png";
 
 export default function UsersPage() {
   const [, setLocation] = useLocation();

@@ -270,7 +270,7 @@ export default function ReceivedDevicesReview() {
             )}
 
             {/* Action Buttons */}
-            {device.status === 'pending' && (
+            {device.status === 'pending' && user?.role === 'supervisor' && (
               <div className="flex gap-3 pt-4">
                 <Button
                   onClick={(e) => {

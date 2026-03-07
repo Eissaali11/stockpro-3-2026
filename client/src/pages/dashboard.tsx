@@ -2,21 +2,12 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
-import { getRoleLabel } from "@shared/roles";
 import {
   Bell,
   Boxes,
-  CircleHelp,
-  Home,
   Settings,
-  ShieldCheck,
   UserCircle2,
-  Users,
   Warehouse,
-  Wrench,
-  ArrowRightLeft,
-  Undo2,
-  ClipboardList,
   Shapes,
 } from "lucide-react";
 
@@ -60,12 +51,6 @@ function sumInventoryValue(inventory: unknown): number {
 function percentage(value: number, max: number): number {
   if (!max || max <= 0) return 0;
   return Math.min(100, Math.max(0, (value / max) * 100));
-}
-
-function initials(fullName?: string | null): string {
-  if (!fullName) return "م";
-  const parts = fullName.trim().split(/\s+/).filter(Boolean);
-  return (parts[0]?.[0] || "م") + (parts[1]?.[0] || "");
 }
 
 function statusText(percent: number): string {
@@ -214,81 +199,25 @@ export default function Dashboard() {
 
   const maxTrend = Math.max(...trendBars.map((bar) => bar.value), 1);
 
-  const navItems = [
-    { href: "/home", label: "الصفحة الرئيسية", icon: Home, active: true, roles: ["admin", "supervisor", "technician"] },
-    { href: canSeeGlobalData ? "/admin-inventory-overview" : "/my-fixed-inventory", label: "إدارة المخزون", icon: Boxes, active: false, roles: ["admin", "supervisor", "technician"] },
-    { href: "/operations", label: "العمليات", icon: ClipboardList, active: false, roles: ["admin", "supervisor"] },
-    { href: "/warehouses", label: "إدارة المستودعات", icon: Warehouse, active: false, roles: ["admin", "supervisor"] },
-    { href: "/withdrawn-devices", label: "الأصناف المرتجعة", icon: Undo2, active: false, roles: ["admin", "supervisor"] },
-    { href: "/notifications", label: "الإشعارات", icon: Bell, active: false, roles: ["admin", "supervisor", "technician"] },
-    { href: "/users", label: "المستخدمين", icon: Users, active: false, roles: ["admin"] },
-    { href: "/operations", label: "عملية النقل المستودعات", icon: ArrowRightLeft, active: false, roles: ["admin", "supervisor"] },
-    { href: "/backup", label: "النسخ الاحتياطية", icon: ShieldCheck, active: false, roles: ["admin"] },
-    { href: "/item-types", label: "إدارة الأصناف", icon: Shapes, active: false, roles: ["admin"] },
-  ].filter((item) => item.roles.includes(user?.role || "technician"));
-
   return (
-    <div dir="rtl" className="min-h-screen bg-[#102222] text-slate-100 flex">
-      <aside className="w-72 shrink-0 border-l border-slate-700/60 bg-[#1a3636] flex flex-col h-screen sticky top-0">
-        <div className="p-6 flex items-center gap-3 border-b border-slate-700/60">
-          <div className="size-10 rounded-xl bg-cyan-400/20 text-cyan-300 flex items-center justify-center overflow-hidden">
-            <img src="/favicon.png" alt="ستوك" className="h-8 w-8 object-contain" />
-          </div>
-          <h1 className="text-lg font-bold tracking-tight">إدارة المخزون</h1>
+    <div dir="rtl" className="space-y-6 text-slate-100">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">لوحة التحكم</h2>
+          <p className="text-slate-400 mt-1">مرحباً بك، {user?.fullName || "المستخدم"}</p>
         </div>
+        <Link
+          href="/notifications"
+          className="relative p-2 rounded-full hover:bg-slate-800 transition-colors text-slate-300"
+          aria-label="الإشعارات"
+          title="الإشعارات"
+        >
+          <Bell className="h-5 w-5" />
+          <span className="absolute top-1 right-1 size-2.5 bg-red-500 rounded-full border-2 border-[#143030]" />
+        </Link>
+      </div>
 
-        <div className="p-4 flex flex-col gap-5 flex-1 overflow-y-auto">
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-900/40 border border-slate-700/40">
-            <div className="size-11 rounded-full bg-cyan-300/20 text-cyan-200 flex items-center justify-center border border-cyan-300/40 font-semibold">
-              {initials(user?.fullName)}
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold">{user?.fullName || "المستخدم"}</span>
-              <span className="text-xs text-slate-400">{getRoleLabel(user?.role || "technician")}</span>
-            </div>
-          </div>
-
-          <nav className="flex flex-col gap-2">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={`${item.href}-${item.label}`}
-                  href={item.href}
-                  className={
-                    item.active
-                      ? "flex items-center gap-3 px-4 py-3 rounded-xl bg-cyan-400/20 text-cyan-300 font-medium"
-                      : "flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800/70 transition-colors font-medium"
-                  }
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-
-        <div className="p-4 border-t border-slate-700/60">
-          <a className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800/70 transition-colors font-medium" href="#">
-            <CircleHelp className="h-4 w-4" />
-            المساعدة
-          </a>
-        </div>
-      </aside>
-
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="h-20 border-b border-slate-700/60 bg-[#143030]/90 backdrop-blur-md flex items-center justify-between px-8 shrink-0 sticky top-0 z-10">
-          <h2 className="text-2xl font-bold">مرحباً بك، {user?.fullName || "المستخدم"} 👋</h2>
-          <div className="flex items-center gap-5">
-            <Link href="/notifications" className="relative p-2 rounded-full hover:bg-slate-800 transition-colors text-slate-300">
-              <Bell className="h-5 w-5" />
-              <span className="absolute top-1 right-1 size-2.5 bg-red-500 rounded-full border-2 border-[#143030]" />
-            </Link>
-          </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto p-8 space-y-8">
+      <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <div className="lg:col-span-1 rounded-2xl bg-gradient-to-br from-cyan-400/20 to-cyan-400/5 border border-cyan-300/20 p-6 flex flex-col justify-between relative overflow-hidden">
               <div className="absolute -right-10 -top-10 size-40 bg-cyan-300/20 blur-3xl rounded-full" />
@@ -468,8 +397,8 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-        </div>
-      </main>
+
+      </div>
     </div>
   );
 }

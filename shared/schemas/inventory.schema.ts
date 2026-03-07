@@ -83,6 +83,7 @@ export const receivedDevices = pgTable("received_devices", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   technicianId: varchar("technician_id").notNull().references(() => users.id),
   supervisorId: varchar("supervisor_id").references(() => users.id),
+  itemTypeId: varchar("item_type_id").references(() => itemTypes.id),
   terminalId: text("terminal_id").notNull(),
   serialNumber: text("serial_number").notNull(),
   battery: boolean("battery").notNull().default(false),
@@ -187,6 +188,7 @@ export const insertWithdrawnDeviceSchema = createInsertSchema(withdrawnDevices).
 export const insertReceivedDeviceSchema = createInsertSchema(receivedDevices, {
   technicianId: z.string(),
   supervisorId: z.string().nullable().optional(),
+  itemTypeId: z.string().nullable().optional(),
   regionId: z.string().nullable().optional(),
 }).omit({
   id: true,

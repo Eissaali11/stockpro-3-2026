@@ -15,6 +15,26 @@ import { eq, and, desc, sql } from "drizzle-orm";
  * Handles withdrawn and received devices operations
  */
 export class DevicesService {
+  private itemTypeColumnExists: boolean | null = null;
+
+  private async hasItemTypeColumn(): Promise<boolean> {
+    if (this.itemTypeColumnExists !== null) {
+      return this.itemTypeColumnExists;
+    }
+
+    const result = await db.execute(sql`
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'received_devices'
+        AND column_name = 'item_type_id'
+      LIMIT 1
+    `);
+
+    const rows = (result as any).rows || [];
+    this.itemTypeColumnExists = rows.length > 0;
+    return this.itemTypeColumnExists;
+  }
 
   /**
    * Get all withdrawn devices
@@ -110,6 +130,41 @@ export class DevicesService {
     supervisorId?: string; 
     regionId?: string 
   }): Promise<ReceivedDevice[]> {
+    const hasItemTypeColumn = await this.hasItemTypeColumn();
+
+    if (!hasItemTypeColumn) {
+      const result = await db.execute(sql`
+        SELECT
+          id,
+          technician_id as "technicianId",
+          supervisor_id as "supervisorId",
+          terminal_id as "terminalId",
+          serial_number as "serialNumber",
+          battery,
+          charger_cable as "chargerCable",
+          charger_head as "chargerHead",
+          has_sim as "hasSim",
+          sim_card_type as "simCardType",
+          damage_part as "damagePart",
+          status,
+          admin_notes as "adminNotes",
+          approved_by as "approvedBy",
+          approved_at as "approvedAt",
+          region_id as "regionId",
+          created_at as "createdAt",
+          updated_at as "updatedAt",
+          NULL::varchar as "itemTypeId"
+        FROM received_devices
+        WHERE (${filters?.status ?? null}::text IS NULL OR status = ${filters?.status ?? null})
+          AND (${filters?.technicianId ?? null}::varchar IS NULL OR technician_id = ${filters?.technicianId ?? null})
+          AND (${filters?.supervisorId ?? null}::varchar IS NULL OR supervisor_id = ${filters?.supervisorId ?? null})
+          AND (${filters?.regionId ?? null}::varchar IS NULL OR region_id = ${filters?.regionId ?? null})
+        ORDER BY created_at DESC
+      `);
+
+      return ((result as any).rows || []) as ReceivedDevice[];
+    }
+
     let query = db
       .select()
       .from(receivedDevices)
@@ -141,6 +196,39 @@ export class DevicesService {
    * Get single received device
    */
   async getReceivedDevice(id: string): Promise<ReceivedDevice | undefined> {
+    const hasItemTypeColumn = await this.hasItemTypeColumn();
+
+    if (!hasItemTypeColumn) {
+      const result = await db.execute(sql`
+        SELECT
+          id,
+          technician_id as "technicianId",
+          supervisor_id as "supervisorId",
+          terminal_id as "terminalId",
+          serial_number as "serialNumber",
+          battery,
+          charger_cable as "chargerCable",
+          charger_head as "chargerHead",
+          has_sim as "hasSim",
+          sim_card_type as "simCardType",
+          damage_part as "damagePart",
+          status,
+          admin_notes as "adminNotes",
+          approved_by as "approvedBy",
+          approved_at as "approvedAt",
+          region_id as "regionId",
+          created_at as "createdAt",
+          updated_at as "updatedAt",
+          NULL::varchar as "itemTypeId"
+        FROM received_devices
+        WHERE id = ${id}
+        LIMIT 1
+      `);
+
+      const [device] = ((result as any).rows || []) as ReceivedDevice[];
+      return device || undefined;
+    }
+
     const [device] = await db
       .select()
       .from(receivedDevices)
@@ -154,6 +242,73 @@ export class DevicesService {
    * Create received device entry
    */
   async createReceivedDevice(data: InsertReceivedDevice): Promise<ReceivedDevice> {
+    const hasItemTypeColumn = await this.hasItemTypeColumn();
+
+    if (!hasItemTypeColumn) {
+      const result = await db.execute(sql`
+        INSERT INTO received_devices (
+          technician_id,
+          supervisor_id,
+          terminal_id,
+          serial_number,
+          battery,
+          charger_cable,
+          charger_head,
+          has_sim,
+          sim_card_type,
+          damage_part,
+          status,
+          region_id,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          ${data.technicianId},
+          ${data.supervisorId ?? null},
+          ${data.terminalId},
+          ${data.serialNumber},
+          ${data.battery ?? false},
+          ${data.chargerCable ?? false},
+          ${data.chargerHead ?? false},
+          ${data.hasSim ?? false},
+          ${data.simCardType ?? null},
+          ${data.damagePart ?? ""},
+          'pending',
+          ${data.regionId ?? null},
+          NOW(),
+          NOW()
+        )
+        RETURNING
+          id,
+          technician_id as "technicianId",
+          supervisor_id as "supervisorId",
+          terminal_id as "terminalId",
+          serial_number as "serialNumber",
+          battery,
+          charger_cable as "chargerCable",
+          charger_head as "chargerHead",
+          has_sim as "hasSim",
+          sim_card_type as "simCardType",
+          damage_part as "damagePart",
+          status,
+          admin_notes as "adminNotes",
+          approved_by as "approvedBy",
+          approved_at as "approvedAt",
+          region_id as "regionId",
+          created_at as "createdAt",
+          updated_at as "updatedAt",
+          NULL::varchar as "itemTypeId"
+      `);
+
+      const [newDevice] = ((result as any).rows || []) as ReceivedDevice[];
+
+      if (!newDevice) {
+        throw new Error("Failed to create received device entry");
+      }
+
+      return newDevice;
+    }
+
     const [newDevice] = await db
       .insert(receivedDevices)
       .values({
@@ -179,6 +334,48 @@ export class DevicesService {
     approvedBy: string, 
     adminNotes?: string
   ): Promise<ReceivedDevice> {
+    const hasItemTypeColumn = await this.hasItemTypeColumn();
+
+    if (!hasItemTypeColumn) {
+      const result = await db.execute(sql`
+        UPDATE received_devices
+        SET
+          status = ${status},
+          approved_by = ${approvedBy},
+          admin_notes = ${adminNotes ?? null},
+          approved_at = NOW(),
+          updated_at = NOW()
+        WHERE id = ${id}
+        RETURNING
+          id,
+          technician_id as "technicianId",
+          supervisor_id as "supervisorId",
+          terminal_id as "terminalId",
+          serial_number as "serialNumber",
+          battery,
+          charger_cable as "chargerCable",
+          charger_head as "chargerHead",
+          has_sim as "hasSim",
+          sim_card_type as "simCardType",
+          damage_part as "damagePart",
+          status,
+          admin_notes as "adminNotes",
+          approved_by as "approvedBy",
+          approved_at as "approvedAt",
+          region_id as "regionId",
+          created_at as "createdAt",
+          updated_at as "updatedAt",
+          NULL::varchar as "itemTypeId"
+      `);
+
+      const [updatedDevice] = ((result as any).rows || []) as ReceivedDevice[];
+      if (!updatedDevice) {
+        throw new Error("Received device not found");
+      }
+
+      return updatedDevice;
+    }
+
     const [updatedDevice] = await db
       .update(receivedDevices)
       .set({
@@ -283,11 +480,39 @@ export class DevicesService {
       .where(eq(withdrawnDevices.technicianName, technician?.fullName || ""))
       .orderBy(desc(withdrawnDevices.createdAt));
 
-    const received = await db
-      .select()
-      .from(receivedDevices)
-      .where(eq(receivedDevices.technicianId, technicianId))
-      .orderBy(desc(receivedDevices.createdAt));
+    const hasItemTypeColumn = await this.hasItemTypeColumn();
+
+    const received = hasItemTypeColumn
+      ? await db
+          .select()
+          .from(receivedDevices)
+          .where(eq(receivedDevices.technicianId, technicianId))
+          .orderBy(desc(receivedDevices.createdAt))
+      : (((await db.execute(sql`
+          SELECT
+            id,
+            technician_id as "technicianId",
+            supervisor_id as "supervisorId",
+            terminal_id as "terminalId",
+            serial_number as "serialNumber",
+            battery,
+            charger_cable as "chargerCable",
+            charger_head as "chargerHead",
+            has_sim as "hasSim",
+            sim_card_type as "simCardType",
+            damage_part as "damagePart",
+            status,
+            admin_notes as "adminNotes",
+            approved_by as "approvedBy",
+            approved_at as "approvedAt",
+            region_id as "regionId",
+            created_at as "createdAt",
+            updated_at as "updatedAt",
+            NULL::varchar as "itemTypeId"
+          FROM received_devices
+          WHERE technician_id = ${technicianId}
+          ORDER BY created_at DESC
+        `)) as any).rows || []);
 
     return {
       withdrawn,

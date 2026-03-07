@@ -37,6 +37,12 @@ export function registerSystemRoutes(app: Express): void {
   // Create backup
   app.get("/api/admin/backup", requireAuth, requireAdmin, systemController.createBackup);
 
+  // Get backup storage stats
+  app.get("/api/admin/backup/storage-stats", requireAuth, requireAdmin, systemController.getBackupStorageStats);
+
+  // Get backup history
+  app.get("/api/admin/backup/history", requireAuth, requireAdmin, systemController.getBackupHistory);
+
   // Restore backup
   app.post(
     "/api/admin/restore",

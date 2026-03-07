@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { PlusCircle } from "lucide-react";
+import { Minus, Plus, PlusCircle, Search, XCircle } from "lucide-react";
 import { useActiveItemTypes } from "@/hooks/use-item-types";
 
 interface UpdateMovingInventoryModalProps {
@@ -70,6 +70,7 @@ export function UpdateMovingInventoryModal({
   });
 
   const [entryUpdates, setEntryUpdates] = useState<Record<string, { boxes: number; units: number }>>({});
+  const [productSearchQuery, setProductSearchQuery] = useState("");
 
   useEffect(() => {
     if (!itemTypes) return;
@@ -96,6 +97,28 @@ export function UpdateMovingInventoryModal({
 
     setEntryUpdates(initial);
   }, [itemTypes, movingEntries, currentInventory]);
+
+  useEffect(() => {
+    if (!open) {
+      setProductSearchQuery("");
+    }
+  }, [open]);
+
+  const visibleItemTypes = useMemo(() => {
+    return (itemTypes || []).filter((it) => it.isActive && it.isVisible);
+  }, [itemTypes]);
+
+  const filteredItemTypes = useMemo(() => {
+    const normalized = productSearchQuery.trim().toLowerCase();
+    if (!normalized) return visibleItemTypes;
+
+    return visibleItemTypes.filter((itemType) => {
+      const nameAr = (itemType.nameAr || "").toLowerCase();
+      const nameEn = (itemType.nameEn || "").toLowerCase();
+      const category = (itemType.category || "").toLowerCase();
+      return nameAr.includes(normalized) || nameEn.includes(normalized) || category.includes(normalized);
+    });
+  }, [visibleItemTypes, productSearchQuery]);
 
   const updateMutation = useMutation({
     mutationFn: async () => {
@@ -189,7 +212,35 @@ export function UpdateMovingInventoryModal({
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {itemTypes?.filter(it => it.isActive && it.isVisible).map((itemType) => {
+          <div className="space-y-2">
+            <Label>البحث عن المنتج</Label>
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={productSearchQuery}
+                onChange={(event) => setProductSearchQuery(event.target.value)}
+                placeholder="ابحث بالاسم أو الفئة"
+                className="pr-10 pl-10"
+              />
+              {productSearchQuery.trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setProductSearchQuery("")}
+                  aria-label="مسح البحث"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <XCircle className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">عرض {filteredItemTypes.length} من {visibleItemTypes.length} صنف</p>
+          </div>
+
+          {filteredItemTypes.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              لا توجد منتجات مطابقة لبحثك
+            </div>
+          ) : filteredItemTypes.map((itemType) => {
             const currentValues = getCurrentValue(itemType.id);
             const updateValues = entryUpdates[itemType.id] || { boxes: 0, units: 0 };
 
@@ -204,14 +255,42 @@ export function UpdateMovingInventoryModal({
                         الحالي: {currentValues.boxes}
                       </span>
                     </div>
-                    <Input
-                      id={`${itemType.id}-boxes`}
-                      type="number"
-                      min="0"
-                      value={updateValues.boxes}
-                      onChange={(e) => handleBoxesChange(itemType.id, parseInt(e.target.value) || 0)}
-                      data-testid={`input-update-${itemType.id}-boxes`}
-                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleBoxesChange(itemType.id, updateValues.boxes - 1)}
+                        disabled={updateValues.boxes <= 0}
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <Input
+                        id={`${itemType.id}-boxes`}
+                        type="number"
+                        min="0"
+                        value={updateValues.boxes}
+                        onChange={(e) => handleBoxesChange(itemType.id, parseInt(e.target.value) || 0)}
+                        data-testid={`input-update-${itemType.id}-boxes`}
+                        className="text-center"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleBoxesChange(itemType.id, updateValues.boxes + 1)}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => handleBoxesChange(itemType.id, 0)}
+                        disabled={updateValues.boxes === 0}
+                      >
+                        تصفير
+                      </Button>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
@@ -220,14 +299,42 @@ export function UpdateMovingInventoryModal({
                         الحالي: {currentValues.units}
                       </span>
                     </div>
-                    <Input
-                      id={`${itemType.id}-units`}
-                      type="number"
-                      min="0"
-                      value={updateValues.units}
-                      onChange={(e) => handleUnitsChange(itemType.id, parseInt(e.target.value) || 0)}
-                      data-testid={`input-update-${itemType.id}-units`}
-                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleUnitsChange(itemType.id, updateValues.units - 1)}
+                        disabled={updateValues.units <= 0}
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <Input
+                        id={`${itemType.id}-units`}
+                        type="number"
+                        min="0"
+                        value={updateValues.units}
+                        onChange={(e) => handleUnitsChange(itemType.id, parseInt(e.target.value) || 0)}
+                        data-testid={`input-update-${itemType.id}-units`}
+                        className="text-center"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleUnitsChange(itemType.id, updateValues.units + 1)}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => handleUnitsChange(itemType.id, 0)}
+                        disabled={updateValues.units === 0}
+                      >
+                        تصفير
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

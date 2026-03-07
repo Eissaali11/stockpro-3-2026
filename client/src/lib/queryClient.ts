@@ -74,7 +74,13 @@ export const getQueryFn: <T>(options: {
       }
 
       await throwIfResNotOk(res);
-      return await res.json();
+
+      const responseText = await res.text();
+      if (!responseText || !responseText.trim()) {
+        return null;
+      }
+
+      return JSON.parse(responseText);
     } catch (error: any) {
       // If it's a network error (Failed to fetch), provide a more helpful message
       if (error.message === 'Failed to fetch' || error.name === 'TypeError') {

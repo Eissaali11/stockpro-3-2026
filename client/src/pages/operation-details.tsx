@@ -21,7 +21,6 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { saveAs } from "file-saver";
 import { useActiveItemTypes } from "@/hooks/use-item-types";
-import { NeoShellLayout } from "@/components/layout/neo-shell-layout";
 
 interface WarehouseTransfer {
   id: string;
@@ -525,20 +524,17 @@ export default function OperationDetailsPage() {
 
   if (isLoading) {
     return (
-      <NeoShellLayout title="تفاصيل العملية">
         <div className="min-h-[60vh] flex items-center justify-center bg-[#0A0D14] -m-8">
           <div className="text-center">
             <Loader2 className="mx-auto h-10 w-10 animate-spin text-cyan-300" />
             <p className="mt-3 text-slate-300">جاري تحميل تفاصيل العملية...</p>
           </div>
         </div>
-      </NeoShellLayout>
     );
   }
 
   if (!operationGroup) {
     return (
-      <NeoShellLayout title="تفاصيل العملية">
         <div className="-m-8 min-h-[calc(100vh-5rem)] bg-[#0A0D14] text-slate-200 flex items-center justify-center">
           <div className="max-w-md w-full rounded-3xl border border-white/10 bg-white/[0.02] backdrop-blur-2xl p-8 text-center">
             <XCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
@@ -552,7 +548,6 @@ export default function OperationDetailsPage() {
             </Link>
           </div>
         </div>
-      </NeoShellLayout>
     );
   }
 
@@ -620,7 +615,6 @@ export default function OperationDetailsPage() {
   ];
 
   return (
-    <NeoShellLayout title="تفاصيل العملية">
       <div className="-m-8 min-h-[calc(100vh-5rem)] bg-[#0A0D14] text-slate-200 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] bg-cyan-400/5 blur-[120px] rounded-full" />
@@ -842,6 +836,5 @@ export default function OperationDetailsPage() {
           </div>
         </div>
       </div>
-    </NeoShellLayout>
   );
 }

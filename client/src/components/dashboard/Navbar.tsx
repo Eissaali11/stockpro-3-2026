@@ -66,12 +66,14 @@ export const Navbar = () => {
 
   const { data: pendingReceivedDevicesCount } = useQuery<PendingCountResponse>({
     queryKey: ["/api/received-devices/pending/count"],
-    enabled: !!user?.id && (user?.role === 'admin' || user?.role === 'supervisor'),
+    enabled: !!user?.id && user?.role === 'supervisor',
   });
 
-  const notificationsBadgeCount = (user?.role === 'admin' || user?.role === 'supervisor')
+  const notificationsBadgeCount = user?.role === 'supervisor'
     ? (pendingRequestsCount?.count || 0) + (pendingReceivedDevicesCount?.count || 0)
-    : pendingTransfers.length;
+    : user?.role === 'admin'
+      ? (pendingRequestsCount?.count || 0)
+      : pendingTransfers.length;
 
   const navItems: NavItem[] = [
     {

@@ -6,7 +6,6 @@ import { Package, AlertTriangle, CheckCircle, Plus } from "lucide-react";
 import { useState } from "react";
 import { EditTechnicianFixedInventoryModal } from "@/components/edit-technician-fixed-inventory-modal";
 import { motion } from "framer-motion";
-import { Navbar } from "@/components/dashboard/Navbar";
 import { GridBackground } from "@/components/dashboard/GridBackground";
 import dashboardBg from "@assets/image_1762515061799.png";
 
@@ -146,8 +145,6 @@ export default function FixedInventoryDashboard() {
         className="fixed inset-0 opacity-5 bg-center bg-cover pointer-events-none z-0"
         style={{ backgroundImage: `url(${dashboardBg})` }}
       />
-
-      <Navbar />
 
       <div className="container mx-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 relative z-10">
         {/* Header */}

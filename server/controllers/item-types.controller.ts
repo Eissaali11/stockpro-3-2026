@@ -48,6 +48,10 @@ const toggleVisibilitySchema = z.object({
   isVisible: z.boolean(),
 });
 
+const serialTrackingQuerySchema = z.object({
+  status: z.enum(["pending", "approved", "rejected"]).optional(),
+});
+
 const itemTypesService = new ItemTypesService();
 
 const createItemTypeUseCase = new CreateItemTypeUseCase({
@@ -89,6 +93,26 @@ export class ItemTypesController {
       throw new NotFoundError("Item type not found");
     }
     res.json(type);
+  });
+
+  /**
+   * GET /api/item-types/:id/serial-tracking
+   * Get serial tracking data for one item type
+   */
+  getSerialTracking = asyncHandler(async (req: Request, res: Response) => {
+    const type = await itemTypesService.getItemTypeById(req.params.id);
+    if (!type) {
+      throw new NotFoundError("Item type not found");
+    }
+
+    const { status } = serialTrackingQuerySchema.parse(req.query);
+    const user = req.user!;
+    const rows = await itemTypesService.getSerialTrackingByItemType(req.params.id, {
+      status,
+      regionId: user.role === "supervisor" ? user.regionId ?? undefined : undefined,
+    });
+
+    res.json(rows);
   });
 
   /**

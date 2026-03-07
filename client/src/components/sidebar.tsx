@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Minus, Plus, FileText, TriangleAlert, Settings, LogOut, User, Shield, History, Smartphone, Package, TruckIcon, Home, Languages, Activity, Database } from "lucide-react";
 import { InventoryItemWithStatus, Transaction } from "@shared/schema";
 import AddItemModal from "./add-item-modal";
@@ -24,6 +25,7 @@ export default function Sidebar({ inventory }: SidebarProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   
   const { data: transactions, isLoading: transactionsLoading } = useQuery<Transaction[]>({
     queryKey: ["/api/transactions?recent=true&limit=10"],
@@ -32,6 +34,9 @@ export default function Sidebar({ inventory }: SidebarProps) {
   const lowStockItems = inventory?.filter(item => item.status === 'low') || [];
   const outOfStockItems = inventory?.filter(item => item.status === 'out') || [];
   const alertItems = [...lowStockItems, ...outOfStockItems];
+  const selectedTransactionItem = selectedTransaction
+    ? inventory?.find(item => item.id === selectedTransaction.itemId)
+    : undefined;
   
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -378,7 +383,13 @@ ${inventory.map(item =>
               {(Array.isArray(transactions) ? transactions : []).slice(0, 3).map((transaction) => {
                 const item = inventory?.find(i => i.id === transaction.itemId);
                 return (
-                  <div key={transaction.id} className="p-3 bg-accent/30 rounded-lg" data-testid={`transaction-${transaction.id}`}>
+                  <button
+                    key={transaction.id}
+                    type="button"
+                    onClick={() => setSelectedTransaction(transaction)}
+                    className="w-full p-3 bg-accent/30 rounded-lg text-right transition-colors hover:bg-accent/50"
+                    data-testid={`transaction-${transaction.id}`}
+                  >
                     <div className="flex items-center space-x-3 space-x-reverse">
                       <div className={`${
                         transaction.type === 'withdraw' 
@@ -405,7 +416,7 @@ ${inventory.map(item =>
                         {transaction.type === 'withdraw' ? '-' : '+'}{transaction.quantity}
                       </span>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -457,6 +468,57 @@ ${inventory.map(item =>
       </Card>
       
       {/* Modals */}
+      <Dialog open={!!selectedTransaction} onOpenChange={(open) => !open && setSelectedTransaction(null)}>
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle>تفاصيل العملية</DialogTitle>
+            <DialogDescription>
+              عرض كامل لبيانات العملية المختارة من سجل العمليات الأخيرة
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedTransaction && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">نوع العملية</span>
+                <Badge variant={selectedTransaction.type === 'withdraw' ? 'destructive' : 'default'}>
+                  {selectedTransaction.type === 'withdraw' ? 'سحب' : 'إضافة'}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 text-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">الصنف</span>
+                  <span className="font-medium text-right">{selectedTransactionItem?.name || 'صنف محذوف'}</span>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">الكمية</span>
+                  <span className="font-medium">
+                    {selectedTransaction.type === 'withdraw' ? '-' : '+'}{selectedTransaction.quantity}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">السبب</span>
+                  <span className="font-medium text-right">{selectedTransaction.reason || 'غير محدد'}</span>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">رقم العملية</span>
+                  <span className="font-medium text-xs">{selectedTransaction.id}</span>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">وقت التنفيذ</span>
+                  <span className="font-medium">{selectedTransaction.createdAt ? new Date(selectedTransaction.createdAt).toLocaleString('ar-SA') : 'غير متوفر'}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <AddItemModal open={showAddModal} onOpenChange={setShowAddModal} />
       <WithdrawalModal 
         open={showWithdrawModal} 
