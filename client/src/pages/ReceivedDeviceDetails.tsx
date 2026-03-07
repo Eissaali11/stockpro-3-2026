@@ -100,6 +100,7 @@ type DeliveryProof = {
   createdAt: Date | null;
   uploadedBy?: string;
   isImage: boolean;
+  kind: "deliveryProof" | "receiptForm";
 };
 
 const formatDate = (value?: string | null) => {
@@ -176,6 +177,10 @@ const extractUrlFromLogDetails = (details?: string | null): string | null => {
       "filepath",
       "deliveryfileurl",
       "deliveryproofurl",
+      "receiptformfileurl",
+      "receiptformurl",
+      "signedreceiptformurl",
+      "paperreceipturl",
       "attachmenturl",
       "proofurl",
       "documenturl",
@@ -219,6 +224,50 @@ const extractUrlFromLogDetails = (details?: string | null): string | null => {
   }
 
   return null;
+};
+
+const extractStringFieldFromLogDetails = (details: string | null | undefined, keys: string[]): string | null => {
+  if (!details) return null;
+
+  try {
+    const parsed = JSON.parse(details);
+    const queue: unknown[] = [parsed];
+    const keySet = new Set(keys.map((key) => key.toLowerCase().trim()));
+
+    while (queue.length) {
+      const current = queue.shift();
+
+      if (!current || typeof current !== "object") {
+        continue;
+      }
+
+      if (Array.isArray(current)) {
+        queue.push(...current);
+        continue;
+      }
+
+      for (const [key, value] of Object.entries(current as Record<string, unknown>)) {
+        if (typeof value === "string") {
+          if (keySet.has(key.toLowerCase().trim()) && value.trim()) {
+            return value.trim();
+          }
+        } else if (value && typeof value === "object") {
+          queue.push(value);
+        }
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+const extractUrlFieldFromLogDetails = (details: string | null | undefined, keys: string[]): string | null => {
+  const value = extractStringFieldFromLogDetails(details, keys);
+  if (!value) return null;
+
+  return extractFirstUrlFromText(value) || (/^(https?:\/\/|\/)/i.test(value) ? value : null);
 };
 
 const stageStatusConfig: Record<JourneyStage["status"], { text: string; badgeClass: string; cardClass: string }> = {
@@ -277,6 +326,7 @@ export default function ReceivedDeviceDetails() {
   const [adminNotes, setAdminNotes] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [deliveryPreviewOpen, setDeliveryPreviewOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<DeliveryProof | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const { data: device, isLoading } = useQuery<ReceivedDevice>({
@@ -315,6 +365,7 @@ export default function ReceivedDeviceDetails() {
           createdAt: new Date(deliveryLog.createdAt),
           uploadedBy: deliveryLog.userName,
           isImage: isImageFileUrl(normalizedUrl),
+          kind: "deliveryProof",
         };
       }
     }
@@ -328,11 +379,49 @@ export default function ReceivedDeviceDetails() {
         source: "adminNotes",
         createdAt: device?.updatedAt ? new Date(device.updatedAt) : null,
         isImage: isImageFileUrl(normalizedUrl),
+        kind: "deliveryProof",
       };
     }
 
     return null;
   }, [device?.adminNotes, device?.updatedAt, logs]);
+
+  const receiptFormProof = useMemo<DeliveryProof | null>(() => {
+    const deliveryProofLogs = logs
+      .filter((log) => String(log.action || "").toLowerCase() === "delivery_proof")
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    for (const log of deliveryProofLogs) {
+      const receiptFormUrl = extractUrlFieldFromLogDetails(log.details, [
+        "receiptFormFileUrl",
+        "receiptFormUrl",
+        "signedReceiptFormUrl",
+        "paperReceiptUrl",
+        "paperFormUrl",
+      ]);
+
+      if (!receiptFormUrl) continue;
+
+      const normalizedUrl = normalizeUrl(receiptFormUrl);
+      const explicitName = extractStringFieldFromLogDetails(log.details, [
+        "receiptFormFileName",
+        "receiptFormName",
+        "paperReceiptName",
+      ]);
+
+      return {
+        url: normalizedUrl,
+        fileName: explicitName || getFileNameFromUrl(normalizedUrl),
+        source: "log",
+        createdAt: new Date(log.createdAt),
+        uploadedBy: log.userName,
+        isImage: isImageFileUrl(normalizedUrl),
+        kind: "receiptForm",
+      };
+    }
+
+    return null;
+  }, [logs]);
 
   const updateStatusMutation = useMutation({
     mutationFn: ({ status, notes }: { status: DeviceStatus; notes: string }) =>
@@ -571,12 +660,12 @@ export default function ReceivedDeviceDetails() {
       });
     }
 
-    if (deliveryProof || deliveryProofLog) {
+    if (deliveryProof || receiptFormProof || deliveryProofLog) {
       stages.push({
         id: "delivery-proof",
         title: "رفع ملف التسليم",
-        description: "تم رفع ملف التسليم من تطبيق الفني وإرساله للمشرف للمراجعة.",
-        createdAt: deliveryProof?.createdAt || new Date(deliveryProofLog?.createdAt || Date.now()),
+        description: "تم رفع ملف التسليم/فرم الاستلام الموقّع من تطبيق الفني وإرساله للمشرف للمراجعة.",
+        createdAt: deliveryProof?.createdAt || receiptFormProof?.createdAt || new Date(deliveryProofLog?.createdAt || Date.now()),
         status: device.status === "approved" ? "done" : "active",
         icon: FileText,
       });
@@ -590,7 +679,7 @@ export default function ReceivedDeviceDetails() {
           ? "تم تسليم الجهاز للعميل واعتماد العملية."
           : device.status === "rejected"
             ? "تم إيقاف التسليم بعد المراجعة."
-            : deliveryProof
+            : deliveryProof || receiptFormProof
               ? "تم رفع ملف التسليم من تطبيق الفني وبانتظار الاعتماد النهائي."
               : "الجهاز بانتظار إتمام التسليم للعميل.",
       createdAt: deliveryAt,
@@ -616,7 +705,7 @@ export default function ReceivedDeviceDetails() {
       }));
 
     return [...stages, ...additionalOperationalStages];
-  }, [deliveryProof, device, logs]);
+  }, [deliveryProof, receiptFormProof, device, logs]);
 
   const handleAction = (action: "approve" | "reject") => {
     setActionType(action);
@@ -655,15 +744,7 @@ export default function ReceivedDeviceDetails() {
 
   const status = statusConfig[device.status];
   const StatusIcon = status.icon;
-  const deliveryIsPdf = deliveryProof ? isPdfFileUrl(deliveryProof.url) : false;
-  const DeliveryFileIcon = deliveryProof?.isImage ? Image : FileText;
-  const deliveryFileTypeLabel = deliveryProof
-    ? deliveryProof.isImage
-      ? "صورة تسليم"
-      : deliveryIsPdf
-        ? "ملف PDF"
-        : "ملف مرفق"
-    : "";
+  const primaryPreviewFile = previewFile || deliveryProof || receiptFormProof || null;
 
   const handleExportPdf = async () => {
     if (!device || isExportingPdf) return;
@@ -676,7 +757,7 @@ export default function ReceivedDeviceDetails() {
         statusText: status.text,
         journeyStages,
         timeline: timelineItems,
-        deliveryProof,
+        deliveryProof: deliveryProof || receiptFormProof,
       });
 
       toast({
@@ -862,20 +943,21 @@ export default function ReceivedDeviceDetails() {
                             size="sm"
                             variant="outline"
                             onClick={() => {
-                              if (deliveryProof) {
+                              if (deliveryProof || receiptFormProof) {
+                                setPreviewFile(deliveryProof || receiptFormProof);
                                 setDeliveryPreviewOpen(true);
                                 return;
                               }
 
                               toast({
                                 title: "لا يوجد ملف تسليم",
-                                description: "لم يتم رفع صورة أو PDF تسليم من تطبيق الفني لهذا الجهاز بعد.",
+                                description: "لم يتم رفع ملف تسليم أو فرم استلام ورقي من تطبيق الفني لهذا الجهاز بعد.",
                               });
                             }}
                             className="border-cyan-500/40 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-60"
                           >
                             <Eye className="h-4 w-4 ml-1" />
-                            {deliveryProof ? "استعراض ملف التسليم" : "لا يوجد ملف تسليم"}
+                            {deliveryProof || receiptFormProof ? "استعراض ملف التسليم" : "لا يوجد ملف تسليم"}
                           </Button>
                         </div>
                       )}
@@ -891,70 +973,110 @@ export default function ReceivedDeviceDetails() {
           <div className="flex items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-cyan-300" />
-              <h3 className="text-lg font-bold text-white">ملف التسليم المرفوع من الفني</h3>
+              <h3 className="text-lg font-bold text-white">ملفات التسليم المرفوعة من الفني</h3>
             </div>
-            {deliveryProof && (
+            {(deliveryProof || receiptFormProof) && (
               <Badge className="border border-cyan-500/30 bg-cyan-500/10 text-cyan-200">
-                {deliveryProof.source === "log" ? "من سجل العمليات" : "من ملاحظات المشرف"}
+                {(deliveryProof ? 1 : 0) + (receiptFormProof ? 1 : 0)} ملف
               </Badge>
             )}
           </div>
 
-          {deliveryProof ? (
+          {deliveryProof || receiptFormProof ? (
             <div className="space-y-4">
-              <div className="bg-slate-800/60 border border-cyan-500/20 rounded-xl p-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg border border-cyan-500/30 bg-cyan-500/10 flex items-center justify-center">
-                    <DeliveryFileIcon className="h-5 w-5 text-cyan-300" />
+              {deliveryProof && (
+                <div className="bg-slate-800/60 border border-cyan-500/20 rounded-xl p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg border border-cyan-500/30 bg-cyan-500/10 flex items-center justify-center">
+                      {deliveryProof.isImage ? <Image className="h-5 w-5 text-cyan-300" /> : <FileText className="h-5 w-5 text-cyan-300" />}
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-200 font-semibold">{deliveryProof.fileName}</p>
+                      <p className="text-xs text-cyan-200/80 mt-0.5">
+                        {deliveryProof.isImage ? "صورة تسليم" : isPdfFileUrl(deliveryProof.url) ? "ملف PDF" : "ملف مرفق"}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-slate-200 font-semibold">{deliveryProof.fileName}</p>
-                    <p className="text-xs text-cyan-200/80 mt-0.5">{deliveryFileTypeLabel}</p>
+                  <div className="mt-2 text-xs text-slate-400 space-y-1">
+                    <p>
+                      تاريخ الرفع: {deliveryProof.createdAt ? `${formatDate(deliveryProof.createdAt.toISOString())} - ${formatTime(deliveryProof.createdAt.toISOString())}` : "غير متوفر"}
+                    </p>
+                    {deliveryProof.uploadedBy && <p>تم الرفع بواسطة: {deliveryProof.uploadedBy}</p>}
+                    <p>المصدر: {deliveryProof.source === "log" ? "سجل العمليات" : "ملاحظات المشرف"}</p>
+                  </div>
+                  <div className="mt-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setPreviewFile(deliveryProof);
+                          setDeliveryPreviewOpen(true);
+                        }}
+                        className="h-9 bg-cyan-600 hover:bg-cyan-500 text-white"
+                      >
+                        <Eye className="h-4 w-4 ml-1" />
+                        استعراض
+                      </Button>
+
+                      <a
+                        href={deliveryProof.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        فتح ملف التسليم
+                      </a>
+                    </div>
                   </div>
                 </div>
-                <div className="mt-2 text-xs text-slate-400 space-y-1">
-                  <p>
-                    تاريخ الرفع: {deliveryProof.createdAt ? `${formatDate(deliveryProof.createdAt.toISOString())} - ${formatTime(deliveryProof.createdAt.toISOString())}` : "غير متوفر"}
-                  </p>
-                  {deliveryProof.uploadedBy && <p>تم الرفع بواسطة: {deliveryProof.uploadedBy}</p>}
-                </div>
-                <div className="mt-4">
-                  <div className="flex flex-wrap items-center gap-2">
+              )}
+
+              {receiptFormProof && (
+                <div className="bg-slate-800/60 border border-amber-500/20 rounded-xl p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg border border-amber-500/30 bg-amber-500/10 flex items-center justify-center">
+                      {receiptFormProof.isImage ? <Image className="h-5 w-5 text-amber-300" /> : <FileText className="h-5 w-5 text-amber-300" />}
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-200 font-semibold">{receiptFormProof.fileName}</p>
+                      <p className="text-xs text-amber-200/80 mt-0.5">فرم الاستلام الورقي الموقّع</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs text-slate-400 space-y-1">
+                    <p>
+                      تاريخ الرفع: {receiptFormProof.createdAt ? `${formatDate(receiptFormProof.createdAt.toISOString())} - ${formatTime(receiptFormProof.createdAt.toISOString())}` : "غير متوفر"}
+                    </p>
+                    {receiptFormProof.uploadedBy && <p>تم الرفع بواسطة: {receiptFormProof.uploadedBy}</p>}
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
-                      onClick={() => setDeliveryPreviewOpen(true)}
-                      className="h-9 bg-cyan-600 hover:bg-cyan-500 text-white"
+                      onClick={() => {
+                        setPreviewFile(receiptFormProof);
+                        setDeliveryPreviewOpen(true);
+                      }}
+                      className="h-9 bg-amber-600 hover:bg-amber-500 text-white"
                     >
                       <Eye className="h-4 w-4 ml-1" />
-                      استعراض
+                      استعراض الفرم
                     </Button>
-
                     <a
-                      href={deliveryProof.url}
+                      href={receiptFormProof.url}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium"
                     >
                       <ExternalLink className="h-4 w-4" />
-                      فتح ملف التسليم
+                      فتح فرم الاستلام
                     </a>
                   </div>
-                </div>
-              </div>
-
-              {deliveryProof.isImage && (
-                <div className="bg-black/25 border border-white/10 rounded-xl p-3">
-                  <img
-                    src={deliveryProof.url}
-                    alt="ملف التسليم"
-                    className="w-full max-h-[360px] object-contain rounded-lg"
-                  />
                 </div>
               )}
             </div>
           ) : (
             <div className="bg-slate-800/40 border border-white/10 rounded-xl p-4 text-slate-300 text-sm">
-              لا يوجد حالياً ملف تسليم مرفوع لهذا الجهاز. سيظهر هنا تلقائياً عند توفر رابط الملف في سجل العمليات أو الملاحظات.
+              لا يوجد حالياً ملف تسليم مرفوع لهذا الجهاز. سيظهر هنا تلقائياً عند توفر رابط الملف في سجل العمليات أو الملاحظات، بما يشمل فرم الاستلام الورقي الموقّع.
             </div>
           )}
         </section>
@@ -1068,7 +1190,15 @@ export default function ReceivedDeviceDetails() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deliveryPreviewOpen} onOpenChange={setDeliveryPreviewOpen}>
+      <Dialog
+        open={deliveryPreviewOpen}
+        onOpenChange={(open) => {
+          setDeliveryPreviewOpen(open);
+          if (!open) {
+            setPreviewFile(null);
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-4xl bg-slate-900 border-white/10">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
@@ -1076,24 +1206,24 @@ export default function ReceivedDeviceDetails() {
               استعراض بيانات التسليم
             </DialogTitle>
             <DialogDescription className="text-slate-400">
-              {deliveryProof?.fileName || "ملف التسليم"}
+              {primaryPreviewFile?.fileName || "ملف التسليم"}
             </DialogDescription>
           </DialogHeader>
 
-          {deliveryProof ? (
+          {primaryPreviewFile ? (
             <div className="space-y-3">
-              {deliveryProof.isImage ? (
+              {primaryPreviewFile.isImage ? (
                 <div className="bg-black/30 border border-white/10 rounded-lg p-2">
                   <img
-                    src={deliveryProof.url}
+                    src={primaryPreviewFile.url}
                     alt="صورة التسليم"
                     className="w-full max-h-[70vh] object-contain rounded"
                   />
                 </div>
-              ) : isPdfFileUrl(deliveryProof.url) ? (
+              ) : isPdfFileUrl(primaryPreviewFile.url) ? (
                 <div className="bg-black/30 border border-white/10 rounded-lg overflow-hidden">
                   <iframe
-                    src={deliveryProof.url}
+                    src={primaryPreviewFile.url}
                     title="ملف PDF للتسليم"
                     className="w-full h-[70vh]"
                   />
@@ -1106,7 +1236,7 @@ export default function ReceivedDeviceDetails() {
 
               <div className="flex justify-end">
                 <a
-                  href={deliveryProof.url}
+                  href={primaryPreviewFile.url}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium"

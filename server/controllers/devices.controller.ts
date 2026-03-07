@@ -233,15 +233,22 @@ export class DevicesController {
       throw new AuthorizationError("هذه العملية متاحة للفني فقط");
     }
 
-    const schema = z.object({
-      fileUrl: z.string().trim().min(1),
-      fileName: z.string().trim().optional(),
-      customerName: z.string().trim().optional(),
-      notes: z.string().trim().optional(),
-      deliveredAt: z.string().datetime().optional(),
-      latitude: z.number().optional(),
-      longitude: z.number().optional(),
-    });
+    const schema = z
+      .object({
+        fileUrl: z.string().trim().min(1).optional(),
+        fileName: z.string().trim().optional(),
+        receiptFormFileUrl: z.string().trim().min(1).optional(),
+        receiptFormFileName: z.string().trim().optional(),
+        customerName: z.string().trim().optional(),
+        notes: z.string().trim().optional(),
+        deliveredAt: z.string().datetime().optional(),
+        latitude: z.number().optional(),
+        longitude: z.number().optional(),
+      })
+      .refine((value) => !!(value.fileUrl || value.receiptFormFileUrl), {
+        message: "يجب إرفاق ملف تسليم واحد على الأقل",
+        path: ["fileUrl"],
+      });
 
     const payload = schema.parse(req.body);
 
@@ -256,6 +263,9 @@ export class DevicesController {
 
     const deliveredAt = payload.deliveredAt || new Date().toISOString();
 
+    const primaryFileUrl = payload.fileUrl || payload.receiptFormFileUrl || "";
+    const primaryFileName = payload.fileName || payload.receiptFormFileName;
+
     await repositories.systemLogs.createSystemLog({
       userId: user.id,
       userName: user.username,
@@ -267,8 +277,10 @@ export class DevicesController {
       entityName: device.serialNumber,
       description: `تم رفع ملف تسليم الجهاز للعميل من تطبيق الفني: ${device.serialNumber}`,
       details: JSON.stringify({
-        fileUrl: payload.fileUrl,
-        fileName: payload.fileName || null,
+        fileUrl: primaryFileUrl,
+        fileName: primaryFileName || null,
+        receiptFormFileUrl: payload.receiptFormFileUrl || null,
+        receiptFormFileName: payload.receiptFormFileName || null,
         customerName: payload.customerName || null,
         notes: payload.notes || null,
         deliveredAt,

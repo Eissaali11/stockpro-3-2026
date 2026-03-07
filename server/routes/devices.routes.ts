@@ -17,15 +17,22 @@ const updateDeviceStatusSchema = z.object({
   adminNotes: z.string().optional(),
 });
 
-const uploadDeliveryProofSchema = z.object({
-  fileUrl: z.string().trim().min(1),
-  fileName: z.string().trim().optional(),
-  customerName: z.string().trim().optional(),
-  notes: z.string().trim().optional(),
-  deliveredAt: z.string().datetime().optional(),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
-});
+const uploadDeliveryProofSchema = z
+  .object({
+    fileUrl: z.string().trim().min(1).optional(),
+    fileName: z.string().trim().optional(),
+    receiptFormFileUrl: z.string().trim().min(1).optional(),
+    receiptFormFileName: z.string().trim().optional(),
+    customerName: z.string().trim().optional(),
+    notes: z.string().trim().optional(),
+    deliveredAt: z.string().datetime().optional(),
+    latitude: z.number().optional(),
+    longitude: z.number().optional(),
+  })
+  .refine((value) => !!(value.fileUrl || value.receiptFormFileUrl), {
+    message: "يجب إرفاق ملف تسليم واحد على الأقل (delivery أو فرم الاستلام الورقي)",
+    path: ["fileUrl"],
+  });
 
 export function registerDevicesRoutes(app: Express): void {
   // ===== Withdrawn Devices =====
