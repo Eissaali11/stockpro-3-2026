@@ -26,6 +26,13 @@ type TechnicianInventoryRecord = {
   movingInventory?: Record<string, any> | null;
 };
 
+type ScanOperationType =
+  | "ADD_STOCK"
+  | "DEDUCT_STOCK"
+  | "TRANSFER_TO_TECHNICIAN"
+  | "WITHDRAW_FROM_TECHNICIAN";
+type PackagingType = "box" | "unit";
+
 const fetchJson = async (url: string): Promise<any> => {
   const response = await fetch(url, { credentials: "include" });
 
@@ -71,29 +78,30 @@ const fetchArray = async (url: string): Promise<any[]> => {
 };
 
 const postScanReceive = async (body: any) => {
-  const endpoints = ["/api/products/scan-receive", "/api/product-receipts", "/api/inventory/receive"];
+  const response = await fetch("/api/inventory-scan/execute", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
 
-  for (const endpoint of endpoints) {
+  const rawText = await response.text();
+  let payload: any = {};
+  if (rawText?.trim()) {
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        return payload;
-      }
+      payload = JSON.parse(rawText);
     } catch {
-      continue;
+      payload = { message: rawText };
     }
   }
 
-  throw new Error("تعذر تسجيل الاستلام عبر أي واجهة API متاحة.");
+  if (!response.ok) {
+    throw new Error(payload?.message || "تعذر تنفيذ حركة المسح.");
+  }
+
+  return payload;
 };
 
 export default function ProductsManagementPage() {
@@ -103,9 +111,13 @@ export default function ProductsManagementPage() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [scannedValue, setScannedValue] = useState("");
+  const [operationType, setOperationType] = useState<ScanOperationType>("ADD_STOCK");
+  const [packagingType, setPackagingType] = useState<PackagingType>("unit");
   const [quantity, setQuantity] = useState(1);
   const [storageType, setStorageType] = useState<StorageBucketType>("warehouse");
   const [storageId, setStorageId] = useState("");
+  const [transferWarehouseId, setTransferWarehouseId] = useState("");
+  const [transferTechnicianId, setTransferTechnicianId] = useState("");
   const [latestScans, setLatestScans] = useState<ProductScanRecord[]>([]);
   const [receiveMessage, setReceiveMessage] = useState<string | null>(null);
 
@@ -298,6 +310,11 @@ export default function ProductsManagementPage() {
   );
 
   useEffect(() => {
+    if (user?.role === "technician" && storageType !== "technician") {
+      setStorageType("technician");
+      return;
+    }
+
     const options = storageType === "warehouse" ? warehouseOptions : technicianOptions;
     if (options.length === 0) {
       if (storageId !== "") {
@@ -311,6 +328,25 @@ export default function ProductsManagementPage() {
       setStorageId(options[0].id);
     }
   }, [storageType, warehouseOptions, technicianOptions, storageId]);
+
+  useEffect(() => {
+    if (!transferWarehouseId || !warehouseOptions.some((option) => option.id === transferWarehouseId)) {
+      setTransferWarehouseId(warehouseOptions[0]?.id ?? "");
+    }
+  }, [warehouseOptions, transferWarehouseId]);
+
+  useEffect(() => {
+    if (user?.role === "technician") {
+      if (transferTechnicianId !== user.id) {
+        setTransferTechnicianId(user.id);
+      }
+      return;
+    }
+
+    if (!transferTechnicianId || !technicianOptions.some((option) => option.id === transferTechnicianId)) {
+      setTransferTechnicianId(technicianOptions[0]?.id ?? "");
+    }
+  }, [technicianOptions, transferTechnicianId, user?.id, user?.role]);
 
   const rows = useMemo(
     () => buildProductDistributionRows(productMasters, warehouseInventoryRows, technicianInventoryRows),
@@ -340,6 +376,7 @@ export default function ProductsManagementPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/supervisor/technicians-inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/my-fixed-inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/my-moving-inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stock-movements"] });
     },
   });
 
@@ -350,8 +387,19 @@ export default function ProductsManagementPage() {
       return;
     }
 
-    if (!storageId) {
-      setReceiveMessage("يرجى اختيار موقع التخزين قبل الاستلام.");
+    const isTransferMode = operationType === "TRANSFER_TO_TECHNICIAN" || operationType === "WITHDRAW_FROM_TECHNICIAN";
+
+    if (isTransferMode) {
+      if (!transferWarehouseId) {
+        setReceiveMessage("يرجى اختيار المستودع قبل تنفيذ التحويل.");
+        return;
+      }
+      if (!transferTechnicianId) {
+        setReceiveMessage("يرجى اختيار الفني قبل تنفيذ التحويل.");
+        return;
+      }
+    } else if (!storageId) {
+      setReceiveMessage("يرجى اختيار موقع التخزين قبل التنفيذ.");
       return;
     }
 
@@ -367,24 +415,52 @@ export default function ProductsManagementPage() {
     }
 
     try {
-      await receiveMutation.mutateAsync({
-        itemTypeId: matchedProduct.id,
+      const payload = {
+        source: "scanner",
+        operationType,
+        itemCode: matchedProduct.id,
+        packagingType,
         quantity,
-        storageType,
-        storageId,
-        scannedValue: trimmedValue,
-      });
+        ownerType: !isTransferMode ? storageType : undefined,
+        ownerId: !isTransferMode ? storageId : undefined,
+        warehouseId: isTransferMode ? transferWarehouseId : undefined,
+        technicianId: isTransferMode ? transferTechnicianId : undefined,
+        reasonCode:
+          operationType === "ADD_STOCK"
+            ? "scan_add"
+            : operationType === "DEDUCT_STOCK"
+              ? "scan_deduct"
+              : operationType === "TRANSFER_TO_TECHNICIAN"
+                ? "scan_transfer_to_technician"
+                : "scan_withdraw_from_technician",
+        idempotencyKey: isTransferMode
+          ? `${operationType}:${transferWarehouseId}:${transferTechnicianId}:${matchedProduct.id}:${packagingType}:${quantity}:${trimmedValue}`
+          : `${storageType}:${storageId}:${matchedProduct.id}:${operationType}:${packagingType}:${quantity}:${trimmedValue}`,
+        notes: `scannedValue:${trimmedValue}`,
+      };
 
+      await receiveMutation.mutateAsync(payload);
+
+      const selectedWarehouse = warehouseOptions.find((option) => option.id === transferWarehouseId)?.label ?? "مستودع";
+      const selectedTechnician = technicianOptions.find((option) => option.id === transferTechnicianId)?.label ?? "فني";
       const options = storageType === "warehouse" ? warehouseOptions : technicianOptions;
-      const storageName = options.find((option) => option.id === storageId)?.label ?? "موقع تخزين";
+      const directStorageName = options.find((option) => option.id === storageId)?.label ?? "موقع تخزين";
+      const storageName =
+        operationType === "TRANSFER_TO_TECHNICIAN"
+          ? `${selectedWarehouse} → ${selectedTechnician}`
+          : operationType === "WITHDRAW_FROM_TECHNICIAN"
+            ? `${selectedTechnician} → ${selectedWarehouse}`
+            : directStorageName;
 
       const newRecord: ProductScanRecord = {
         id: `${Date.now()}-${matchedProduct.id}`,
         itemTypeId: matchedProduct.id,
         itemNameAr: matchedProduct.nameAr,
         quantity,
-        storageType,
-        storageId,
+        operationType,
+        packagingType,
+        storageType: isTransferMode ? "warehouse" : storageType,
+        storageId: isTransferMode ? `${transferWarehouseId}:${transferTechnicianId}` : storageId,
         storageName,
         createdAt: new Date().toISOString(),
       };
@@ -392,7 +468,16 @@ export default function ProductsManagementPage() {
       setLatestScans((previous) => [newRecord, ...previous].slice(0, 20));
       setScannedValue("");
       setQuantity(1);
-      setReceiveMessage(`تم استقبال ${quantity} من ${matchedProduct.nameAr} بنجاح.`);
+      const operationText =
+        operationType === "ADD_STOCK"
+          ? "إضافة"
+          : operationType === "DEDUCT_STOCK"
+            ? "إنقاص"
+            : operationType === "TRANSFER_TO_TECHNICIAN"
+              ? "تحويل"
+              : "سحب";
+      const packagingText = packagingType === "box" ? "كرتون" : "وحدة";
+      setReceiveMessage(`تم ${operationText} ${quantity} ${packagingText} من ${matchedProduct.nameAr} بنجاح.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "حدث خطأ أثناء تسجيل الاستلام.";
       setReceiveMessage(message);
@@ -452,12 +537,20 @@ export default function ProductsManagementPage() {
       <ProductsScanReceiver
         scannedValue={scannedValue}
         onScannedValueChange={setScannedValue}
+        operationType={operationType}
+        onOperationTypeChange={setOperationType}
+        packagingType={packagingType}
+        onPackagingTypeChange={setPackagingType}
         quantity={quantity}
         onQuantityChange={setQuantity}
         storageType={storageType}
         onStorageTypeChange={setStorageType}
         storageId={storageId}
         onStorageIdChange={setStorageId}
+        transferWarehouseId={transferWarehouseId}
+        onTransferWarehouseIdChange={setTransferWarehouseId}
+        transferTechnicianId={transferTechnicianId}
+        onTransferTechnicianIdChange={setTransferTechnicianId}
         warehouseOptions={warehouseOptions}
         technicianOptions={technicianOptions}
         onReceive={handleReceive}

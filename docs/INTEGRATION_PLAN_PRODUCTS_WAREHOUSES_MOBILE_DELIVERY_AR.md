@@ -65,6 +65,8 @@
 - مسح بالكاميرا داخل التطبيق.
 - يدعم التوقيع، رفع الصور، ورفع/توليد نموذج استلام PDF.
 
+> ملاحظة تنفيذية: تطبيق الجوال سيكون **Flutter app منفصل** وسيتم تطويره في مرحلة لاحقة.
+
 > النتيجة: كلا القناتين تغذيان نفس محرك الحركات ونفس قواعد التحقق.
 
 ---
@@ -220,3 +222,72 @@
 - يوصى باعتماد **Ledger-First Architecture**: أي تحديث رصيد يجب أن يمر عبر سجل الحركة أولاً.
 - يوصى بإضافة دعم **Offline Queue** في تطبيق الجوال للمناطق ذات الإنترنت الضعيف.
 - يوصى بتوحيد `reasonCode` عبر جميع الوحدات لتحسين التقارير.
+
+---
+
+## 14) التنفيذ الحالي (المرحلة الأولى)
+تم تنفيذ نقطة API موحدة للمسح في الخادم:
+
+- `POST /api/inventory-scan/execute`
+- المصادقة: `requireAuth`
+- API جاهز لمصدرين: `scanner` أو `mobile`
+- التنفيذ الحالي في الواجهة: `scanner` (ويب/قارئ باركود)
+- مصدر `mobile` محجوز لتطبيق Flutter المنفصل (لاحقاً)
+
+### 14.1 العمليات المدعومة في نقطة المسح
+- `ADD_STOCK`
+- `DEDUCT_STOCK`
+- `TRANSFER_TO_TECHNICIAN`
+- `WITHDRAW_FROM_TECHNICIAN`
+
+### 14.2 أمثلة Payload
+
+#### إضافة رصيد لمستودع
+```json
+{
+   "source": "scanner",
+   "operationType": "ADD_STOCK",
+   "itemCode": "rollPaper",
+   "packagingType": "box",
+   "quantity": 5,
+   "ownerType": "warehouse",
+   "ownerId": "<warehouse-id>",
+   "reasonCode": "initial_stock"
+}
+```
+
+#### إنقاص رصيد من فني
+```json
+{
+   "source": "scanner",
+   "operationType": "DEDUCT_STOCK",
+   "itemCode": "rollPaper",
+   "packagingType": "unit",
+   "quantity": 2,
+   "ownerType": "technician",
+   "ownerId": "<technician-id>",
+   "reasonCode": "customer_usage"
+}
+```
+
+#### تحويل من مستودع إلى فني
+```json
+{
+   "source": "scanner",
+   "operationType": "TRANSFER_TO_TECHNICIAN",
+   "itemCode": "rollPaper",
+   "packagingType": "box",
+   "quantity": 1,
+   "warehouseId": "<warehouse-id>",
+   "technicianId": "<technician-id>",
+   "reasonCode": "warehouse_dispatch"
+}
+```
+
+### 14.3 ملاحظات تنفيذية مهمة
+- البحث عن المنتج في التنفيذ الحالي يتم عبر `itemType.id` أو الاسم (`nameAr` / `nameEn`).
+- عند توفير `idempotencyKey` يتم منع إعادة تنفيذ نفس عملية المسح.
+- يتم تحديث مخزون **entries الجديد** مع مزامنة الجداول القديمة للحفاظ على التوافق الخلفي.
+- يتم تسجيل كل عملية في:
+   - `stock_movements` كسجل حركة.
+   - `system_logs` كسجل تدقيق مفصل.

@@ -38,6 +38,12 @@ export type ProductScanRecord = {
   itemTypeId: string;
   itemNameAr: string;
   quantity: number;
+  operationType:
+    | "ADD_STOCK"
+    | "DEDUCT_STOCK"
+    | "TRANSFER_TO_TECHNICIAN"
+    | "WITHDRAW_FROM_TECHNICIAN";
+  packagingType: "box" | "unit";
   storageType: StorageBucketType;
   storageId: string;
   storageName: string;
