@@ -237,8 +237,9 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
           updatedAt: asDate(user.updatedAt),
         })
         .onConflictDoUpdate({
-          target: users.username,
+          target: users.id,
           set: {
+            username,
             email,
             password,
             fullName: asString(user.fullName) ?? username,
