@@ -180,6 +180,8 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
     ? data.warehouseTransfers
     : [];
 
+  const importedUserIdMap = new Map<string, string>();
+
   await db.transaction(async (tx) => {
     for (const row of importedRegions) {
       const region = row as Record<string, unknown>;
@@ -286,6 +288,8 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
           });
       }
 
+      importedUserIdMap.set(id, targetUserId);
+
       summary.users += 1;
     }
 
@@ -296,8 +300,15 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
       const location = asString(warehouse.location);
       if (!name || !location) continue;
 
-      const fallbackCreatorId =
-        asString((importedUsers[0] as Record<string, unknown> | undefined)?.id) ?? "system";
+      const fallbackCreatorRawId = asString((importedUsers[0] as Record<string, unknown> | undefined)?.id);
+      const fallbackCreatorId = fallbackCreatorRawId
+        ? importedUserIdMap.get(fallbackCreatorRawId) ?? fallbackCreatorRawId
+        : null;
+      const createdByRaw = asString(warehouse.createdBy);
+      const createdBy = createdByRaw
+        ? importedUserIdMap.get(createdByRaw) ?? createdByRaw
+        : fallbackCreatorId;
+      if (!createdBy) continue;
 
       await tx
         .insert(warehouses)
@@ -307,7 +318,7 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
           location,
           description: asString(warehouse.description),
           isActive: asBoolean(warehouse.isActive, true),
-          createdBy: asString(warehouse.createdBy) ?? fallbackCreatorId,
+          createdBy,
           regionId: asString(warehouse.regionId),
           createdAt: asDate(warehouse.createdAt),
           updatedAt: asDate(warehouse.updatedAt),
@@ -319,7 +330,7 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
             location,
             description: asString(warehouse.description),
             isActive: asBoolean(warehouse.isActive, true),
-            createdBy: asString(warehouse.createdBy) ?? fallbackCreatorId,
+            createdBy,
             regionId: asString(warehouse.regionId),
             updatedAt: new Date(),
           },
@@ -425,7 +436,10 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
 
     for (const row of importedSupervisorWarehouses) {
       const assignment = row as Record<string, unknown>;
-      const supervisorId = asString(assignment.supervisorId);
+      const supervisorIdRaw = asString(assignment.supervisorId);
+      const supervisorId = supervisorIdRaw
+        ? importedUserIdMap.get(supervisorIdRaw) ?? supervisorIdRaw
+        : null;
       const warehouseId = asString(assignment.warehouseId);
       if (!supervisorId || !warehouseId) continue;
 
@@ -445,8 +459,16 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
     for (const row of importedInventoryRequests) {
       const request = row as Record<string, unknown>;
       const id = asString(request.id) ?? randomUUID();
-      const technicianId = asString(request.technicianId);
+      const technicianIdRaw = asString(request.technicianId);
+      const technicianId = technicianIdRaw
+        ? importedUserIdMap.get(technicianIdRaw) ?? technicianIdRaw
+        : null;
       if (!technicianId) continue;
+
+      const respondedByRaw = asString(request.respondedBy);
+      const respondedBy = respondedByRaw
+        ? importedUserIdMap.get(respondedByRaw) ?? respondedByRaw
+        : null;
 
       await tx
         .insert(inventoryRequests)
@@ -477,7 +499,7 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
           notes: asString(request.notes),
           status: asString(request.status) ?? "pending",
           adminNotes: asString(request.adminNotes),
-          respondedBy: asString(request.respondedBy),
+          respondedBy,
           respondedAt: request.respondedAt ? asDate(request.respondedAt) : null,
           createdAt: asDate(request.createdAt),
         })
@@ -509,7 +531,7 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
             notes: asString(request.notes),
             status: asString(request.status) ?? "pending",
             adminNotes: asString(request.adminNotes),
-            respondedBy: asString(request.respondedBy),
+            respondedBy,
             respondedAt: request.respondedAt ? asDate(request.respondedAt) : null,
           },
         });
@@ -521,8 +543,14 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
       const transfer = row as Record<string, unknown>;
       const id = asString(transfer.id) ?? randomUUID();
       const warehouseId = asString(transfer.warehouseId);
-      const technicianId = asString(transfer.technicianId);
-      const performedBy = asString(transfer.performedBy);
+      const technicianIdRaw = asString(transfer.technicianId);
+      const technicianId = technicianIdRaw
+        ? importedUserIdMap.get(technicianIdRaw) ?? technicianIdRaw
+        : null;
+      const performedByRaw = asString(transfer.performedBy);
+      const performedBy = performedByRaw
+        ? importedUserIdMap.get(performedByRaw) ?? performedByRaw
+        : null;
       const itemType = asString(transfer.itemType);
       const packagingType = asString(transfer.packagingType);
       if (!warehouseId || !technicianId || !performedBy || !itemType || !packagingType) continue;
@@ -611,12 +639,17 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
       const itemId = asString(transaction.itemId);
       if (!itemId) continue;
 
+      const transactionUserIdRaw = asString(transaction.userId);
+      const transactionUserId = transactionUserIdRaw
+        ? importedUserIdMap.get(transactionUserIdRaw) ?? transactionUserIdRaw
+        : null;
+
       await tx
         .insert(transactions)
         .values({
           id,
           itemId,
-          userId: asString(transaction.userId),
+          userId: transactionUserId,
           type: asString(transaction.type) ?? "add",
           quantity: asNumber(transaction.quantity, 0),
           reason: asString(transaction.reason),
@@ -626,7 +659,7 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
           target: transactions.id,
           set: {
             itemId,
-            userId: asString(transaction.userId),
+            userId: transactionUserId,
             type: asString(transaction.type) ?? "add",
             quantity: asNumber(transaction.quantity, 0),
             reason: asString(transaction.reason),
