@@ -13,18 +13,25 @@ async function resetAdminPassword() {
   try {
     console.log('🔐 Resetting admin password...\n');
 
+    const username = process.env.ADMIN_USERNAME ?? 'admin';
+    const newPassword = process.env.ADMIN_PASSWORD ?? 'admin123';
+    const email = process.env.ADMIN_EMAIL ?? `${username}@company.com`;
+    const fullName = process.env.ADMIN_FULL_NAME ?? 'System Administrator';
+    const city = process.env.ADMIN_CITY ?? 'Riyadh';
+
     // Hash the new password
-    const newPassword = 'admin123';
     const hashedPassword = await hashPassword(newPassword);
 
-    // Update admin user password
+    // Update existing admin user password
     const result = await db
       .update(users)
       .set({ 
         password: hashedPassword,
+        role: 'admin',
+        isActive: true,
         updatedAt: new Date()
       })
-      .where(eq(users.username, 'admin'))
+      .where(eq(users.username, username))
       .returning({ id: users.id, username: users.username });
 
     if (result.length > 0) {
@@ -32,8 +39,8 @@ async function resetAdminPassword() {
       console.log(`   User: ${result[0].username}`);
       console.log(`   New Password: ${newPassword}`);
       console.log('\n📝 You can now login with:');
-      console.log('   Username: admin');
-      console.log('   Password: admin123');
+      console.log(`   Username: ${username}`);
+      console.log(`   Password: ${newPassword}`);
     } else {
       console.log('❌ Admin user not found. Creating new admin user...');
       
@@ -41,11 +48,11 @@ async function resetAdminPassword() {
       const [newUser] = await db
         .insert(users)
         .values({
-          username: 'admin',
-          email: 'admin@company.com',
+          username,
+          email,
           password: hashedPassword,
-          fullName: 'مدير النظام',
-          city: 'الرياض',
+          fullName,
+          city,
           role: 'admin',
           isActive: true,
         })

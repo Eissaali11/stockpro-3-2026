@@ -6,10 +6,12 @@ import type { Request, Response } from "express";
 import { asyncHandler } from "../middleware/errorHandler";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { GetSystemLogsUseCase } from "../application/system-logs/use-cases/GetSystemLogs.use-case";
 import { repositories } from "../infrastructure/repositories";
 import { getDatabase } from "../infrastructure/database/connection";
 import { inventoryItems, regions, transactions, users } from "../infrastructure/schemas";
+import { hashPassword } from "../utils/password";
 
 const getSystemLogsUseCase = new GetSystemLogsUseCase(repositories.systemLogs);
 
@@ -34,8 +36,230 @@ async function exportAllData(): Promise<{ exportedAt: string; data: Record<strin
   };
 }
 
-async function importAllData(_backup: { data?: Record<string, unknown> }): Promise<void> {
-  return;
+type BackupDataset = {
+  users?: unknown[];
+  regions?: unknown[];
+  inventoryItems?: unknown[];
+  transactions?: unknown[];
+};
+
+type ImportSummary = {
+  users: number;
+  regions: number;
+  inventoryItems: number;
+  transactions: number;
+};
+
+function asString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function asBoolean(value: unknown, fallback = true): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") return true;
+    if (value.toLowerCase() === "false") return false;
+  }
+  return fallback;
+}
+
+function asDate(value: unknown): Date {
+  if (value instanceof Date) return value;
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+}
+
+function normalizeRole(value: unknown): "admin" | "supervisor" | "technician" {
+  const role = asString(value);
+  if (role === "admin" || role === "supervisor" || role === "technician") return role;
+  return "technician";
+}
+
+async function normalizeImportedPassword(password: unknown): Promise<string> {
+  const raw = asString(password);
+  if (!raw) {
+    return hashPassword(`Temp-${randomUUID()}`);
+  }
+
+  // Keep bcrypt hashes as-is, otherwise hash the plain value.
+  if (raw.startsWith("$2")) return raw;
+  return hashPassword(raw);
+}
+
+async function importAllData(backup: { data?: Record<string, unknown> }): Promise<ImportSummary> {
+  const db = getDatabase();
+  const summary: ImportSummary = {
+    users: 0,
+    regions: 0,
+    inventoryItems: 0,
+    transactions: 0,
+  };
+
+  const data = (backup.data ?? {}) as BackupDataset;
+
+  const importedRegions = Array.isArray(data.regions) ? data.regions : [];
+  const importedUsers = Array.isArray(data.users) ? data.users : [];
+  const importedItems = Array.isArray(data.inventoryItems) ? data.inventoryItems : [];
+  const importedTransactions = Array.isArray(data.transactions) ? data.transactions : [];
+
+  await db.transaction(async (tx) => {
+    for (const row of importedRegions) {
+      const region = row as Record<string, unknown>;
+      const id = asString(region.id) ?? randomUUID();
+      const name = asString(region.name);
+      if (!name) continue;
+
+      await tx
+        .insert(regions)
+        .values({
+          id,
+          name,
+          description: asString(region.description),
+          isActive: asBoolean(region.isActive, true),
+          createdAt: asDate(region.createdAt),
+          updatedAt: asDate(region.updatedAt),
+        })
+        .onConflictDoUpdate({
+          target: regions.id,
+          set: {
+            name,
+            description: asString(region.description),
+            isActive: asBoolean(region.isActive, true),
+            updatedAt: new Date(),
+          },
+        });
+
+      summary.regions += 1;
+    }
+
+    for (const row of importedUsers) {
+      const user = row as Record<string, unknown>;
+      const id = asString(user.id) ?? randomUUID();
+      const username = asString(user.username);
+      if (!username) continue;
+
+      const fallbackEmail = `${username}.${id.slice(0, 8)}@import.local`;
+      const email = asString(user.email) ?? fallbackEmail;
+      const password = await normalizeImportedPassword(user.password);
+
+      await tx
+        .insert(users)
+        .values({
+          id,
+          username,
+          email,
+          password,
+          fullName: asString(user.fullName) ?? username,
+          profileImage: asString(user.profileImage),
+          city: asString(user.city),
+          role: normalizeRole(user.role),
+          regionId: asString(user.regionId),
+          isActive: asBoolean(user.isActive, true),
+          createdAt: asDate(user.createdAt),
+          updatedAt: asDate(user.updatedAt),
+        })
+        .onConflictDoUpdate({
+          target: users.username,
+          set: {
+            email,
+            password,
+            fullName: asString(user.fullName) ?? username,
+            profileImage: asString(user.profileImage),
+            city: asString(user.city),
+            role: normalizeRole(user.role),
+            regionId: asString(user.regionId),
+            isActive: asBoolean(user.isActive, true),
+            updatedAt: new Date(),
+          },
+        });
+
+      summary.users += 1;
+    }
+
+    for (const row of importedItems) {
+      const item = row as Record<string, unknown>;
+      const id = asString(item.id) ?? randomUUID();
+      const name = asString(item.name);
+      const type = asString(item.type);
+      const unit = asString(item.unit);
+      if (!name || !type || !unit) continue;
+
+      await tx
+        .insert(inventoryItems)
+        .values({
+          id,
+          name,
+          type,
+          unit,
+          quantity: asNumber(item.quantity, 0),
+          minThreshold: asNumber(item.minThreshold, 5),
+          technicianName: asString(item.technicianName),
+          city: asString(item.city),
+          regionId: asString(item.regionId),
+          createdAt: asDate(item.createdAt),
+          updatedAt: asDate(item.updatedAt),
+        })
+        .onConflictDoUpdate({
+          target: inventoryItems.id,
+          set: {
+            name,
+            type,
+            unit,
+            quantity: asNumber(item.quantity, 0),
+            minThreshold: asNumber(item.minThreshold, 5),
+            technicianName: asString(item.technicianName),
+            city: asString(item.city),
+            regionId: asString(item.regionId),
+            updatedAt: new Date(),
+          },
+        });
+
+      summary.inventoryItems += 1;
+    }
+
+    for (const row of importedTransactions) {
+      const transaction = row as Record<string, unknown>;
+      const id = asString(transaction.id) ?? randomUUID();
+      const itemId = asString(transaction.itemId);
+      if (!itemId) continue;
+
+      await tx
+        .insert(transactions)
+        .values({
+          id,
+          itemId,
+          userId: asString(transaction.userId),
+          type: asString(transaction.type) ?? "add",
+          quantity: asNumber(transaction.quantity, 0),
+          reason: asString(transaction.reason),
+          createdAt: asDate(transaction.createdAt),
+        })
+        .onConflictDoUpdate({
+          target: transactions.id,
+          set: {
+            itemId,
+            userId: asString(transaction.userId),
+            type: asString(transaction.type) ?? "add",
+            quantity: asNumber(transaction.quantity, 0),
+            reason: asString(transaction.reason),
+          },
+        });
+
+      summary.transactions += 1;
+    }
+  });
+
+  return summary;
 }
 
 const systemLogsFiltersSchema = z.object({
@@ -178,7 +402,7 @@ export class SystemController {
       });
     }
 
-    await importAllData(backup);
+    const imported = await importAllData(backup);
 
     // Log the restore operation
     const restorePayload = JSON.stringify(backup);
@@ -195,12 +419,13 @@ export class SystemController {
       description: 'استعادة نسخة احتياطية كاملة لجميع بيانات النظام',
       details: JSON.stringify({
         restoreSizeBytes,
+        imported,
       }),
       severity: 'warning',
       success: true
     });
 
-    res.json({ success: true, message: "Backup restored successfully" });
+    res.json({ success: true, message: "Backup restored successfully", imported });
   });
 
   /**

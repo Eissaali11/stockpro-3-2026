@@ -45,6 +45,17 @@ interface BackupHistoryResponse {
   items: BackupHistoryItem[];
 }
 
+interface RestoreResponse {
+  success: boolean;
+  message?: string;
+  imported?: {
+    users?: number;
+    regions?: number;
+    inventoryItems?: number;
+    transactions?: number;
+  };
+}
+
 type BackupTableRow =
   | {
       id: string;
@@ -113,6 +124,17 @@ function formatRelativeArabic(dateIso?: string | null): string {
 
   const diffMonths = Math.floor(diffDays / 30);
   return `منذ ${diffMonths} شهر`;
+}
+
+function formatRestoreSummary(imported?: RestoreResponse["imported"]): string {
+  if (!imported) return "تم استعادة جميع البيانات من النسخة الاحتياطية";
+
+  const usersCount = imported.users ?? 0;
+  const regionsCount = imported.regions ?? 0;
+  const itemsCount = imported.inventoryItems ?? 0;
+  const transactionsCount = imported.transactions ?? 0;
+
+  return `المستخدمون: ${usersCount} | المناطق: ${regionsCount} | الأصناف: ${itemsCount} | الحركات: ${transactionsCount}`;
 }
 
 export default function BackupManagementPage() {
@@ -258,11 +280,12 @@ export default function BackupManagementPage() {
       const text = await file.text();
       const backup = JSON.parse(text);
 
-      await apiRequest('POST', '/api/admin/restore', backup);
+      const response = await apiRequest('POST', '/api/admin/restore', backup);
+      const restoreResult = (await response.json()) as RestoreResponse;
 
       toast({
         title: "تمت الاستعادة بنجاح",
-        description: "تم استعادة جميع البيانات من النسخة الاحتياطية",
+        description: formatRestoreSummary(restoreResult.imported),
       });
 
       await Promise.all([
@@ -339,8 +362,9 @@ export default function BackupManagementPage() {
     try {
       setIsImporting(true);
       const parsed = JSON.parse(entry.data);
-      await apiRequest('POST', '/api/admin/restore', parsed);
-      toast({ title: 'تمت الاستعادة بنجاح', description: `تمت استعادة ${entry.name}` });
+      const response = await apiRequest('POST', '/api/admin/restore', parsed);
+      const restoreResult = (await response.json()) as RestoreResponse;
+      toast({ title: 'تمت الاستعادة بنجاح', description: formatRestoreSummary(restoreResult.imported) });
 
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["/api/admin/backup/storage-stats"] }),
