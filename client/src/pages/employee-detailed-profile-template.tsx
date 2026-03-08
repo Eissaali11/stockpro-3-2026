@@ -45,19 +45,30 @@ function employeeCode(userId?: string | null): string {
   return `SP-${userId.slice(0, 4).toUpperCase()}`;
 }
 
+function isImageAttachment(file?: { type?: string; name?: string } | null): boolean {
+  if (!file) return false;
+  if (file.type?.startsWith("image/")) return true;
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name || "");
+}
+
 export default function EmployeeDetailedProfileTemplatePage() {
   const { user: authUser } = useAuth();
   const [location] = useLocation();
 
   const targetUserId = useMemo(() => {
-    if (typeof window === "undefined") {
-      return authUser?.id || "";
-    }
-    const fromQuery = new URLSearchParams(window.location.search).get("userId");
+    const queryString = location.includes("?") ? `?${location.split("?")[1]}` : "";
+    const search = typeof window !== "undefined" ? window.location.search : queryString;
+    const fromQuery = new URLSearchParams(search).get("userId");
     return fromQuery || authUser?.id || "";
   }, [authUser?.id, location]);
 
-  const { data: selectedUser, isLoading: isLoadingUser } = useQuery<UserSafe>({
+  const isViewingAnotherUser = !!targetUserId && !!authUser?.id && targetUserId !== authUser.id;
+
+  const {
+    data: selectedUser,
+    isLoading: isLoadingUser,
+    error: selectedUserError,
+  } = useQuery<UserSafe>({
     queryKey: [`/api/users/${targetUserId}`],
     enabled: !!targetUserId,
   });
@@ -67,18 +78,21 @@ export default function EmployeeDetailedProfileTemplatePage() {
     enabled: !!authUser,
   });
 
-  const shownUser = selectedUser || authUser;
+  const shownUser = isViewingAnotherUser ? selectedUser : selectedUser || authUser;
   const shownUserId = shownUser?.id;
 
-  const { data: fixedEntries = [] } = useQuery<TechnicianFixedInventoryEntry[]>({
+  const fixedEntriesQuery = useQuery<TechnicianFixedInventoryEntry[]>({
     queryKey: [`/api/technicians/${shownUserId}/fixed-inventory-entries`],
     enabled: !!shownUserId && shownUser?.role === "technician",
   });
 
-  const { data: movingEntries = [] } = useQuery<TechnicianMovingInventoryEntry[]>({
+  const movingEntriesQuery = useQuery<TechnicianMovingInventoryEntry[]>({
     queryKey: [`/api/technicians/${shownUserId}/moving-inventory-entries`],
     enabled: !!shownUserId && shownUser?.role === "technician",
   });
+
+  const fixedEntries = Array.isArray(fixedEntriesQuery.data) ? fixedEntriesQuery.data : [];
+  const movingEntries = Array.isArray(movingEntriesQuery.data) ? movingEntriesQuery.data : [];
 
   const regionName = useMemo(() => {
     if (!shownUser?.regionId) return "غير محدد";
@@ -97,6 +111,22 @@ export default function EmployeeDetailedProfileTemplatePage() {
   const roleLabel = getRoleLabel(shownUser?.role || "");
   const isActive = !!shownUser?.isActive;
   const extraProfile = useMemo(() => getEmployeeProfileExtra(shownUserId), [location, shownUserId]);
+  const jobOfferFile = extraProfile?.jobOfferFile || null;
+  const promissoryNoteFile = extraProfile?.promissoryNoteFile || null;
+  const carHandoverFile = extraProfile?.carHandoverFile || null;
+  const otherFiles = Array.isArray(extraProfile?.otherFiles) ? extraProfile.otherFiles : [];
+
+  const fixedInventoryStatus = fixedEntriesQuery.isLoading
+    ? "جاري التحميل"
+    : fixedEntriesQuery.error
+      ? "تعذر جلب البيانات"
+      : "بيانات حقيقية";
+
+  const movingInventoryStatus = movingEntriesQuery.isLoading
+    ? "جاري التحميل"
+    : movingEntriesQuery.error
+      ? "تعذر جلب البيانات"
+      : "بيانات حقيقية";
 
   const personalInfoRows = [
     { label: "الاسم الكامل", value: shownUser?.fullName || "-" },
@@ -117,6 +147,22 @@ export default function EmployeeDetailedProfileTemplatePage() {
     return (
       <div className="min-h-screen bg-[#0f2323] text-slate-100 flex items-center justify-center" dir="rtl">
         <p className="text-sm text-slate-300">جاري تحميل بيانات الموظف...</p>
+      </div>
+    );
+  }
+
+  if (isViewingAnotherUser && selectedUserError) {
+    return (
+      <div className="min-h-screen bg-[#0f2323] text-slate-100 flex items-center justify-center" dir="rtl">
+        <p className="text-sm text-rose-300">تعذر تحميل ملف الموظف المطلوب. تأكد من صلاحية الوصول أو وجود المستخدم.</p>
+      </div>
+    );
+  }
+
+  if (!shownUser) {
+    return (
+      <div className="min-h-screen bg-[#0f2323] text-slate-100 flex items-center justify-center" dir="rtl">
+        <p className="text-sm text-slate-300">لا توجد بيانات موظف متاحة للعرض.</p>
       </div>
     );
   }
@@ -256,12 +302,26 @@ export default function EmployeeDetailedProfileTemplatePage() {
                         </div>
                         <div className="flex justify-between items-center text-sm py-1 border-b border-white/5">
                           <span className="text-slate-400">حالة البيانات</span>
-                          <span className="font-semibold">بيانات حقيقية</span>
+                          <span className="font-semibold">{fixedInventoryStatus}</span>
                         </div>
-                        <button className="w-full mt-2 py-2 rounded-lg bg-cyan-400/10 text-cyan-300 text-xs font-bold border border-cyan-400/20 hover:bg-cyan-400/20 transition-all inline-flex items-center justify-center gap-2">
-                          <Download className="h-3 w-3" />
-                          نموذج الاستلام والتسليم
-                        </button>
+                        {carHandoverFile ? (
+                          <a
+                            href={carHandoverFile.dataUrl}
+                            download={carHandoverFile.name}
+                            className="w-full mt-2 py-2 rounded-lg bg-cyan-400/10 text-cyan-300 text-xs font-bold border border-cyan-400/20 hover:bg-cyan-400/20 transition-all inline-flex items-center justify-center gap-2"
+                          >
+                            <Download className="h-3 w-3" />
+                            تحميل نموذج الاستلام والتسليم
+                          </a>
+                        ) : (
+                          <button
+                            className="w-full mt-2 py-2 rounded-lg bg-white/5 text-slate-400 text-xs font-bold border border-white/10 inline-flex items-center justify-center gap-2 cursor-not-allowed"
+                            disabled
+                          >
+                            <Download className="h-3 w-3" />
+                            لا يوجد نموذج مرفوع
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -289,6 +349,10 @@ export default function EmployeeDetailedProfileTemplatePage() {
                         <div className="flex justify-between items-center text-sm py-1 border-b border-white/5">
                           <span className="text-slate-400">إجمالي العهد</span>
                           <span className="font-semibold">{totalInventory}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm py-1 border-b border-white/5">
+                          <span className="text-slate-400">حالة البيانات</span>
+                          <span className="font-semibold">{movingInventoryStatus}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm py-1 border-b border-white/5">
                           <span className="text-slate-400">آخر تحديث</span>
@@ -323,41 +387,97 @@ export default function EmployeeDetailedProfileTemplatePage() {
                     <div className="pt-4 border-t border-white/5 space-y-4">
                       <p className="text-xs font-bold text-slate-400">وثائق العمل</p>
 
-                      <div className="group relative rounded-xl overflow-hidden border border-white/10 hover:border-cyan-400/50 transition-all cursor-pointer">
-                        <img
-                          className="w-full h-24 object-cover brightness-50 group-hover:brightness-75 transition-all"
-                          alt="Corporate office building"
-                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuDFut3B_IxH3QzMegrp6wVe35dx1txA9NB0IpspJzLuSSKmJ401_g46oB8t0JLr6dJ83icrAIS2nHN-Gq2a79P2bLx9ltwywZDCalxj2XPR8yVChHw4asSiEVt6YDrhsPwCgJ5Oi8FmFbnr4VLTUQFxA3Ze5kU7y2kUSNGCX3tz3clibBLTlynPc-fyrLlTcgrglfq4DtLkcx1lI3b5hFRyyKobc-Hw51TGcTu7JZnAQVJBqHlFxxZjiTS1di1klrYmEypAChyLNOA"
-                        />
-                        <div className="absolute inset-0 flex flex-col justify-end p-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold">العرض الوظيفي.pdf</span>
-                            <Download className="h-3 w-3 text-cyan-300" />
+                      <a
+                        href={jobOfferFile?.dataUrl || "#"}
+                        download={jobOfferFile?.name || undefined}
+                        target={jobOfferFile ? "_blank" : undefined}
+                        rel={jobOfferFile ? "noreferrer" : undefined}
+                        className={`group relative rounded-xl overflow-hidden border transition-all ${
+                          jobOfferFile ? "border-white/10 hover:border-cyan-400/50 cursor-pointer" : "border-white/5 opacity-60 cursor-not-allowed"
+                        }`}
+                        onClick={(event) => {
+                          if (!jobOfferFile) event.preventDefault();
+                        }}
+                      >
+                        {jobOfferFile && isImageAttachment(jobOfferFile) ? (
+                          <img
+                            className="w-full h-24 object-cover brightness-75 group-hover:brightness-100 transition-all"
+                            alt={jobOfferFile.name}
+                            src={jobOfferFile.dataUrl}
+                          />
+                        ) : (
+                          <div className="w-full h-24 bg-gradient-to-br from-slate-800 to-[#0f2323] flex items-center justify-center">
+                            <Upload className="h-10 w-10 text-white/20 group-hover:text-cyan-300/40 transition-all" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 flex flex-col justify-end p-3 bg-black/25">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-bold truncate">{jobOfferFile?.name || "لا يوجد عرض وظيفي مرفوع"}</span>
+                            <Download className="h-3 w-3 text-cyan-300 shrink-0" />
                           </div>
                         </div>
-                      </div>
+                      </a>
 
-                      <div className="group relative rounded-xl overflow-hidden border border-white/10 hover:border-cyan-400/50 transition-all cursor-pointer">
-                        <div className="w-full h-24 bg-gradient-to-br from-slate-800 to-[#0f2323] flex items-center justify-center">
-                          <Upload className="h-10 w-10 text-white/20 group-hover:text-cyan-300/40 transition-all" />
-                        </div>
-                        <div className="absolute inset-0 flex flex-col justify-end p-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold">سند لأمر - موقع</span>
-                            <Eye className="h-3 w-3 text-cyan-300" />
+                      <a
+                        href={promissoryNoteFile?.dataUrl || "#"}
+                        download={promissoryNoteFile?.name || undefined}
+                        target={promissoryNoteFile ? "_blank" : undefined}
+                        rel={promissoryNoteFile ? "noreferrer" : undefined}
+                        className={`group relative rounded-xl overflow-hidden border transition-all ${
+                          promissoryNoteFile
+                            ? "border-white/10 hover:border-cyan-400/50 cursor-pointer"
+                            : "border-white/5 opacity-60 cursor-not-allowed"
+                        }`}
+                        onClick={(event) => {
+                          if (!promissoryNoteFile) event.preventDefault();
+                        }}
+                      >
+                        {promissoryNoteFile && isImageAttachment(promissoryNoteFile) ? (
+                          <img
+                            className="w-full h-24 object-cover brightness-75 group-hover:brightness-100 transition-all"
+                            alt={promissoryNoteFile.name}
+                            src={promissoryNoteFile.dataUrl}
+                          />
+                        ) : (
+                          <div className="w-full h-24 bg-gradient-to-br from-slate-800 to-[#0f2323] flex items-center justify-center">
+                            <Upload className="h-10 w-10 text-white/20 group-hover:text-cyan-300/40 transition-all" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 flex flex-col justify-end p-3 bg-black/25">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-bold truncate">{promissoryNoteFile?.name || "لا يوجد سند لأمر مرفوع"}</span>
+                            <Eye className="h-3 w-3 text-cyan-300 shrink-0" />
                           </div>
                         </div>
-                      </div>
+                      </a>
 
-                      <div className="group relative rounded-xl overflow-hidden border border-white/10 hover:border-cyan-400/50 transition-all cursor-pointer">
-                        <div className="w-full h-24 bg-gradient-to-br from-slate-800 to-[#0f2323] flex items-center justify-center">
-                          <FolderOpen className="h-10 w-10 text-white/20 group-hover:text-cyan-300/40 transition-all" />
-                        </div>
-                        <div className="absolute inset-0 flex flex-col justify-end p-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold">مرفقات أخرى (4)</span>
+                      <div className="group relative rounded-xl overflow-hidden border border-white/10 hover:border-cyan-400/50 transition-all">
+                        <div className="w-full min-h-24 bg-gradient-to-br from-slate-800 to-[#0f2323] p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-bold">مرفقات أخرى ({otherFiles.length})</span>
                             <FolderOpen className="h-3 w-3 text-cyan-300" />
                           </div>
+                          {otherFiles.length === 0 ? (
+                            <p className="text-[10px] text-slate-400">لا توجد مرفقات إضافية</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {otherFiles.slice(0, 3).map((file) => (
+                                <a
+                                  key={`${file.name}-${file.uploadedAt}`}
+                                  href={file.dataUrl}
+                                  download={file.name}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[10px] text-cyan-300 hover:text-cyan-200 block truncate"
+                                >
+                                  {file.name}
+                                </a>
+                              ))}
+                              {otherFiles.length > 3 && (
+                                <p className="text-[10px] text-slate-400">+{otherFiles.length - 3} مرفقات أخرى</p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

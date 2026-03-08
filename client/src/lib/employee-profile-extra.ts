@@ -1,3 +1,11 @@
+export type EmployeeStoredFile = {
+  name: string;
+  type: string;
+  size: number;
+  dataUrl: string;
+  uploadedAt: string;
+};
+
 export type EmployeeProfileExtraData = {
   nationalId?: string;
   phoneNumber?: string;
@@ -22,6 +30,10 @@ export type EmployeeProfileExtraData = {
   phoneSerial?: string;
   businessPhoneNumber?: string;
   simType?: string;
+  jobOfferFile?: EmployeeStoredFile | null;
+  promissoryNoteFile?: EmployeeStoredFile | null;
+  carHandoverFile?: EmployeeStoredFile | null;
+  otherFiles?: EmployeeStoredFile[];
 };
 
 const STORAGE_PREFIX = "employee-profile-extra:";
@@ -40,12 +52,13 @@ export function getEmployeeProfileExtra(userId?: string | null): EmployeeProfile
   }
 }
 
-export function setEmployeeProfileExtra(userId: string, data: EmployeeProfileExtraData): void {
-  if (!userId || typeof window === "undefined") return;
+export function setEmployeeProfileExtra(userId: string, data: EmployeeProfileExtraData): boolean {
+  if (!userId || typeof window === "undefined") return false;
 
   try {
     window.localStorage.setItem(`${STORAGE_PREFIX}${userId}`, JSON.stringify(data));
+    return true;
   } catch {
-    // ignore storage failures
+    return false;
   }
 }

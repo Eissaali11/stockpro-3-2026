@@ -1,55 +1,57 @@
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/lib/auth';
-import { loginSchema, type LoginRequest } from '@shared/schema';
-import { User, Lock, Loader2, Package, TruckIcon, BarChart3, FileText, Users, Shield } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { useLocation } from 'wouter';
-import rasscoLogo from "@assets/39bff80c-2b7d-48a8-80ed-34b372af4da3_transparent_1762470013152.png";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
+import { loginSchema, type LoginRequest } from "@shared/schema";
+import { AlertCircle, ArrowLeft, BarChart3, Loader2, Lock, ShieldCheck, User } from "lucide-react";
+import { useLocation } from "wouter";
+import stockLogo from "@assets/logl1.png";
 
 export default function Login() {
   const { login, isLoading } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
 
   const form = useForm<LoginRequest>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: '',
-      password: '',
+      username: "",
+      password: "",
     },
   });
 
   const onSubmit = async (data: LoginRequest) => {
     setIsSubmitting(true);
+    setErrorMessage("");
+
     try {
       const result = await login(data);
-      
+
       if (result.success) {
         toast({
           title: "تم تسجيل الدخول بنجاح",
           description: `مرحباً ${result.user?.fullName}`,
         });
-        setLocation('/home');
+        setLocation("/home");
       } else {
+        const message = result.message || "خطأ في بيانات الدخول، يرجى المحاولة مرة أخرى.";
+        setErrorMessage(message);
         toast({
           variant: "destructive",
           title: "خطأ في تسجيل الدخول",
-          description: result.message || "اسم المستخدم أو كلمة المرور غير صحيحة",
+          description: message,
         });
       }
     } catch (error: any) {
+      const message = error?.message || "حدث خطأ غير متوقع";
+      setErrorMessage(message);
       toast({
         variant: "destructive",
         title: "خطأ في تسجيل الدخول",
-        description: error.message || "حدث خطأ غير متوقع",
+        description: message,
       });
     } finally {
       setIsSubmitting(false);
@@ -58,350 +60,486 @@ export default function Login() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <motion.div 
-          className="text-center"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-        >
-          <Loader2 className="h-12 w-12 animate-spin text-[#18B2B0] mx-auto mb-4" />
+      <div className="min-h-screen flex items-center justify-center bg-[#020617]" dir="rtl">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-teal-400 mx-auto mb-4" />
           <p className="text-white text-lg font-semibold">جاري التحميل...</p>
-        </motion.div>
+        </div>
       </div>
     );
   }
 
-  const features = [
-    {
-      icon: Package,
-      title: "إدارة المخزون الثابت والمتحرك",
-      description: "تتبع دقيق لجميع الأصناف والمواد مع تحديثات فورية للكميات"
-    },
-    {
-      icon: TruckIcon,
-      title: "إدارة المستودعات",
-      description: "نظام متقدم لإدارة المستودعات مع نظام الموافقات والتحويلات"
-    },
-    {
-      icon: Users,
-      title: "إدارة الفنيين",
-      description: "متابعة شاملة لمخزون كل فني مع تنبيهات تلقائية عند النقص"
-    },
-    {
-      icon: FileText,
-      title: "التقارير والتصدير",
-      description: "تقارير تفصيلية احترافية وتصدير Excel بتنسيق موحد ومنظم"
-    },
-    {
-      icon: BarChart3,
-      title: "لوحة المعلومات التحليلية",
-      description: "رؤية شاملة للمخزون مع مؤشرات الأداء الرئيسية والإحصائيات"
-    },
-    {
-      icon: Shield,
-      title: "نظام الصلاحيات",
-      description: "التحكم الكامل في الصلاحيات مع تسجيل كامل لجميع العمليات"
-    }
-  ];
+  const usernameError = form.formState.errors.username?.message;
+  const passwordError = form.formState.errors.password?.message;
 
   return (
-    <div 
-      className="min-h-screen flex items-center justify-center relative overflow-hidden" 
-      dir="rtl"
-      style={{
-        backgroundImage: 'linear-gradient(135deg, #0b1d1f 0%, #12353a 45%, #0f2a2f 100%)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
-      }}
-    >
-      {/* Dark Overlay */}
-      <div className="absolute inset-0 bg-gray-900/70 backdrop-blur-sm"></div>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
 
-      <div className="relative z-10 w-full max-w-7xl mx-auto px-4 py-12">
-        <div className="grid lg:grid-cols-2 gap-16 items-center">
-          {/* Left Side - Features */}
-          <motion.div
-            className="space-y-6 order-2 lg:order-1"
-            initial={{ opacity: 0, x: -50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8 }}
-          >
-            {/* Logo - Desktop Only */}
-            <motion.div
-              className="hidden lg:flex justify-center lg:justify-start"
-              initial={{ opacity: 0, y: -20, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.8, type: "spring", stiffness: 100 }}
-            >
-              <motion.div
-                className="relative"
-                animate={{
-                  rotate: [0, 360],
-                }}
-                transition={{
-                  duration: 20,
-                  repeat: Infinity,
-                  ease: "linear"
-                }}
-              >
-                {/* Glow Effect */}
-                <motion.div
-                  className="absolute inset-0 rounded-full bg-[#18B2B0]/30 blur-2xl"
-                  animate={{
-                    scale: [1, 1.2, 1],
-                    opacity: [0.5, 0.8, 0.5]
-                  }}
-                  transition={{
-                    duration: 3,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                  }}
-                />
-                {/* Logo Container */}
-                <motion.div
-                  className="relative bg-white rounded-full shadow-2xl border-4 border-[#18B2B0]/50 w-32 h-32 flex items-center justify-center p-4"
-                  whileHover={{ scale: 1.1 }}
-                  animate={{
-                    boxShadow: [
-                      "0 0 20px rgba(24, 178, 176, 0.3)",
-                      "0 0 40px rgba(24, 178, 176, 0.6)",
-                      "0 0 20px rgba(24, 178, 176, 0.3)"
-                    ]
-                  }}
-                  transition={{
-                    duration: 2,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                  }}
-                >
-                  <img 
-                    src={rasscoLogo} 
-                    alt="RASSCO" 
-                    className="w-full h-full object-contain"
-                  />
-                </motion.div>
-              </motion.div>
-            </motion.div>
+        .login-root {
+          --obsidian: #020617;
+          --glass-border: rgba(255, 255, 255, 0.05);
+          --glass-bg: rgba(15, 23, 42, 0.6);
+          font-family: 'Inter', 'IBM Plex Sans Arabic', sans-serif;
+          background: var(--obsidian);
+        }
 
-            {/* Title */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="text-center lg:text-right space-y-3"
-            >
-              <h1 className="text-4xl lg:text-5xl font-black text-white leading-tight">
-                StockPro
-              </h1>
-              <p className="text-xl lg:text-2xl text-[#18B2B0] font-semibold">
-                نظام إدارة المخزون الاحترافي
-              </p>
-              <p className="text-base lg:text-lg text-gray-300 leading-relaxed">
-                حلول متقدمة لإدارة مخزون الفنيين والمستودعات
-              </p>
-            </motion.div>
+        .glass-panel {
+          background: var(--glass-bg);
+          backdrop-filter: blur(20px);
+          border: 1px solid var(--glass-border);
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+          position: relative;
+          overflow: hidden;
+          animation: fadeUp 0.7s ease-out both;
+        }
 
-            {/* Features Grid */}
-            <motion.div
-              className="grid gap-3"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.4 }}
-            >
-              {features.map((feature, index) => (
-                <motion.div
-                  key={index}
-                  className="flex gap-4 items-center bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/20 hover:bg-white/15 transition-all duration-300"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.5 + index * 0.1 }}
-                  whileHover={{ scale: 1.02, x: 5 }}
-                >
-                  <div className="p-3 bg-[#18B2B0]/20 rounded-lg border border-[#18B2B0]/30 shrink-0">
-                    <feature.icon className="w-6 h-6 text-[#18B2B0]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-white text-base lg:text-lg mb-1">{feature.title}</h3>
-                    <p className="text-gray-300 text-xs lg:text-sm leading-relaxed">{feature.description}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
-          </motion.div>
+        @keyframes logoBreath {
+          0%,
+          100% {
+            transform: translateY(0) scale(1);
+          }
+          50% {
+            transform: translateY(-8px) scale(1.02);
+          }
+        }
 
-          {/* Right Side - Login Form */}
-          <motion.div
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8 }}
-            className="flex flex-col items-center justify-center order-1 lg:order-2 w-full"
-          >
-            {/* Mobile Logo */}
-            <motion.div
-              className="lg:hidden mb-8 flex justify-center"
-              initial={{ opacity: 0, y: -20, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.8, type: "spring", stiffness: 100 }}
-            >
-              <motion.div
-                className="relative"
-                animate={{
-                  rotate: [0, 360],
-                }}
-                transition={{
-                  duration: 20,
-                  repeat: Infinity,
-                  ease: "linear"
-                }}
-              >
-                {/* Glow Effect */}
-                <motion.div
-                  className="absolute inset-0 rounded-full bg-[#18B2B0]/30 blur-xl"
-                  animate={{
-                    scale: [1, 1.2, 1],
-                    opacity: [0.5, 0.8, 0.5]
-                  }}
-                  transition={{
-                    duration: 3,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                  }}
-                />
-                {/* Logo Container */}
-                <motion.div
-                  className="relative bg-white rounded-full shadow-2xl border-4 border-[#18B2B0]/50 w-28 h-28 flex items-center justify-center p-3"
-                  whileHover={{ scale: 1.1 }}
-                  animate={{
-                    boxShadow: [
-                      "0 0 20px rgba(24, 178, 176, 0.3)",
-                      "0 0 40px rgba(24, 178, 176, 0.6)",
-                      "0 0 20px rgba(24, 178, 176, 0.3)"
-                    ]
-                  }}
-                  transition={{
-                    duration: 2,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                  }}
-                >
-                  <img 
-                    src={rasscoLogo} 
-                    alt="RASSCO" 
-                    className="w-full h-full object-contain"
-                  />
-                </motion.div>
-              </motion.div>
-            </motion.div>
+        @keyframes ringSpin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
 
-            <Card className="w-full max-w-md bg-white/20 backdrop-blur-xl border-2 border-white/30 shadow-2xl">
-              <CardHeader className="text-center pb-4 pt-8 space-y-4">
-                <div className="flex justify-center mb-6">
-                  <div className="p-4 bg-gradient-to-br from-[#18B2B0] to-teal-600 rounded-full shadow-lg">
-                    <Shield className="h-12 w-12 text-white" />
+        @keyframes ambientDrift {
+          0%,
+          100% {
+            transform: translate(0, 0);
+          }
+          50% {
+            transform: translate(18px, -12px);
+          }
+        }
+
+        @keyframes pulseParticle {
+          0%,
+          100% {
+            opacity: 0.4;
+            transform: translateY(0px);
+          }
+          50% {
+            opacity: 1;
+            transform: translateY(-10px);
+          }
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes fadeUp {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes sheenMove {
+          from {
+            transform: translateX(-120%);
+          }
+          to {
+            transform: translateX(140%);
+          }
+        }
+
+        .glass-panel::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            110deg,
+            transparent 30%,
+            rgba(45, 212, 191, 0.08) 50%,
+            transparent 70%
+          );
+          animation: sheenMove 7s linear infinite;
+          pointer-events: none;
+        }
+
+        .brand-logo-shell {
+          position: relative;
+          animation: logoBreath 5.5s ease-in-out infinite;
+        }
+
+        .brand-logo-ring {
+          position: absolute;
+          inset: -10px;
+          border-radius: 28px;
+          border: 1px solid rgba(45, 212, 191, 0.22);
+          border-top-color: rgba(34, 211, 238, 0.55);
+          border-bottom-color: rgba(16, 185, 129, 0.45);
+          animation: ringSpin 14s linear infinite;
+          pointer-events: none;
+        }
+
+        .ambient-blob-one {
+          animation: ambientDrift 11s ease-in-out infinite;
+        }
+
+        .ambient-blob-two {
+          animation: ambientDrift 13s ease-in-out infinite reverse;
+        }
+
+        .input-container-elite {
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 12px;
+          transition: all 0.3s ease;
+        }
+
+        .input-container-elite:focus-within {
+          border-color: rgba(45, 212, 191, 0.45);
+          background: rgba(255, 255, 255, 0.05);
+          box-shadow: 0 0 20px rgba(45, 212, 191, 0.08);
+        }
+
+        .message-box {
+          animation: slideDown 0.35s ease-out forwards;
+        }
+
+        .grid-overlay {
+          background-image:
+            linear-gradient(to right, rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
+          background-size: 60px 60px;
+        }
+
+        .particle {
+          animation: pulseParticle 8s ease-in-out infinite;
+        }
+
+        .brand-content {
+          animation: fadeUp 0.65s ease-out both;
+          animation-delay: 0.1s;
+        }
+
+        .capability-item {
+          background: rgba(15, 23, 42, 0.45);
+          border: 1px solid rgba(45, 212, 191, 0.14);
+          border-radius: 12px;
+          padding: 10px 12px;
+          color: #cbd5e1;
+          font-size: 12px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          opacity: 0;
+          transform: translateY(8px);
+          animation: fadeUp 0.6s ease-out forwards;
+          transition: transform 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+        }
+
+        .capability-item:hover {
+          transform: translateY(-2px);
+          border-color: rgba(45, 212, 191, 0.35);
+          background: rgba(15, 23, 42, 0.72);
+        }
+
+        .capability-item:nth-child(1) {
+          animation-delay: 0.18s;
+        }
+
+        .capability-item:nth-child(2) {
+          animation-delay: 0.28s;
+        }
+
+        .capability-item:nth-child(3) {
+          animation-delay: 0.38s;
+        }
+
+        .performance-summary {
+          margin-top: 14px;
+          padding: 12px;
+          border-radius: 14px;
+          border: 1px solid rgba(45, 212, 191, 0.16);
+          background: linear-gradient(145deg, rgba(8, 47, 73, 0.35), rgba(15, 23, 42, 0.35));
+          animation: fadeUp 0.6s ease-out both;
+          animation-delay: 0.16s;
+        }
+
+        .performance-title {
+          font-size: 12px;
+          color: #5eead4;
+          font-weight: 600;
+          margin-bottom: 6px;
+        }
+
+        .performance-text {
+          font-size: 11px;
+          color: #a7b3c8;
+          line-height: 1.9;
+        }
+
+        .performance-metrics {
+          margin-top: 10px;
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .metric-pill {
+          border-radius: 10px;
+          padding: 8px 6px;
+          border: 1px solid rgba(45, 212, 191, 0.14);
+          background: rgba(2, 6, 23, 0.45);
+          text-align: center;
+          animation: fadeUp 0.6s ease-out both;
+        }
+
+        .metric-pill:nth-child(1) {
+          animation-delay: 0.2s;
+        }
+
+        .metric-pill:nth-child(2) {
+          animation-delay: 0.27s;
+        }
+
+        .metric-pill:nth-child(3) {
+          animation-delay: 0.34s;
+        }
+
+        .metric-value {
+          color: #99f6e4;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+        }
+
+        .metric-label {
+          margin-top: 3px;
+          color: #94a3b8;
+          font-size: 10px;
+        }
+
+        .mobile-brand-logo {
+          filter: drop-shadow(0 0 28px rgba(45, 212, 191, 0.2));
+        }
+
+        .cta-button {
+          transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+        }
+
+        .cta-button:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 0 24px rgba(45, 212, 191, 0.18);
+        }
+      `}</style>
+
+      <div className="login-root min-h-screen text-slate-100" dir="rtl">
+        <div className="flex min-h-screen">
+          <div className="hidden lg:flex w-1/2 relative bg-[#020617] items-center justify-center overflow-hidden border-l border-white/[0.03]">
+            <div className="absolute inset-0" style={{
+              backgroundImage:
+                "radial-gradient(circle at 20% 20%, rgba(45,212,191,0.08), transparent 35%), radial-gradient(circle at 80% 70%, rgba(6,182,212,0.08), transparent 40%)",
+            }} />
+            <div className="ambient-blob-one absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-[120px]" />
+            <div className="ambient-blob-two absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-[120px]" />
+
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="particle absolute top-[15%] left-[10%] w-1.5 h-1.5 bg-cyan-400/30 rounded-full blur-[1px]" />
+              <div className="particle absolute top-[60%] left-[20%] w-1 h-1 bg-teal-400/40 rounded-full blur-[1px]" style={{ animationDelay: "-2s" }} />
+              <div className="particle absolute top-[30%] left-[80%] w-2 h-2 bg-cyan-400/20 rounded-full blur-[2px]" style={{ animationDelay: "-5s" }} />
+              <div className="particle absolute top-[80%] left-[70%] w-1 h-1 bg-teal-400/30 rounded-full blur-[1px]" style={{ animationDelay: "-7s" }} />
+            </div>
+
+            <div className="relative z-10 flex flex-col items-center">
+              <div className="brand-logo-shell relative mb-10">
+                <div className="brand-logo-ring" />
+                <div className="rounded-3xl p-8 border border-teal-400/15 bg-slate-900/40 backdrop-blur-lg">
+                  <img src={stockLogo} alt="Stock Enterprise" className="h-28 w-auto object-contain" />
+                </div>
+                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-72 h-12 bg-teal-500/20 blur-2xl rounded-full" />
+              </div>
+
+              <div className="brand-content text-center space-y-4 px-10 max-w-md">
+                <h1 className="text-5xl font-light tracking-widest text-white">ستوك</h1>
+                <div className="w-12 h-0.5 bg-teal-500/30 mx-auto my-4" />
+                <p className="text-slate-400 text-sm font-light max-w-xs mx-auto leading-relaxed tracking-wide">
+                  نظام إدارة الموارد واللوجستيات الذكي للمؤسسات الرائدة عالمياً.
+                </p>
+
+                <div className="performance-summary text-right">
+                  <p className="performance-title">أداء النظام</p>
+                  <p className="performance-text">
+                    يقدّم النظام تشغيلًا سلسًا لحركة المخزون والمبيعات والطلبات مع تحديثات فورية،
+                    بما يضمن رؤية تشغيلية دقيقة، قرارات أسرع، واستمرارية عمل عالية حتى مع كثافة العمليات اليومية.
+                  </p>
+                  <div className="performance-metrics">
+                    <div className="metric-pill">
+                      <p className="metric-value">استجابة فورية</p>
+                      <p className="metric-label">تحديث لحظي</p>
+                    </div>
+                    <div className="metric-pill">
+                      <p className="metric-value">تزامن مباشر</p>
+                      <p className="metric-label">بين الإدارات</p>
+                    </div>
+                    <div className="metric-pill">
+                      <p className="metric-value">دقة عالية</p>
+                      <p className="metric-label">في التتبع</p>
+                    </div>
                   </div>
                 </div>
-                <h2 className="text-3xl font-bold text-white mb-2">تسجيل الدخول</h2>
-                <p className="text-gray-200">مرحباً بك في نظام StockPro</p>
-              </CardHeader>
-              
-              <CardContent className="pb-8 px-8">
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-                    <FormField
-                      control={form.control}
-                      name="username"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-white font-semibold">اسم المستخدم</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                              <Input
-                                {...field}
-                                type="text"
-                                placeholder="أدخل اسم المستخدم"
-                                className="pr-10 h-12 bg-white/90 border-gray-300 focus:border-[#18B2B0] focus:ring-[#18B2B0]"
-                                disabled={isSubmitting}
-                                data-testid="input-username"
-                              />
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-white font-semibold">كلمة المرور</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                              <Input
-                                {...field}
-                                type="password"
-                                placeholder="أدخل كلمة المرور"
-                                className="pr-10 h-12 bg-white/90 border-gray-300 focus:border-[#18B2B0] focus:ring-[#18B2B0]"
-                                disabled={isSubmitting}
-                                data-testid="input-password"
-                              />
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <Button
-                      type="submit"
-                      className="w-full h-12 bg-gradient-to-r from-[#18B2B0] to-teal-600 hover:from-[#15a09e] hover:to-teal-700 text-white font-bold text-lg shadow-lg hover:shadow-xl transition-all duration-300"
-                      disabled={isSubmitting}
-                      data-testid="button-login"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <Loader2 className="ml-2 h-5 w-5 animate-spin" />
-                          جاري تسجيل الدخول...
-                        </>
-                      ) : (
-                        'تسجيل الدخول'
-                      )}
-                    </Button>
-                  </form>
-                </Form>
-              </CardContent>
-            </Card>
 
-            {/* Copyright */}
-            <motion.div
-              className="mt-8 text-center"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1 }}
-            >
-              <div className="bg-white/10 backdrop-blur-md px-6 py-4 rounded-lg border border-white/20">
-                <p className="text-white font-semibold text-sm mb-1">
-                  جميع الحقوق محفوظة © 2024
-                </p>
-                <p className="text-[#18B2B0] font-bold text-base">
-                  عيسى القحطاني
-                </p>
-                <a 
-                  href="mailto:skrkhtan@gmail.com" 
-                  className="text-gray-300 hover:text-white text-sm transition-colors duration-300 inline-block mt-1"
-                >
-                  skrkhtan@gmail.com
-                </a>
+                <div className="grid gap-2 text-right mt-6">
+                  <div className="capability-item">
+                    <ShieldCheck className="h-4 w-4 text-teal-300 shrink-0" />
+                    فوترة إلكترونية وامتثال ضريبي متوافق مع ZATCA
+                  </div>
+                  <div className="capability-item">
+                    <BarChart3 className="h-4 w-4 text-cyan-300 shrink-0" />
+                    تحليلات لحظية لمبيعات الموزعين والمخزون المتبقي
+                  </div>
+                  <div className="capability-item">
+                    <Lock className="h-4 w-4 text-emerald-300 shrink-0" />
+                    بنية تشغيل مؤسسية آمنة مع تتبع وتدقيق كامل
+                  </div>
+                </div>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
+
+          <div className="w-full lg:w-1/2 flex items-center justify-center p-6 md:p-12 relative bg-[#020617]">
+            <div className="absolute inset-0 grid-overlay" />
+
+            <div className="lg:hidden absolute top-12 left-1/2 -translate-x-1/2 text-center">
+              <img src={stockLogo} alt="Stock Enterprise" className="mobile-brand-logo h-20 w-auto object-contain mx-auto mb-3" />
+              <h1 className="text-3xl font-bold text-white">ستوك</h1>
+            </div>
+
+            <div className="glass-panel w-full max-w-[440px] p-8 md:p-12 rounded-[2rem] relative z-10 mt-16 lg:mt-0">
+              <div className="mb-6 min-h-0" id="alert-container">
+                {!!errorMessage && (
+                  <div className="message-box bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-center gap-3">
+                    <AlertCircle className="text-red-400 h-4 w-4 shrink-0" />
+                    <p className="text-red-400 text-xs">{errorMessage}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mb-8 text-right">
+                <h2 className="text-2xl font-light text-white mb-2 tracking-tight">مرحباً بك مجدداً</h2>
+                <p className="text-slate-400 text-sm font-light">الرجاء إدخال بيانات الاعتماد للوصول إلى لوحة التحكم</p>
+              </div>
+
+              <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-[0.2em] mr-1">اسم المستخدم</label>
+                  <div className="input-container-elite group relative flex items-center">
+                    <User className="absolute right-4 text-slate-500 group-focus-within:text-teal-400 transition-colors h-4 w-4" />
+                    <input
+                      {...form.register("username")}
+                      className="w-full bg-transparent border-none text-white pr-12 pl-4 py-3.5 rounded-xl focus:outline-none placeholder:text-slate-700 text-sm"
+                      placeholder="اسم المستخدم الخاص بك"
+                      type="text"
+                      disabled={isSubmitting}
+                      data-testid="input-username"
+                    />
+                  </div>
+                  {!!usernameError && <p className="text-[11px] text-red-400 mr-1">{usernameError}</p>}
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center px-1">
+                    <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-[0.2em]">كلمة المرور</label>
+                    <button
+                      type="button"
+                      className="text-[11px] text-teal-500/60 hover:text-teal-400 transition-colors"
+                    >
+                      نسيت كلمة المرور؟
+                    </button>
+                  </div>
+                  <div className="input-container-elite group relative flex items-center">
+                    <Lock className="absolute right-4 text-slate-500 group-focus-within:text-teal-400 transition-colors h-4 w-4" />
+                    <input
+                      {...form.register("password")}
+                      className="w-full bg-transparent border-none text-white pr-12 pl-4 py-3.5 rounded-xl focus:outline-none placeholder:text-slate-700 text-sm"
+                      placeholder="••••••••••••"
+                      type="password"
+                      disabled={isSubmitting}
+                      data-testid="input-password"
+                    />
+                  </div>
+                  {!!passwordError && <p className="text-[11px] text-red-400 mr-1">{passwordError}</p>}
+                </div>
+
+                <div className="flex items-center px-1">
+                  <input
+                    className="w-3.5 h-3.5 rounded-sm border-white/10 bg-white/5 text-teal-600 focus:ring-teal-500/20 focus:ring-offset-0"
+                    id="remember"
+                    type="checkbox"
+                  />
+                  <label className="mr-3 text-xs text-slate-500 cursor-pointer hover:text-slate-300 transition-colors" htmlFor="remember">
+                    تذكر هذا الجهاز للجلسات القادمة
+                  </label>
+                </div>
+
+                <button
+                  className="cta-button w-full py-4 bg-teal-600/10 hover:bg-teal-600/20 border border-teal-500/20 hover:border-teal-500/40 text-teal-400 font-medium text-sm rounded-xl flex items-center justify-center gap-3 transition-all duration-300 group disabled:opacity-60 disabled:cursor-not-allowed"
+                  type="submit"
+                  disabled={isSubmitting}
+                  data-testid="button-login"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="text-lg animate-spin h-4 w-4" />
+                      <span>جاري تسجيل الدخول...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>دخول النظام الآمن</span>
+                      <ArrowLeft className="text-lg h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-10 pt-8 border-t border-white/5 flex flex-col items-center gap-6">
+                <p className="text-[10px] text-slate-600 flex items-center gap-2">
+                  <Lock className="h-3 w-3" />
+                  نظام مشفر بمعيار <span className="text-teal-500/40 font-mono">AES-256 BIT</span>
+                </p>
+                <div className="flex gap-8">
+                  <button className="text-slate-500 hover:text-white transition-colors text-[11px] font-medium tracking-wide" type="button">
+                    ENGLISH
+                  </button>
+                  <button className="text-slate-500 hover:text-white transition-colors text-[11px] font-medium" type="button">
+                    مركز الدعم
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="absolute bottom-8 right-12 hidden lg:block">
+              <p className="text-[10px] text-slate-600 tracking-[0.2em] uppercase font-bold">Stock Inventory Systems © 2026</p>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

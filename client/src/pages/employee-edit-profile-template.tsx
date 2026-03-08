@@ -18,7 +18,11 @@ import { useAuth } from "@/lib/auth";
 import { getRoleLabel } from "@shared/roles";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { getEmployeeProfileExtra, setEmployeeProfileExtra } from "@/lib/employee-profile-extra";
+import {
+  getEmployeeProfileExtra,
+  setEmployeeProfileExtra,
+  type EmployeeStoredFile,
+} from "@/lib/employee-profile-extra";
 import type { RegionWithStats, UserSafe } from "@shared/schema";
 
 type EditFormData = {
@@ -80,22 +84,55 @@ function employeeCode(userId?: string | null): string {
   return `SP-${userId.slice(0, 4).toUpperCase()}`;
 }
 
+const MAX_ATTACHMENT_SIZE_BYTES = 1.5 * 1024 * 1024;
+const MAX_OTHER_FILES = 5;
+
+function fileToStoredFile(file: File): Promise<EmployeeStoredFile> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("تعذر قراءة الملف"));
+        return;
+      }
+
+      resolve({
+        name: file.name,
+        type: file.type || "application/octet-stream",
+        size: file.size,
+        dataUrl: reader.result,
+        uploadedAt: new Date().toISOString(),
+      });
+    };
+    reader.onerror = () => reject(new Error("تعذر قراءة الملف"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function EmployeeEditProfileTemplatePage() {
   const { user: authUser } = useAuth();
   const { toast } = useToast();
   const [location, setLocation] = useLocation();
   const [formData, setFormData] = useState<EditFormData>(INITIAL_FORM_DATA);
+  const [jobOfferFile, setJobOfferFile] = useState<EmployeeStoredFile | null>(null);
+  const [promissoryNoteFile, setPromissoryNoteFile] = useState<EmployeeStoredFile | null>(null);
+  const [carHandoverFile, setCarHandoverFile] = useState<EmployeeStoredFile | null>(null);
+  const [otherFiles, setOtherFiles] = useState<EmployeeStoredFile[]>([]);
 
   const targetUserId = useMemo(() => {
-    if (typeof window === "undefined") {
-      return authUser?.id || "";
-    }
-
-    const fromQuery = new URLSearchParams(window.location.search).get("userId");
+    const queryString = location.includes("?") ? `?${location.split("?")[1]}` : "";
+    const search = typeof window !== "undefined" ? window.location.search : queryString;
+    const fromQuery = new URLSearchParams(search).get("userId");
     return fromQuery || authUser?.id || "";
   }, [authUser?.id, location]);
 
-  const { data: selectedUser } = useQuery<UserSafe>({
+  const isEditingAnotherUser = !!targetUserId && !!authUser?.id && targetUserId !== authUser.id;
+
+  const {
+    data: selectedUser,
+    isLoading: isLoadingSelectedUser,
+    error: selectedUserError,
+  } = useQuery<UserSafe>({
     queryKey: [`/api/users/${targetUserId}`],
     enabled: !!targetUserId,
   });
@@ -105,7 +142,7 @@ export default function EmployeeEditProfileTemplatePage() {
     enabled: !!authUser,
   });
 
-  const shownUser = selectedUser || authUser;
+  const shownUser = isEditingAnotherUser ? selectedUser : selectedUser || authUser;
 
   const regionName = useMemo(() => {
     if (!shownUser?.regionId) return "";
@@ -116,6 +153,10 @@ export default function EmployeeEditProfileTemplatePage() {
     if (!shownUser) return;
 
     const extra = getEmployeeProfileExtra(shownUser.id) || {};
+    setJobOfferFile(extra.jobOfferFile || null);
+    setPromissoryNoteFile(extra.promissoryNoteFile || null);
+    setCarHandoverFile(extra.carHandoverFile || null);
+    setOtherFiles(Array.isArray(extra.otherFiles) ? extra.otherFiles : []);
 
     setFormData((prev) => ({
       ...prev,
@@ -130,6 +171,56 @@ export default function EmployeeEditProfileTemplatePage() {
 
   const handleChange = (key: keyof EditFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const validateFileSize = (file: File): boolean => {
+    if (file.size <= MAX_ATTACHMENT_SIZE_BYTES) return true;
+
+    toast({
+      title: "حجم الملف كبير",
+      description: `الحد الأقصى لكل ملف هو ${Math.floor(MAX_ATTACHMENT_SIZE_BYTES / (1024 * 1024))}MB`,
+      variant: "destructive",
+    });
+    return false;
+  };
+
+  const handleSingleFileUpload = async (
+    fileList: FileList | null,
+    setFile: (file: EmployeeStoredFile | null) => void,
+  ) => {
+    const file = fileList?.[0];
+    if (!file) return;
+    if (!validateFileSize(file)) return;
+
+    try {
+      const stored = await fileToStoredFile(file);
+      setFile(stored);
+    } catch {
+      toast({
+        title: "فشل رفع الملف",
+        description: "تعذر قراءة الملف. حاول مرة أخرى.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleOtherFilesUpload = async (fileList: FileList | null) => {
+    const files = fileList ? Array.from(fileList) : [];
+    if (files.length === 0) return;
+
+    const validFiles = files.filter(validateFileSize).slice(0, MAX_OTHER_FILES);
+    if (validFiles.length === 0) return;
+
+    try {
+      const storedFiles = await Promise.all(validFiles.map(fileToStoredFile));
+      setOtherFiles(storedFiles);
+    } catch {
+      toast({
+        title: "فشل رفع المرفقات",
+        description: "تعذر قراءة بعض الملفات. حاول بملفات أصغر أو أقل عددًا.",
+        variant: "destructive",
+      });
+    }
   };
 
   const updateEmployeeMutation = useMutation({
@@ -152,7 +243,7 @@ export default function EmployeeEditProfileTemplatePage() {
       return (await response.json()) as UserSafe;
     },
     onSuccess: async (updatedUser) => {
-      setEmployeeProfileExtra(updatedUser.id, {
+      const extraSaved = setEmployeeProfileExtra(updatedUser.id, {
         nationalId: formData.nationalId,
         phoneNumber: formData.phoneNumber,
         birthDate: formData.birthDate,
@@ -176,7 +267,19 @@ export default function EmployeeEditProfileTemplatePage() {
         phoneSerial: formData.phoneSerial,
         businessPhoneNumber: formData.businessPhoneNumber,
         simType: formData.simType,
+        jobOfferFile,
+        promissoryNoteFile,
+        carHandoverFile,
+        otherFiles,
       });
+
+      if (!extraSaved) {
+        toast({
+          title: "تم حفظ البيانات الأساسية فقط",
+          description: "تعذر حفظ بعض المرفقات محليًا. قلل حجم الملفات ثم حاول مرة أخرى.",
+          variant: "destructive",
+        });
+      }
 
       queryClient.setQueryData([`/api/users/${updatedUser.id}`], updatedUser);
       await Promise.all([
@@ -221,6 +324,38 @@ export default function EmployeeEditProfileTemplatePage() {
     const userId = shownUser?.id || targetUserId;
     setLocation(`/employee-detailed-profile-template?userId=${userId}`);
   };
+
+  if (isEditingAnotherUser && isLoadingSelectedUser) {
+    return (
+      <div className="min-h-screen bg-[#0f2323] text-slate-100 flex items-center justify-center" dir="rtl">
+        <p className="text-sm text-slate-300">جاري تحميل بيانات الموظف للتعديل...</p>
+      </div>
+    );
+  }
+
+  if (isEditingAnotherUser && selectedUserError) {
+    return (
+      <div className="min-h-screen bg-[#0f2323] text-slate-100 flex items-center justify-center" dir="rtl">
+        <div className="text-center space-y-4">
+          <p className="text-sm text-rose-300">تعذر تحميل بيانات الموظف المطلوب للتعديل.</p>
+          <button
+            onClick={handleCancel}
+            className="px-4 py-2 rounded-lg bg-cyan-400 text-[#0f2323] font-bold"
+          >
+            العودة لصفحة الملف
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!shownUser) {
+    return (
+      <div className="min-h-screen bg-[#0f2323] text-slate-100 flex items-center justify-center" dir="rtl">
+        <p className="text-sm text-slate-300">لا يمكن العثور على بيانات موظف للتعديل.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[#0f2323] text-slate-100 min-h-full" dir="rtl">
@@ -297,9 +432,40 @@ export default function EmployeeEditProfileTemplatePage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <UploadCard title="صورة العرض الوظيفي" subtitle="اسحب الصورة هنا" icon={FileImage} />
-            <UploadCard title="صورة السند لأمر" subtitle="اسحب الصورة هنا" icon={FileText} />
-            <UploadCard title="صور أخرى" subtitle="إضافة صور إضافية" icon={ImagePlus} multiple />
+            <UploadCard
+              title="صورة العرض الوظيفي"
+              subtitle="اختر صورة أو PDF"
+              icon={FileImage}
+              selectedFiles={jobOfferFile ? [jobOfferFile.name] : []}
+              onFilesSelected={(files) => {
+                void handleSingleFileUpload(files, setJobOfferFile);
+              }}
+              onClear={() => setJobOfferFile(null)}
+              accept="image/*,.pdf"
+            />
+            <UploadCard
+              title="صورة السند لأمر"
+              subtitle="اختر صورة أو PDF"
+              icon={FileText}
+              selectedFiles={promissoryNoteFile ? [promissoryNoteFile.name] : []}
+              onFilesSelected={(files) => {
+                void handleSingleFileUpload(files, setPromissoryNoteFile);
+              }}
+              onClear={() => setPromissoryNoteFile(null)}
+              accept="image/*,.pdf"
+            />
+            <UploadCard
+              title="صور أخرى"
+              subtitle="حتى 5 مرفقات"
+              icon={ImagePlus}
+              multiple
+              selectedFiles={otherFiles.map((file) => file.name)}
+              onFilesSelected={(files) => {
+                void handleOtherFilesUpload(files);
+              }}
+              onClear={() => setOtherFiles([])}
+              accept="image/*,.pdf"
+            />
           </div>
         </div>
 
@@ -330,9 +496,28 @@ export default function EmployeeEditProfileTemplatePage() {
                 <label className="text-xs text-slate-400">نموذج الاستلام والتسليم</label>
                 <label className="flex items-center gap-3 w-full p-2 border border-dashed border-slate-700 rounded-lg cursor-pointer hover:bg-slate-700/30 transition-all">
                   <FileText className="h-4 w-4 text-slate-500" />
-                  <span className="text-xs text-slate-400">تحميل المستند</span>
-                  <input className="hidden" type="file" />
+                  <span className="text-xs text-slate-400 truncate">
+                    {carHandoverFile?.name || "تحميل المستند"}
+                  </span>
+                  <input
+                    className="hidden"
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(event) => {
+                      void handleSingleFileUpload(event.target.files, setCarHandoverFile);
+                      event.currentTarget.value = "";
+                    }}
+                  />
                 </label>
+                {carHandoverFile && (
+                  <button
+                    type="button"
+                    onClick={() => setCarHandoverFile(null)}
+                    className="text-[11px] text-rose-300 hover:text-rose-200"
+                  >
+                    حذف المرفق
+                  </button>
+                )}
               </div>
             </div>
 
@@ -470,11 +655,19 @@ function UploadCard({
   title,
   subtitle,
   icon: Icon,
+  selectedFiles,
+  onFilesSelected,
+  onClear,
+  accept,
   multiple = false,
 }: {
   title: string;
   subtitle: string;
   icon: typeof FileImage;
+  selectedFiles: string[];
+  onFilesSelected: (files: FileList | null) => void;
+  onClear: () => void;
+  accept?: string;
   multiple?: boolean;
 }) {
   return (
@@ -483,8 +676,31 @@ function UploadCard({
       <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-700 rounded-2xl bg-slate-800/30 hover:bg-slate-800/60 hover:border-cyan-300/50 transition-all cursor-pointer">
         <Icon className="h-8 w-8 text-slate-500 group-hover:text-cyan-300 transition-colors" />
         <span className="text-xs text-slate-400 mt-2">{subtitle}</span>
-        <input className="hidden" type="file" multiple={multiple} />
+        {selectedFiles.length > 0 && (
+          <span className="mt-2 text-[11px] text-emerald-300 max-w-[90%] truncate">
+            {multiple ? `${selectedFiles.length} مرفق` : selectedFiles[0]}
+          </span>
+        )}
+        <input
+          className="hidden"
+          type="file"
+          multiple={multiple}
+          accept={accept}
+          onChange={(event) => {
+            onFilesSelected(event.target.files);
+            event.currentTarget.value = "";
+          }}
+        />
       </label>
+      {selectedFiles.length > 0 && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="mt-2 text-[11px] text-rose-300 hover:text-rose-200"
+        >
+          حذف المرفقات
+        </button>
+      )}
     </div>
   );
 }
