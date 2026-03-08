@@ -14,6 +14,7 @@ import { registerTechnicianInventoryEntriesRoutes } from "./inventory-entries-te
 import { registerInventoryEntriesMigrationRoutes } from "./inventory-entries-migration.routes";
 import { registerTechniciansAdminRoutes } from "./technicians-admin.routes";
 import { registerInventoryScanRoutes } from "./inventory-scan.routes";
+import { registerAccountingRoutes } from "./accounting.routes";
 
 /**
  * Common/System Routes
@@ -36,6 +37,7 @@ export function registerCommonRoleRoutes(app: Express): void {
   registerTechnicianInventoryEntriesRoutes(app);
   registerInventoryEntriesMigrationRoutes(app);
   registerInventoryScanRoutes(app);
+  registerAccountingRoutes(app);
 
   registerTechniciansAdminRoutes(app);
 }
