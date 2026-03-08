@@ -5,7 +5,7 @@
 import type { Request, Response } from "express";
 import { asyncHandler } from "../middleware/errorHandler";
 import { z } from "zod";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { GetSystemLogsUseCase } from "../application/system-logs/use-cases/GetSystemLogs.use-case";
 import { repositories } from "../infrastructure/repositories";
@@ -216,41 +216,75 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
       const username = asString(user.username);
       if (!username) continue;
 
-      const fallbackEmail = `${username}.${id.slice(0, 8)}@import.local`;
-      const email = asString(user.email) ?? fallbackEmail;
+      const [existingById] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+
+      const [existingByUsername] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.username, username))
+        .limit(1);
+
+      const targetUserId = existingById?.id ?? existingByUsername?.id ?? id;
+      let resolvedUsername = username;
+
+      const [usernameOwner] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.username, resolvedUsername))
+        .limit(1);
+
+      if (usernameOwner && usernameOwner.id !== targetUserId) {
+        resolvedUsername = `${username}_${targetUserId.slice(0, 8)}`;
+      }
+
+      let resolvedEmail = asString(user.email) ?? `${resolvedUsername}.${targetUserId.slice(0, 8)}@import.local`;
+
+      const [emailOwner] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, resolvedEmail))
+        .limit(1);
+
+      if (emailOwner && emailOwner.id !== targetUserId) {
+        resolvedEmail = `${resolvedUsername}.${targetUserId.slice(0, 8)}@import.local`;
+      }
+
       const password = await normalizeImportedPassword(user.password);
 
-      await tx
-        .insert(users)
-        .values({
-          id,
-          username,
-          email,
-          password,
-          fullName: asString(user.fullName) ?? username,
-          profileImage: asString(user.profileImage),
-          city: asString(user.city),
-          role: normalizeRole(user.role),
-          regionId: asString(user.regionId),
-          isActive: asBoolean(user.isActive, true),
-          createdAt: asDate(user.createdAt),
-          updatedAt: asDate(user.updatedAt),
-        })
-        .onConflictDoUpdate({
-          target: users.id,
-          set: {
-            username,
-            email,
-            password,
-            fullName: asString(user.fullName) ?? username,
-            profileImage: asString(user.profileImage),
-            city: asString(user.city),
-            role: normalizeRole(user.role),
-            regionId: asString(user.regionId),
-            isActive: asBoolean(user.isActive, true),
+      const userPayload = {
+        username: resolvedUsername,
+        email: resolvedEmail,
+        password,
+        fullName: asString(user.fullName) ?? resolvedUsername,
+        profileImage: asString(user.profileImage),
+        city: asString(user.city),
+        role: normalizeRole(user.role),
+        regionId: asString(user.regionId),
+        isActive: asBoolean(user.isActive, true),
+      };
+
+      if (existingById || existingByUsername) {
+        await tx
+          .update(users)
+          .set({
+            ...userPayload,
             updatedAt: new Date(),
-          },
-        });
+          })
+          .where(eq(users.id, targetUserId));
+      } else {
+        await tx
+          .insert(users)
+          .values({
+            id: targetUserId,
+            ...userPayload,
+            createdAt: asDate(user.createdAt),
+            updatedAt: asDate(user.updatedAt),
+          });
+      }
 
       summary.users += 1;
     }
