@@ -12,6 +12,7 @@ import { repositories } from "../infrastructure/repositories";
 import { getDatabase } from "../infrastructure/database/connection";
 import {
   inventoryItems,
+  itemTypes,
   regions,
   supervisorWarehouses,
   transactions,
@@ -32,6 +33,7 @@ async function exportAllData(): Promise<{ exportedAt: string; data: Record<strin
   const [
     allUsers,
     allRegions,
+    allItemTypes,
     allItems,
     allTransactions,
     allWarehouses,
@@ -43,6 +45,7 @@ async function exportAllData(): Promise<{ exportedAt: string; data: Record<strin
   ] = await Promise.all([
     db.select().from(users),
     db.select().from(regions),
+    db.select().from(itemTypes),
     db.select().from(inventoryItems),
     db.select().from(transactions),
     db.select().from(warehouses),
@@ -58,6 +61,7 @@ async function exportAllData(): Promise<{ exportedAt: string; data: Record<strin
     data: {
       users: allUsers,
       regions: allRegions,
+      itemTypes: allItemTypes,
       inventoryItems: allItems,
       transactions: allTransactions,
       warehouses: allWarehouses,
@@ -73,6 +77,7 @@ async function exportAllData(): Promise<{ exportedAt: string; data: Record<strin
 type BackupDataset = {
   users?: unknown[];
   regions?: unknown[];
+  itemTypes?: unknown[];
   inventoryItems?: unknown[];
   transactions?: unknown[];
   warehouses?: unknown[];
@@ -86,6 +91,7 @@ type BackupDataset = {
 type ImportSummary = {
   users: number;
   regions: number;
+  itemTypes: number;
   inventoryItems: number;
   transactions: number;
   warehouses: number;
@@ -131,6 +137,14 @@ function normalizeRole(value: unknown): "admin" | "supervisor" | "technician" {
   return "technician";
 }
 
+function normalizeItemTypeCategory(value: unknown): "devices" | "papers" | "sim" | "accessories" {
+  const category = asString(value);
+  if (category === "devices" || category === "papers" || category === "sim" || category === "accessories") {
+    return category;
+  }
+  return "accessories";
+}
+
 async function normalizeImportedPassword(password: unknown): Promise<string> {
   const raw = asString(password);
   if (!raw) {
@@ -147,6 +161,7 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
   const summary: ImportSummary = {
     users: 0,
     regions: 0,
+    itemTypes: 0,
     inventoryItems: 0,
     transactions: 0,
     warehouses: 0,
@@ -160,6 +175,7 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
   const data = (backup.data ?? {}) as BackupDataset;
 
   const importedRegions = Array.isArray(data.regions) ? data.regions : [];
+  const importedItemTypes = Array.isArray(data.itemTypes) ? data.itemTypes : [];
   const importedUsers = Array.isArray(data.users) ? data.users : [];
   const importedItems = Array.isArray(data.inventoryItems) ? data.inventoryItems : [];
   const importedTransactions = Array.isArray(data.transactions) ? data.transactions : [];
@@ -291,6 +307,67 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
       importedUserIdMap.set(id, targetUserId);
 
       summary.users += 1;
+    }
+
+    for (const row of importedItemTypes) {
+      const itemType = row as Record<string, unknown>;
+      const id = asString(itemType.id) ?? randomUUID();
+      const nameAr = asString(itemType.nameAr);
+      const nameEn = asString(itemType.nameEn);
+      if (!nameAr || !nameEn) continue;
+
+      const [existingById] = await tx
+        .select({ id: itemTypes.id })
+        .from(itemTypes)
+        .where(eq(itemTypes.id, id))
+        .limit(1);
+
+      const [existingByNameAr] = await tx
+        .select({ id: itemTypes.id })
+        .from(itemTypes)
+        .where(eq(itemTypes.nameAr, nameAr))
+        .limit(1);
+
+      const [existingByNameEn] = await tx
+        .select({ id: itemTypes.id })
+        .from(itemTypes)
+        .where(eq(itemTypes.nameEn, nameEn))
+        .limit(1);
+
+      const targetItemTypeId = existingById?.id ?? existingByNameAr?.id ?? existingByNameEn?.id ?? id;
+
+      const itemTypePayload = {
+        nameAr,
+        nameEn,
+        category: normalizeItemTypeCategory(itemType.category),
+        unitsPerBox: asNumber(itemType.unitsPerBox, 10),
+        isActive: asBoolean(itemType.isActive, true),
+        isVisible: asBoolean(itemType.isVisible, true),
+        sortOrder: asNumber(itemType.sortOrder, 0),
+        icon: asString(itemType.icon),
+        color: asString(itemType.color),
+      };
+
+      if (existingById || existingByNameAr || existingByNameEn) {
+        await tx
+          .update(itemTypes)
+          .set({
+            ...itemTypePayload,
+            updatedAt: new Date(),
+          })
+          .where(eq(itemTypes.id, targetItemTypeId));
+      } else {
+        await tx
+          .insert(itemTypes)
+          .values({
+            id: targetItemTypeId,
+            ...itemTypePayload,
+            createdAt: asDate(itemType.createdAt),
+            updatedAt: asDate(itemType.updatedAt),
+          });
+      }
+
+      summary.itemTypes += 1;
     }
 
     for (const row of importedWarehouses) {
