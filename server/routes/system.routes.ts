@@ -18,6 +18,8 @@ const restoreBackupSchema = z.object({
     transactions: z.array(z.any()).optional(),
     warehouses: z.array(z.any()).optional(),
     warehouseInventory: z.array(z.any()).optional(),
+    warehouseInventoryEntries: z.array(z.any()).optional(),
+    supervisorWarehouses: z.array(z.any()).optional(),
     techniciansInventory: z.array(z.any()).optional(),
     technicianFixedInventories: z.array(z.any()).optional(),
     inventoryRequests: z.array(z.any()).optional(),

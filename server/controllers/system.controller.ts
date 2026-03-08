@@ -16,8 +16,10 @@ import {
   supervisorWarehouses,
   transactions,
   users,
+  inventoryRequests,
   warehouseInventory,
   warehouseInventoryEntries,
+  warehouseTransfers,
   warehouses,
 } from "../infrastructure/schemas";
 import { hashPassword } from "../utils/password";
@@ -36,6 +38,8 @@ async function exportAllData(): Promise<{ exportedAt: string; data: Record<strin
     allWarehouseInventory,
     allWarehouseInventoryEntries,
     allSupervisorWarehouses,
+    allInventoryRequests,
+    allWarehouseTransfers,
   ] = await Promise.all([
     db.select().from(users),
     db.select().from(regions),
@@ -45,6 +49,8 @@ async function exportAllData(): Promise<{ exportedAt: string; data: Record<strin
     db.select().from(warehouseInventory),
     db.select().from(warehouseInventoryEntries),
     db.select().from(supervisorWarehouses),
+    db.select().from(inventoryRequests),
+    db.select().from(warehouseTransfers),
   ]);
 
   return {
@@ -58,6 +64,8 @@ async function exportAllData(): Promise<{ exportedAt: string; data: Record<strin
       warehouseInventory: allWarehouseInventory,
       warehouseInventoryEntries: allWarehouseInventoryEntries,
       supervisorWarehouses: allSupervisorWarehouses,
+      inventoryRequests: allInventoryRequests,
+      warehouseTransfers: allWarehouseTransfers,
     },
   };
 }
@@ -71,6 +79,8 @@ type BackupDataset = {
   warehouseInventory?: unknown[];
   warehouseInventoryEntries?: unknown[];
   supervisorWarehouses?: unknown[];
+  inventoryRequests?: unknown[];
+  warehouseTransfers?: unknown[];
 };
 
 type ImportSummary = {
@@ -82,6 +92,8 @@ type ImportSummary = {
   warehouseInventory: number;
   warehouseInventoryEntries: number;
   supervisorWarehouses: number;
+  inventoryRequests: number;
+  warehouseTransfers: number;
 };
 
 function asString(value: unknown): string | null {
@@ -141,6 +153,8 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
     warehouseInventory: 0,
     warehouseInventoryEntries: 0,
     supervisorWarehouses: 0,
+    inventoryRequests: 0,
+    warehouseTransfers: 0,
   };
 
   const data = (backup.data ?? {}) as BackupDataset;
@@ -158,6 +172,12 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
     : [];
   const importedSupervisorWarehouses = Array.isArray(data.supervisorWarehouses)
     ? data.supervisorWarehouses
+    : [];
+  const importedInventoryRequests = Array.isArray(data.inventoryRequests)
+    ? data.inventoryRequests
+    : [];
+  const importedWarehouseTransfers = Array.isArray(data.warehouseTransfers)
+    ? data.warehouseTransfers
     : [];
 
   await db.transaction(async (tx) => {
@@ -385,6 +405,128 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
         .onConflictDoNothing();
 
       summary.supervisorWarehouses += 1;
+    }
+
+    for (const row of importedInventoryRequests) {
+      const request = row as Record<string, unknown>;
+      const id = asString(request.id) ?? randomUUID();
+      const technicianId = asString(request.technicianId);
+      if (!technicianId) continue;
+
+      await tx
+        .insert(inventoryRequests)
+        .values({
+          id,
+          technicianId,
+          warehouseId: asString(request.warehouseId),
+          n950Boxes: asNumber(request.n950Boxes, 0),
+          n950Units: asNumber(request.n950Units, 0),
+          i9000sBoxes: asNumber(request.i9000sBoxes, 0),
+          i9000sUnits: asNumber(request.i9000sUnits, 0),
+          i9100Boxes: asNumber(request.i9100Boxes, 0),
+          i9100Units: asNumber(request.i9100Units, 0),
+          rollPaperBoxes: asNumber(request.rollPaperBoxes, 0),
+          rollPaperUnits: asNumber(request.rollPaperUnits, 0),
+          stickersBoxes: asNumber(request.stickersBoxes, 0),
+          stickersUnits: asNumber(request.stickersUnits, 0),
+          newBatteriesBoxes: asNumber(request.newBatteriesBoxes, 0),
+          newBatteriesUnits: asNumber(request.newBatteriesUnits, 0),
+          mobilySimBoxes: asNumber(request.mobilySimBoxes, 0),
+          mobilySimUnits: asNumber(request.mobilySimUnits, 0),
+          stcSimBoxes: asNumber(request.stcSimBoxes, 0),
+          stcSimUnits: asNumber(request.stcSimUnits, 0),
+          zainSimBoxes: asNumber(request.zainSimBoxes, 0),
+          zainSimUnits: asNumber(request.zainSimUnits, 0),
+          lebaraBoxes: asNumber(request.lebaraBoxes, 0),
+          lebaraUnits: asNumber(request.lebaraUnits, 0),
+          notes: asString(request.notes),
+          status: asString(request.status) ?? "pending",
+          adminNotes: asString(request.adminNotes),
+          respondedBy: asString(request.respondedBy),
+          respondedAt: request.respondedAt ? asDate(request.respondedAt) : null,
+          createdAt: asDate(request.createdAt),
+        })
+        .onConflictDoUpdate({
+          target: inventoryRequests.id,
+          set: {
+            technicianId,
+            warehouseId: asString(request.warehouseId),
+            n950Boxes: asNumber(request.n950Boxes, 0),
+            n950Units: asNumber(request.n950Units, 0),
+            i9000sBoxes: asNumber(request.i9000sBoxes, 0),
+            i9000sUnits: asNumber(request.i9000sUnits, 0),
+            i9100Boxes: asNumber(request.i9100Boxes, 0),
+            i9100Units: asNumber(request.i9100Units, 0),
+            rollPaperBoxes: asNumber(request.rollPaperBoxes, 0),
+            rollPaperUnits: asNumber(request.rollPaperUnits, 0),
+            stickersBoxes: asNumber(request.stickersBoxes, 0),
+            stickersUnits: asNumber(request.stickersUnits, 0),
+            newBatteriesBoxes: asNumber(request.newBatteriesBoxes, 0),
+            newBatteriesUnits: asNumber(request.newBatteriesUnits, 0),
+            mobilySimBoxes: asNumber(request.mobilySimBoxes, 0),
+            mobilySimUnits: asNumber(request.mobilySimUnits, 0),
+            stcSimBoxes: asNumber(request.stcSimBoxes, 0),
+            stcSimUnits: asNumber(request.stcSimUnits, 0),
+            zainSimBoxes: asNumber(request.zainSimBoxes, 0),
+            zainSimUnits: asNumber(request.zainSimUnits, 0),
+            lebaraBoxes: asNumber(request.lebaraBoxes, 0),
+            lebaraUnits: asNumber(request.lebaraUnits, 0),
+            notes: asString(request.notes),
+            status: asString(request.status) ?? "pending",
+            adminNotes: asString(request.adminNotes),
+            respondedBy: asString(request.respondedBy),
+            respondedAt: request.respondedAt ? asDate(request.respondedAt) : null,
+          },
+        });
+
+      summary.inventoryRequests += 1;
+    }
+
+    for (const row of importedWarehouseTransfers) {
+      const transfer = row as Record<string, unknown>;
+      const id = asString(transfer.id) ?? randomUUID();
+      const warehouseId = asString(transfer.warehouseId);
+      const technicianId = asString(transfer.technicianId);
+      const performedBy = asString(transfer.performedBy);
+      const itemType = asString(transfer.itemType);
+      const packagingType = asString(transfer.packagingType);
+      if (!warehouseId || !technicianId || !performedBy || !itemType || !packagingType) continue;
+
+      await tx
+        .insert(warehouseTransfers)
+        .values({
+          id,
+          requestId: asString(transfer.requestId),
+          warehouseId,
+          technicianId,
+          itemType,
+          packagingType,
+          quantity: asNumber(transfer.quantity, 0),
+          performedBy,
+          notes: asString(transfer.notes),
+          status: asString(transfer.status) ?? "pending",
+          rejectionReason: asString(transfer.rejectionReason),
+          respondedAt: transfer.respondedAt ? asDate(transfer.respondedAt) : null,
+          createdAt: asDate(transfer.createdAt),
+        })
+        .onConflictDoUpdate({
+          target: warehouseTransfers.id,
+          set: {
+            requestId: asString(transfer.requestId),
+            warehouseId,
+            technicianId,
+            itemType,
+            packagingType,
+            quantity: asNumber(transfer.quantity, 0),
+            performedBy,
+            notes: asString(transfer.notes),
+            status: asString(transfer.status) ?? "pending",
+            rejectionReason: asString(transfer.rejectionReason),
+            respondedAt: transfer.respondedAt ? asDate(transfer.respondedAt) : null,
+          },
+        });
+
+      summary.warehouseTransfers += 1;
     }
 
     for (const row of importedItems) {
