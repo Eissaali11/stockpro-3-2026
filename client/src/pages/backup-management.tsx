@@ -53,6 +53,10 @@ interface RestoreResponse {
     regions?: number;
     inventoryItems?: number;
     transactions?: number;
+    warehouses?: number;
+    warehouseInventory?: number;
+    warehouseInventoryEntries?: number;
+    supervisorWarehouses?: number;
   };
 }
 
@@ -133,8 +137,10 @@ function formatRestoreSummary(imported?: RestoreResponse["imported"]): string {
   const regionsCount = imported.regions ?? 0;
   const itemsCount = imported.inventoryItems ?? 0;
   const transactionsCount = imported.transactions ?? 0;
+  const warehousesCount = imported.warehouses ?? 0;
+  const warehouseInventoryCount = imported.warehouseInventory ?? 0;
 
-  return `المستخدمون: ${usersCount} | المناطق: ${regionsCount} | الأصناف: ${itemsCount} | الحركات: ${transactionsCount}`;
+  return `المستخدمون: ${usersCount} | المناطق: ${regionsCount} | المستودعات: ${warehousesCount} | مخزون المستودعات: ${warehouseInventoryCount} | الأصناف: ${itemsCount} | الحركات: ${transactionsCount}`;
 }
 
 export default function BackupManagementPage() {

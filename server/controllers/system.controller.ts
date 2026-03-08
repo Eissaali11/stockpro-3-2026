@@ -10,7 +10,16 @@ import { randomUUID } from "node:crypto";
 import { GetSystemLogsUseCase } from "../application/system-logs/use-cases/GetSystemLogs.use-case";
 import { repositories } from "../infrastructure/repositories";
 import { getDatabase } from "../infrastructure/database/connection";
-import { inventoryItems, regions, transactions, users } from "../infrastructure/schemas";
+import {
+  inventoryItems,
+  regions,
+  supervisorWarehouses,
+  transactions,
+  users,
+  warehouseInventory,
+  warehouseInventoryEntries,
+  warehouses,
+} from "../infrastructure/schemas";
 import { hashPassword } from "../utils/password";
 
 const getSystemLogsUseCase = new GetSystemLogsUseCase(repositories.systemLogs);
@@ -18,11 +27,24 @@ const getSystemLogsUseCase = new GetSystemLogsUseCase(repositories.systemLogs);
 async function exportAllData(): Promise<{ exportedAt: string; data: Record<string, unknown> }> {
   const db = getDatabase();
 
-  const [allUsers, allRegions, allItems, allTransactions] = await Promise.all([
+  const [
+    allUsers,
+    allRegions,
+    allItems,
+    allTransactions,
+    allWarehouses,
+    allWarehouseInventory,
+    allWarehouseInventoryEntries,
+    allSupervisorWarehouses,
+  ] = await Promise.all([
     db.select().from(users),
     db.select().from(regions),
     db.select().from(inventoryItems),
     db.select().from(transactions),
+    db.select().from(warehouses),
+    db.select().from(warehouseInventory),
+    db.select().from(warehouseInventoryEntries),
+    db.select().from(supervisorWarehouses),
   ]);
 
   return {
@@ -32,6 +54,10 @@ async function exportAllData(): Promise<{ exportedAt: string; data: Record<strin
       regions: allRegions,
       inventoryItems: allItems,
       transactions: allTransactions,
+      warehouses: allWarehouses,
+      warehouseInventory: allWarehouseInventory,
+      warehouseInventoryEntries: allWarehouseInventoryEntries,
+      supervisorWarehouses: allSupervisorWarehouses,
     },
   };
 }
@@ -41,6 +67,10 @@ type BackupDataset = {
   regions?: unknown[];
   inventoryItems?: unknown[];
   transactions?: unknown[];
+  warehouses?: unknown[];
+  warehouseInventory?: unknown[];
+  warehouseInventoryEntries?: unknown[];
+  supervisorWarehouses?: unknown[];
 };
 
 type ImportSummary = {
@@ -48,6 +78,10 @@ type ImportSummary = {
   regions: number;
   inventoryItems: number;
   transactions: number;
+  warehouses: number;
+  warehouseInventory: number;
+  warehouseInventoryEntries: number;
+  supervisorWarehouses: number;
 };
 
 function asString(value: unknown): string | null {
@@ -103,6 +137,10 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
     regions: 0,
     inventoryItems: 0,
     transactions: 0,
+    warehouses: 0,
+    warehouseInventory: 0,
+    warehouseInventoryEntries: 0,
+    supervisorWarehouses: 0,
   };
 
   const data = (backup.data ?? {}) as BackupDataset;
@@ -111,6 +149,16 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
   const importedUsers = Array.isArray(data.users) ? data.users : [];
   const importedItems = Array.isArray(data.inventoryItems) ? data.inventoryItems : [];
   const importedTransactions = Array.isArray(data.transactions) ? data.transactions : [];
+  const importedWarehouses = Array.isArray(data.warehouses) ? data.warehouses : [];
+  const importedWarehouseInventory = Array.isArray(data.warehouseInventory)
+    ? data.warehouseInventory
+    : [];
+  const importedWarehouseInventoryEntries = Array.isArray(data.warehouseInventoryEntries)
+    ? data.warehouseInventoryEntries
+    : [];
+  const importedSupervisorWarehouses = Array.isArray(data.supervisorWarehouses)
+    ? data.supervisorWarehouses
+    : [];
 
   await db.transaction(async (tx) => {
     for (const row of importedRegions) {
@@ -184,6 +232,159 @@ async function importAllData(backup: { data?: Record<string, unknown> }): Promis
         });
 
       summary.users += 1;
+    }
+
+    for (const row of importedWarehouses) {
+      const warehouse = row as Record<string, unknown>;
+      const id = asString(warehouse.id) ?? randomUUID();
+      const name = asString(warehouse.name);
+      const location = asString(warehouse.location);
+      if (!name || !location) continue;
+
+      const fallbackCreatorId =
+        asString((importedUsers[0] as Record<string, unknown> | undefined)?.id) ?? "system";
+
+      await tx
+        .insert(warehouses)
+        .values({
+          id,
+          name,
+          location,
+          description: asString(warehouse.description),
+          isActive: asBoolean(warehouse.isActive, true),
+          createdBy: asString(warehouse.createdBy) ?? fallbackCreatorId,
+          regionId: asString(warehouse.regionId),
+          createdAt: asDate(warehouse.createdAt),
+          updatedAt: asDate(warehouse.updatedAt),
+        })
+        .onConflictDoUpdate({
+          target: warehouses.id,
+          set: {
+            name,
+            location,
+            description: asString(warehouse.description),
+            isActive: asBoolean(warehouse.isActive, true),
+            createdBy: asString(warehouse.createdBy) ?? fallbackCreatorId,
+            regionId: asString(warehouse.regionId),
+            updatedAt: new Date(),
+          },
+        });
+
+      summary.warehouses += 1;
+    }
+
+    for (const row of importedWarehouseInventory) {
+      const inventory = row as Record<string, unknown>;
+      const id = asString(inventory.id) ?? randomUUID();
+      const warehouseId = asString(inventory.warehouseId);
+      if (!warehouseId) continue;
+
+      await tx
+        .insert(warehouseInventory)
+        .values({
+          id,
+          warehouseId,
+          n950Boxes: asNumber(inventory.n950Boxes, 0),
+          n950Units: asNumber(inventory.n950Units, 0),
+          i9000sBoxes: asNumber(inventory.i9000sBoxes, 0),
+          i9000sUnits: asNumber(inventory.i9000sUnits, 0),
+          i9100Boxes: asNumber(inventory.i9100Boxes, 0),
+          i9100Units: asNumber(inventory.i9100Units, 0),
+          rollPaperBoxes: asNumber(inventory.rollPaperBoxes, 0),
+          rollPaperUnits: asNumber(inventory.rollPaperUnits, 0),
+          stickersBoxes: asNumber(inventory.stickersBoxes, 0),
+          stickersUnits: asNumber(inventory.stickersUnits, 0),
+          newBatteriesBoxes: asNumber(inventory.newBatteriesBoxes, 0),
+          newBatteriesUnits: asNumber(inventory.newBatteriesUnits, 0),
+          mobilySimBoxes: asNumber(inventory.mobilySimBoxes, 0),
+          mobilySimUnits: asNumber(inventory.mobilySimUnits, 0),
+          stcSimBoxes: asNumber(inventory.stcSimBoxes, 0),
+          stcSimUnits: asNumber(inventory.stcSimUnits, 0),
+          zainSimBoxes: asNumber(inventory.zainSimBoxes, 0),
+          zainSimUnits: asNumber(inventory.zainSimUnits, 0),
+          lebaraBoxes: asNumber(inventory.lebaraBoxes, 0),
+          lebaraUnits: asNumber(inventory.lebaraUnits, 0),
+          updatedAt: asDate(inventory.updatedAt),
+        })
+        .onConflictDoUpdate({
+          target: warehouseInventory.id,
+          set: {
+            warehouseId,
+            n950Boxes: asNumber(inventory.n950Boxes, 0),
+            n950Units: asNumber(inventory.n950Units, 0),
+            i9000sBoxes: asNumber(inventory.i9000sBoxes, 0),
+            i9000sUnits: asNumber(inventory.i9000sUnits, 0),
+            i9100Boxes: asNumber(inventory.i9100Boxes, 0),
+            i9100Units: asNumber(inventory.i9100Units, 0),
+            rollPaperBoxes: asNumber(inventory.rollPaperBoxes, 0),
+            rollPaperUnits: asNumber(inventory.rollPaperUnits, 0),
+            stickersBoxes: asNumber(inventory.stickersBoxes, 0),
+            stickersUnits: asNumber(inventory.stickersUnits, 0),
+            newBatteriesBoxes: asNumber(inventory.newBatteriesBoxes, 0),
+            newBatteriesUnits: asNumber(inventory.newBatteriesUnits, 0),
+            mobilySimBoxes: asNumber(inventory.mobilySimBoxes, 0),
+            mobilySimUnits: asNumber(inventory.mobilySimUnits, 0),
+            stcSimBoxes: asNumber(inventory.stcSimBoxes, 0),
+            stcSimUnits: asNumber(inventory.stcSimUnits, 0),
+            zainSimBoxes: asNumber(inventory.zainSimBoxes, 0),
+            zainSimUnits: asNumber(inventory.zainSimUnits, 0),
+            lebaraBoxes: asNumber(inventory.lebaraBoxes, 0),
+            lebaraUnits: asNumber(inventory.lebaraUnits, 0),
+            updatedAt: new Date(),
+          },
+        });
+
+      summary.warehouseInventory += 1;
+    }
+
+    for (const row of importedWarehouseInventoryEntries) {
+      const entry = row as Record<string, unknown>;
+      const id = asString(entry.id) ?? randomUUID();
+      const warehouseId = asString(entry.warehouseId);
+      const itemTypeId = asString(entry.itemTypeId);
+      if (!warehouseId || !itemTypeId) continue;
+
+      await tx
+        .insert(warehouseInventoryEntries)
+        .values({
+          id,
+          warehouseId,
+          itemTypeId,
+          boxes: asNumber(entry.boxes, 0),
+          units: asNumber(entry.units, 0),
+          updatedAt: asDate(entry.updatedAt),
+        })
+        .onConflictDoUpdate({
+          target: warehouseInventoryEntries.id,
+          set: {
+            warehouseId,
+            itemTypeId,
+            boxes: asNumber(entry.boxes, 0),
+            units: asNumber(entry.units, 0),
+            updatedAt: new Date(),
+          },
+        });
+
+      summary.warehouseInventoryEntries += 1;
+    }
+
+    for (const row of importedSupervisorWarehouses) {
+      const assignment = row as Record<string, unknown>;
+      const supervisorId = asString(assignment.supervisorId);
+      const warehouseId = asString(assignment.warehouseId);
+      if (!supervisorId || !warehouseId) continue;
+
+      await tx
+        .insert(supervisorWarehouses)
+        .values({
+          id: asString(assignment.id) ?? randomUUID(),
+          supervisorId,
+          warehouseId,
+          createdAt: asDate(assignment.createdAt),
+        })
+        .onConflictDoNothing();
+
+      summary.supervisorWarehouses += 1;
     }
 
     for (const row of importedItems) {
