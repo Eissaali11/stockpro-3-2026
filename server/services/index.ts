@@ -116,12 +116,8 @@ export class ServiceFactory {
    * Initialize all services (if needed)
    */
   public async initialize(): Promise<void> {
-    // Seed default item types if needed
-    try {
-      await this._itemTypesService.seedDefaultItemTypes();
-    } catch (error) {
-      console.warn('Failed to seed default item types:', error);
-    }
+    // Item types are managed manually (or via import flows), not auto-seeded.
+    return;
   }
 
   /**
