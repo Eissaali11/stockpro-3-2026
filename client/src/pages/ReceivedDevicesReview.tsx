@@ -121,7 +121,7 @@ export default function ReceivedDevicesReview() {
 
   const getUserName = (userId: string) => {
     const foundUser = users.find(u => u.id === userId);
-    return foundUser?.fullName || foundUser?.username || `فني #${userId.slice(0, 8)}`;
+    return foundUser?.fullName || foundUser?.username || `مندوب #${userId.slice(0, 8)}`;
   };
 
   const pendingDevices = devices.filter(d => d.status === 'pending');
@@ -580,3 +580,4 @@ export default function ReceivedDevicesReview() {
     </div>
   );
 }
+

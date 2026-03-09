@@ -206,7 +206,7 @@ export default function AddItemModal({ open, onOpenChange }: AddItemModalProps) 
               name="technicianName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>اسم الفني</FormLabel>
+                  <FormLabel>اسم المندوب</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="مثل: محمد أحمد"
@@ -264,3 +264,4 @@ export default function AddItemModal({ open, onOpenChange }: AddItemModalProps) 
     </Dialog>
   );
 }
+

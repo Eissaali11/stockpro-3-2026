@@ -549,7 +549,7 @@ export default function AdminPage() {
                     onClick={() => setRoleFilter("technicians")}
                     className={roleFilter === "technicians" ? "bg-cyan-400/20 text-cyan-300 border border-cyan-400/30" : "text-slate-400 hover:text-white hover:bg-white/5"}
                   >
-                    الفنيين ({arNumber(techniciansCount)})
+                    المندوبين ({arNumber(techniciansCount)})
                   </Button>
                 </div>
 
@@ -927,3 +927,4 @@ export default function AdminPage() {
     
   );
 }
+

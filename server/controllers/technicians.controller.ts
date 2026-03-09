@@ -147,7 +147,7 @@ export class TechniciansController {
       entityType: "inventory",
       entityId: req.params.technicianId,
       entityName: "المخزون الثابت",
-      description: `تم تحديث المخزون الثابت للفني`,
+      description: `تم تحديث المخزون الثابت للمندوب`,
       severity: "info",
       success: true,
     });

@@ -320,7 +320,7 @@ export function AddUserModal({
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="admin">👑 إدمن (Admin)</SelectItem>
-                        <SelectItem value="technician">👨‍💼 فني (Technician)</SelectItem>
+                        <SelectItem value="technician">👨‍💼 مندوب (Technician)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -358,3 +358,4 @@ export function AddUserModal({
     </Dialog>
   );
 }
+

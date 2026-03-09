@@ -4,12 +4,12 @@ import { requireAuth } from "../middleware/auth";
 import { inventoryEntriesContainer } from "../composition/inventory-entries.container";
 
 /**
- * Technician Inventory Entries Routes - مدخلات مخزون الفنيين (< 100 lines)
- * مجال المسؤولية: إدارة قيود المخزون الثابت والمتنقل للفنيين
+ * Technician Inventory Entries Routes - مدخلات مخزون المندوبين (< 100 lines)
+ * مجال المسؤولية: إدارة قيود المخزون الثابت والمتنقل للمندوبين
  */
 export function registerTechnicianInventoryEntriesRoutes(app: Express): void {
 
-  // عرض قيود المخزون الثابت للفني
+  // عرض قيود المخزون الثابت للمندوب
   app.get("/api/technicians/:technicianId/fixed-inventory-entries", requireAuth, async (req, res) => {
     try {
       const entries = await inventoryEntriesContainer.inventoryEntriesUseCase.getTechnicianFixedEntries(req.params.technicianId);
@@ -20,7 +20,7 @@ export function registerTechnicianInventoryEntriesRoutes(app: Express): void {
     }
   });
 
-  // إنشاء أو تحديث قيد مخزون ثابت للفني
+  // إنشاء أو تحديث قيد مخزون ثابت للمندوب
   app.post("/api/technicians/:technicianId/fixed-inventory-entries", requireAuth, async (req, res) => {
     try {
       const schema = z.object({
@@ -41,7 +41,7 @@ export function registerTechnicianInventoryEntriesRoutes(app: Express): void {
     }
   });
 
-  // عرض قيود المخزون المتنقل للفني
+  // عرض قيود المخزون المتنقل للمندوب
   app.get("/api/technicians/:technicianId/moving-inventory-entries", requireAuth, async (req, res) => {
     try {
       const entries = await inventoryEntriesContainer.inventoryEntriesUseCase.getTechnicianMovingEntries(req.params.technicianId);
@@ -52,7 +52,7 @@ export function registerTechnicianInventoryEntriesRoutes(app: Express): void {
     }
   });
 
-  // إنشاء أو تحديث قيد مخزون متنقل للفني (يدعم التحديث المجمع)
+  // إنشاء أو تحديث قيد مخزون متنقل للمندوب (يدعم التحديث المجمع)
   app.post("/api/technicians/:technicianId/moving-inventory-entries", requireAuth, async (req, res) => {
     try {
       const { entries } = req.body;

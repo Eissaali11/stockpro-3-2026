@@ -110,7 +110,7 @@ export function WarehouseOverviewCards({
             <div className="size-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
               <User className="h-5 w-5 text-blue-400" />
             </div>
-            <p className="text-white/70 text-sm">الفنيون المرتبطون</p>
+            <p className="text-white/70 text-sm">المندوبون المرتبطون</p>
           </div>
           <span className="px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-200 text-xs border border-cyan-400/30">
             {warehouseTechnicians?.length || 0}
@@ -122,7 +122,7 @@ export function WarehouseOverviewCards({
           <Input
             value={technicianSearchQuery}
             onChange={(event) => onTechnicianSearchChange(event.target.value)}
-            placeholder="ابحث عن فني بالاسم أو اسم المستخدم أو المدينة"
+            placeholder="ابحث عن مندوب بالاسم أو اسم المستخدم أو المدينة"
             className="h-9 pr-10 pl-10 bg-black/25 border-cyan-400/25 text-white placeholder:text-gray-400 focus:border-cyan-300"
           />
           {technicianSearchQuery.trim().length > 0 && (
@@ -158,10 +158,11 @@ export function WarehouseOverviewCards({
           )
         ) : (
           <div className="text-xs text-gray-400 py-2 text-center bg-black/20 rounded-lg border border-white/10">
-            لا يوجد فنيون مرتبطون
+            لا يوجد مندوبون مرتبطون
           </div>
         )}
       </div>
     </div>
   );
 }
+

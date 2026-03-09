@@ -100,7 +100,7 @@ CREATE TABLE regions (
 
 ### 3. technician_fixed_inventories (المخزون الثابت)
 
-**الغرض**: تخزين المخزون الثابت لكل فني (القاعدة الأساسية)
+**الغرض**: تخزين المخزون الثابت لكل مندوب (القاعدة الأساسية)
 
 ```sql
 CREATE TABLE technician_fixed_inventories (
@@ -147,7 +147,7 @@ CREATE TABLE technician_fixed_inventories (
 | Column | Type | Default | Description |
 |--------|------|---------|-------------|
 | id | VARCHAR | gen_random_uuid() | معرف فريد |
-| technician_id | VARCHAR | - | معرف الفني (FK) |
+| technician_id | VARCHAR | - | معرف المندوب (FK) |
 | n950_boxes | INTEGER | 0 | عدد صناديق N950 |
 | n950_units | INTEGER | 0 | عدد وحدات N950 |
 | i900_boxes | INTEGER | 0 | عدد صناديق I900 |
@@ -165,7 +165,7 @@ CREATE TABLE technician_fixed_inventories (
 
 **Constraints**:
 - PRIMARY KEY: id
-- UNIQUE: technician_id (فني واحد = سجل واحد)
+- UNIQUE: technician_id (مندوب واحد = سجل واحد)
 - FOREIGN KEY: technician_id → users(id)
 
 **Business Rules**:
@@ -177,7 +177,7 @@ CREATE TABLE technician_fixed_inventories (
 
 ### 4. technicians_inventory (المخزون المتحرك)
 
-**الغرض**: تخزين المخزون المتحرك الفعلي لكل فني
+**الغرض**: تخزين المخزون المتحرك الفعلي لكل مندوب
 
 ```sql
 CREATE TABLE technicians_inventory (
@@ -203,7 +203,7 @@ CREATE TABLE technicians_inventory (
 | Column | Type | Default | Description |
 |--------|------|---------|-------------|
 | id | VARCHAR | gen_random_uuid() | معرف فريد |
-| technician_name | TEXT | - | اسم الفني |
+| technician_name | TEXT | - | اسم المندوب |
 | city | TEXT | - | المدينة |
 | n950_devices | INTEGER | 0 | عدد أجهزة N950 |
 | i900_devices | INTEGER | 0 | عدد أجهزة I900 |
@@ -252,7 +252,7 @@ CREATE TABLE stock_movements (
 | Column | Type | Description |
 |--------|------|-------------|
 | id | VARCHAR | معرف فريد |
-| technician_id | VARCHAR | معرف الفني (FK) |
+| technician_id | VARCHAR | معرف المندوب (FK) |
 | movement_type | TEXT | نوع الحركة: 'transfer' أو 'direct_update' |
 | item_type | TEXT | نوع الصنف: 'n950', 'i900', 'rollPaper', 'stickers', 'mobilySim', 'stcSim' |
 | quantity_changed | INTEGER | الكمية المتغيرة |
@@ -313,7 +313,7 @@ CREATE TABLE inventory_items (
 | unit | TEXT | - | الوحدة |
 | quantity | INTEGER | 0 | الكمية |
 | min_threshold | INTEGER | 5 | الحد الأدنى |
-| technician_name | TEXT | NULL | اسم الفني |
+| technician_name | TEXT | NULL | اسم المندوب |
 | city | TEXT | NULL | المدينة |
 | region_id | VARCHAR | NULL | معرف المنطقة (FK) |
 
@@ -395,7 +395,7 @@ CREATE TABLE withdrawn_devices (
 |--------|------|-------------|
 | id | VARCHAR | معرف فريد |
 | city | TEXT | المدينة |
-| technician_name | TEXT | اسم الفني |
+| technician_name | TEXT | اسم المندوب |
 | terminal_id | TEXT | رقم الجهاز |
 | serial_number | TEXT | الرقم التسلسلي |
 | battery | TEXT | حالة البطارية |
@@ -468,8 +468,8 @@ CREATE INDEX idx_withdrawn_devices_region ON withdrawn_devices(region_id);
    - المنطقة يمكن أن تحتوي على عدة مستخدمين
 
 2. **users → technician_fixed_inventories** (One to One):
-   - كل فني له مخزون ثابت واحد فقط
-   - المخزون الثابت يخص فني واحد فقط
+   - كل مندوب له مخزون ثابت واحد فقط
+   - المخزون الثابت يخص مندوب واحد فقط
 
 3. **users → stock_movements** (One to Many):
    - المستخدم يمكنه إنشاء عدة حركات مخزون
@@ -791,7 +791,7 @@ GROUP BY sm.technician_id, u.full_name, sm.movement_type, sm.item_type
 ORDER BY movement_count DESC;
 ```
 
-### 4. الفنيين ذوي المخزون المنخفض
+### 4. المندوبين ذوي المخزون المنخفض
 
 ```sql
 SELECT 
@@ -892,3 +892,4 @@ ORDER BY idx_scan ASC;
 ---
 
 **نهاية توثيق قاعدة البيانات**
+

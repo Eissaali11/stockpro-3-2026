@@ -156,10 +156,10 @@ export default function FixedInventoryDashboard() {
         >
           <div>
             <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white" data-testid="text-dashboard-title">
-              📊 المخزون الثابت للفنيين
+              📊 المخزون الثابت للمندوبين
             </h1>
             <p className="text-sm text-gray-300 mt-1">
-              متابعة وإدارة المخزون الثابت لجميع الفنيين
+              متابعة وإدارة المخزون الثابت لجميع المندوبين
             </p>
           </div>
         </motion.div>
@@ -208,7 +208,7 @@ export default function FixedInventoryDashboard() {
                   <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-red-400 flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm sm:text-base text-red-300">
-                      ⚠️ تنبيه: {summary.techniciansWithCriticalStock} فنيين لديهم مخزون حرج!
+                      ⚠️ تنبيه: {summary.techniciansWithCriticalStock} مندوبين لديهم مخزون حرج!
                     </p>
                     <div className="mt-2 space-y-1">
                       {technicians
@@ -236,7 +236,7 @@ export default function FixedInventoryDashboard() {
           <Card className="bg-white/10 backdrop-blur-xl border-white/20 shadow-xl">
             <CardHeader className="pb-3">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <CardTitle className="text-base sm:text-lg text-white">الفنيين والمخزون الثابت</CardTitle>
+                <CardTitle className="text-base sm:text-lg text-white">المندوبين والمخزون الثابت</CardTitle>
                 <div className="flex gap-2 text-xs sm:text-sm text-gray-300">
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full bg-green-500" />
@@ -259,7 +259,7 @@ export default function FixedInventoryDashboard() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-white/20">
-                      <th className="text-right py-3 px-2 text-sm font-semibold text-white">اسم الفني</th>
+                      <th className="text-right py-3 px-2 text-sm font-semibold text-white">اسم المندوب</th>
                       <th className="text-right py-3 px-2 text-sm font-semibold text-white">المدينة</th>
                       <th className="text-right py-3 px-2 text-sm font-semibold text-white">N950</th>
                       <th className="text-right py-3 px-2 text-sm font-semibold text-white">I900</th>
@@ -390,3 +390,4 @@ export default function FixedInventoryDashboard() {
     </div>
   );
 }
+

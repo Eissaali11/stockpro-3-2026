@@ -552,7 +552,7 @@ Production: https://your-domain/api
 ### Fixed Inventory Endpoints
 
 #### GET /api/technician-fixed-inventory/:technicianId
-الحصول على المخزون الثابت لفني
+الحصول على المخزون الثابت لمندوب
 
 **Auth**: Required
 

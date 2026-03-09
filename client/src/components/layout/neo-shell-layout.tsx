@@ -19,6 +19,7 @@ import {
   Search,
   Users,
   Warehouse,
+  Calculator,
 } from "lucide-react";
 
 type NeoShellLayoutProps = {
@@ -131,6 +132,7 @@ export function NeoShellLayout({ title, children }: NeoShellLayoutProps) {
     { href: "/operations", label: "العمليات", icon: ClipboardList, roles: ["admin", "supervisor"] },
     { href: "/warehouses", label: "إدارة المستودعات", icon: Warehouse, roles: ["admin", "supervisor"] },
     { href: "/withdrawn-devices", label: "الأصناف المرتجعة", icon: Undo2, roles: ["admin", "supervisor"] },
+    { href: "/accounting", label: "قسم المحاسبة", icon: Calculator, roles: ["admin", "supervisor", "accountant", "finance_manager", "auditor"] },
     { href: "/admin", label: "إدارة المستخدمين", icon: Users, roles: ["admin"] },
     { href: "/system-logs", label: "سجل النظام", icon: ScrollText, roles: ["admin", "supervisor"] },
     { href: "/backup", label: "النسخ الاحتياطية", icon: ShieldCheck, roles: ["admin"] },

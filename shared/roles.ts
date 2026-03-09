@@ -9,7 +9,7 @@ export type UserRole = typeof ROLES[keyof typeof ROLES];
 export const ROLE_LABELS_AR = {
   [ROLES.ADMIN]: 'مدير النظام',
   [ROLES.SUPERVISOR]: 'مشرف',
-  [ROLES.TECHNICIAN]: 'فني',
+  [ROLES.TECHNICIAN]: 'مندوب',
 } as const;
 
 export const ROLE_ORDER = {
@@ -57,3 +57,4 @@ export const ROLE_BADGE_VARIANTS = {
   [ROLES.SUPERVISOR]: 'bg-teal-100 text-teal-700 border-teal-200',
   [ROLES.TECHNICIAN]: 'bg-blue-100 text-blue-700 border-blue-200',
 } as const;
+

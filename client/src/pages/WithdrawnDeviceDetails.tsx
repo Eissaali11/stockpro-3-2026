@@ -108,7 +108,7 @@ const statusConfig: Record<
   rejected: {
     text: "مرفوضة",
     badgeClass: "bg-rose-500/15 text-rose-300 border-rose-500/30",
-    footerHint: "تم رفض المرتجع وفق نتائج المراجعة الفنية.",
+    footerHint: "تم رفض المرتجع وفق نتائج المراجعة المندوبة.",
   },
   maintenance: {
     text: "محول للصيانة",
@@ -155,7 +155,7 @@ export default function WithdrawnDeviceDetailsPage() {
       id: log.id,
       title:
         log.action === "create"
-          ? "طلب ارتجاع من الفني"
+          ? "طلب ارتجاع من المندوب"
           : log.action === "update"
             ? "تحديث بيانات المرتجع"
             : log.action === "delete"
@@ -357,14 +357,14 @@ export default function WithdrawnDeviceDetailsPage() {
               <User className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-white">معلومات الفني</h3>
+              <h3 className="text-lg font-semibold text-white">معلومات المندوب</h3>
               <p className="text-sm text-slate-400">بيانات المسؤول عن الارتجاع</p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <p className="text-xs text-slate-500 mb-1">اسم الفني</p>
+              <p className="text-xs text-slate-500 mb-1">اسم المندوب</p>
               <p className="font-medium text-slate-200">{device.technicianName}</p>
             </div>
             <div>
@@ -417,7 +417,7 @@ export default function WithdrawnDeviceDetailsPage() {
 
           <Card className="bg-slate-900/60 border-white/10 overflow-hidden">
             <div className="px-5 py-4 border-b border-white/10 bg-slate-800/40">
-              <h3 className="font-semibold text-white">الحالة الفنية المبدئية</h3>
+              <h3 className="font-semibold text-white">الحالة المندوبة المبدئية</h3>
             </div>
 
             <div className="p-5 space-y-3 text-sm">
@@ -435,7 +435,7 @@ export default function WithdrawnDeviceDetailsPage() {
               </div>
               <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-800/50">
                 <Settings className="h-4 w-4 text-cyan-400 mt-0.5" />
-                <p className="text-slate-200">ملاحظات الفني: {device.notes || "لا توجد ملاحظات إضافية"}</p>
+                <p className="text-slate-200">ملاحظات المندوب: {device.notes || "لا توجد ملاحظات إضافية"}</p>
               </div>
             </div>
           </Card>
@@ -535,3 +535,4 @@ export default function WithdrawnDeviceDetailsPage() {
     </div>
   );
 }
+

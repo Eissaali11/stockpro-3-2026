@@ -293,7 +293,7 @@ export default function ItemTypeDetailsPage() {
                       <TableRow className="border-slate-700/60 hover:bg-transparent bg-slate-900/25">
                         <TableHead className="text-right text-slate-400">رقم السيريال</TableHead>
                         <TableHead className="text-right text-slate-400">رقم الجهاز</TableHead>
-                        <TableHead className="text-right text-slate-400">الفني</TableHead>
+                        <TableHead className="text-right text-slate-400">المندوب</TableHead>
                         <TableHead className="text-right text-slate-400">الحالة</TableHead>
                         <TableHead className="text-right text-slate-400">التاريخ</TableHead>
                         <TableHead className="text-right text-slate-400">الإجراءات</TableHead>
@@ -339,3 +339,4 @@ export default function ItemTypeDetailsPage() {
     </div>
   );
 }
+

@@ -119,7 +119,7 @@ export const exportInventoryToExcel = async ({
   dateCell.font = { size: 11 };
   dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  const headerRow = worksheet.addRow(['#', 'اسم الصنف', 'النوع', 'الكمية', 'الوحدة', 'الحد الأدنى', 'اسم الفني', 'المدينة', 'الحالة', 'المنطقة']);
+  const headerRow = worksheet.addRow(['#', 'اسم الصنف', 'النوع', 'الكمية', 'الوحدة', 'الحد الأدنى', 'اسم المندوب', 'المدينة', 'الحالة', 'المنطقة']);
   headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   headerRow.eachCell((cell) => {
     cell.fill = {
@@ -1175,7 +1175,7 @@ export const exportTechnicianToExcel = async (data: TechnicianInventoryData) => 
   // Create Fixed Inventory Sheet
   createInventorySheet(
     'المخزون الثابت - Fixed',
-    'تقرير مخزون الفني',
+    'تقرير مخزون المندوب',
     data.fixedEntries,
     data.fixedInventory
   );
@@ -1190,7 +1190,7 @@ export const exportTechnicianToExcel = async (data: TechnicianInventoryData) => 
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const fileName = `تقرير_مخزون_الفني_${data.technicianName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  const fileName = `تقرير_مخزون_المندوب_${data.technicianName}_${new Date().toISOString().split('T')[0]}.xlsx`;
   saveAs(blob, fileName);
 };
 
@@ -1454,7 +1454,7 @@ export const exportSingleWarehouseToExcel = async (data: SingleWarehouseExportDa
 
     transfersSheet.addRow([]);
 
-    const transferHeaderRow = transfersSheet.addRow(['الفني', 'الأصناف المنقولة', 'الحالة', 'التاريخ', 'الملاحظات']);
+    const transferHeaderRow = transfersSheet.addRow(['المندوب', 'الأصناف المنقولة', 'الحالة', 'التاريخ', 'الملاحظات']);
     transferHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
     transferHeaderRow.height = 28;
     transferHeaderRow.eachCell((cell) => {
@@ -1596,3 +1596,4 @@ export const exportSingleWarehouseToExcel = async (data: SingleWarehouseExportDa
     const fileName = `سجل_عمليات_النظام_${new Date().toISOString().split('T')[0]}.xlsx`;
     saveAs(blob, fileName);
   };
+

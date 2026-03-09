@@ -461,7 +461,7 @@ export default function ReceivedDeviceDetails() {
         if (action === "delivery_proof") {
           return {
             id: log.id,
-            title: "تم رفع إثبات التسليم من تطبيق الفني",
+            title: "تم رفع إثبات التسليم من تطبيق المندوب",
             description: log.description,
             createdAt: new Date(log.createdAt),
             kind: (device?.status === "approved" ? "done" : "active") as TimelineItem["kind"],
@@ -597,7 +597,7 @@ export default function ReceivedDeviceDetails() {
         action.includes("technician") ||
         action.includes("assign") ||
         action.includes("handover") ||
-        text.includes("فني") ||
+        text.includes("مندوب") ||
         text.includes("عهدة")
       );
     });
@@ -650,10 +650,10 @@ export default function ReceivedDeviceDetails() {
     if (device.technicianId || technicianLog) {
       stages.push({
         id: "technician",
-        title: "بعهدة الفني",
+        title: "بعهدة المندوب",
         description: device.technicianId
-          ? "الجهاز أصبح ضمن عهدة الفني المسؤول عن عملية التسليم."
-          : "تم رصد مرحلة فنية على الجهاز.",
+          ? "الجهاز أصبح ضمن عهدة المندوب المسؤول عن عملية التسليم."
+          : "تم رصد مرحلة مندوبة على الجهاز.",
         createdAt: device.technicianId || technicianLog ? technicianAt : null,
         status: device.technicianId ? "done" : "active",
         icon: User,
@@ -664,7 +664,7 @@ export default function ReceivedDeviceDetails() {
       stages.push({
         id: "delivery-proof",
         title: "رفع ملف التسليم",
-        description: "تم رفع ملف التسليم/فرم الاستلام الموقّع من تطبيق الفني وإرساله للمشرف للمراجعة.",
+        description: "تم رفع ملف التسليم/فرم الاستلام الموقّع من تطبيق المندوب وإرساله للمشرف للمراجعة.",
         createdAt: deliveryProof?.createdAt || receiptFormProof?.createdAt || new Date(deliveryProofLog?.createdAt || Date.now()),
         status: device.status === "approved" ? "done" : "active",
         icon: FileText,
@@ -680,7 +680,7 @@ export default function ReceivedDeviceDetails() {
           : device.status === "rejected"
             ? "تم إيقاف التسليم بعد المراجعة."
             : deliveryProof || receiptFormProof
-              ? "تم رفع ملف التسليم من تطبيق الفني وبانتظار الاعتماد النهائي."
+              ? "تم رفع ملف التسليم من تطبيق المندوب وبانتظار الاعتماد النهائي."
               : "الجهاز بانتظار إتمام التسليم للعميل.",
       createdAt: deliveryAt,
       status: deliveryStatus,
@@ -951,7 +951,7 @@ export default function ReceivedDeviceDetails() {
 
                               toast({
                                 title: "لا يوجد ملف تسليم",
-                                description: "لم يتم رفع ملف تسليم أو فرم استلام ورقي من تطبيق الفني لهذا الجهاز بعد.",
+                                description: "لم يتم رفع ملف تسليم أو فرم استلام ورقي من تطبيق المندوب لهذا الجهاز بعد.",
                               });
                             }}
                             className="border-cyan-500/40 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-60"
@@ -973,7 +973,7 @@ export default function ReceivedDeviceDetails() {
           <div className="flex items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-cyan-300" />
-              <h3 className="text-lg font-bold text-white">ملفات التسليم المرفوعة من الفني</h3>
+              <h3 className="text-lg font-bold text-white">ملفات التسليم المرفوعة من المندوب</h3>
             </div>
             {(deliveryProof || receiptFormProof) && (
               <Badge className="border border-cyan-500/30 bg-cyan-500/10 text-cyan-200">
@@ -1254,3 +1254,4 @@ export default function ReceivedDeviceDetails() {
     </div>
   );
 }
+

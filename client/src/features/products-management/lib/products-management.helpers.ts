@@ -52,7 +52,7 @@ export const toStorageOptions = (rows: any[], type: StorageBucketType): StorageO
           row?.nameAr ??
           [row?.firstName, row?.lastName].filter(Boolean).join(" ")) ||
           row?.technicianName ||
-          "فني"
+          "مندوب"
       ),
     }))
     .filter((option) => option.id.length > 0);
@@ -172,7 +172,7 @@ export const buildProductDistributionRows = (
       target,
       "technician",
       line.technicianId,
-      line.technicianName || "فني",
+      line.technicianName || "مندوب",
       normalizedQuantity
     );
   }
@@ -197,3 +197,4 @@ export const calculateProductsKpis = (rows: ProductDistributionRow[]): ProductsK
     }
   );
 };
+

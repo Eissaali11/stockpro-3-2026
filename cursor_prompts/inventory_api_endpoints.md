@@ -1,4 +1,4 @@
-# 📡 API Endpoints لتطبيق Flutter - طلب وتحديث المخزون للفني
+# 📡 API Endpoints لتطبيق Flutter - طلب وتحديث المخزون للمندوب
 
 ## 🌐 Base URL
 ```
@@ -12,13 +12,13 @@ Authorization: Bearer <token>
 
 ---
 
-# 📦 صفحة طلب المخزون للفني
+# 📦 صفحة طلب المخزون للمندوب
 
 ## 1️⃣ إنشاء طلب مخزون جديد
 
 ### POST `/api/inventory-requests`
 
-**الوصف:** إنشاء طلب مخزون جديد من الفني للمستودع
+**الوصف:** إنشاء طلب مخزون جديد من المندوب للمستودع
 
 ### Request Body:
 ```json
@@ -135,7 +135,7 @@ Future<InventoryRequest> createInventoryRequest({
 
 ### GET `/api/inventory-requests/my`
 
-**الوصف:** الحصول على جميع طلبات المخزون الخاصة بالفني الحالي
+**الوصف:** الحصول على جميع طلبات المخزون الخاصة بالمندوب الحالي
 
 ### Response (200):
 ```json
@@ -188,7 +188,7 @@ Future<List<InventoryRequest>> getMyInventoryRequests() async {
 
 ### GET `/api/warehouse-transfers`
 
-**الوصف:** الحصول على طلبات النقل من المستودع للفني (للقبول أو الرفض)
+**الوصف:** الحصول على طلبات النقل من المستودع للمندوب (للقبول أو الرفض)
 
 ### Response (200):
 ```json
@@ -370,13 +370,13 @@ Future<void> rejectMultipleTransfers(List<String> transferIds, {String? reason})
 
 ---
 
-# 🔄 صفحة تحديث المخزون للفني
+# 🔄 صفحة تحديث المخزون للمندوب
 
 ## 1️⃣ الحصول على المخزون الثابت
 
 ### GET `/api/my-fixed-inventory`
 
-**الوصف:** الحصول على المخزون الثابت للفني الحالي
+**الوصف:** الحصول على المخزون الثابت للمندوب الحالي
 
 ### Response (200):
 ```json
@@ -427,7 +427,7 @@ Future<TechnicianInventory?> getMyFixedInventory() async {
 
 ### GET `/api/my-moving-inventory`
 
-**الوصف:** الحصول على المخزون المتحرك للفني الحالي
+**الوصف:** الحصول على المخزون المتحرك للمندوب الحالي
 
 ### Response (200):
 ```json
@@ -536,7 +536,7 @@ Future<void> transferStock({
 
 ### GET `/api/stock-movements`
 
-**الوصف:** الحصول على سجل حركات المخزون للفني
+**الوصف:** الحصول على سجل حركات المخزون للمندوب
 
 ### Response (200):
 ```json

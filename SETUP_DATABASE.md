@@ -126,7 +126,7 @@ Password: admin123
 Username: supervisor1
 Password: super123
 
-الفني:
+المندوب:
 Username: tech1
 Password: tech123
 ```
@@ -186,3 +186,4 @@ services.msc
 ---
 
 **ملاحظة**: الحل السحابي (Neon) هو الأسهل والأسرع! 🚀
+

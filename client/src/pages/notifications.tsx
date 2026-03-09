@@ -289,7 +289,7 @@ export default function NotificationsPage() {
       if (user?.role === "admin" && directoryUser.role !== "technician") return;
       map.set(
         directoryUser.id,
-        directoryUser.fullName || directoryUser.username || `فني #${directoryUser.id.slice(0, 8)}`,
+        directoryUser.fullName || directoryUser.username || `مندوب #${directoryUser.id.slice(0, 8)}`,
       );
     });
     return map;
@@ -955,7 +955,7 @@ export default function NotificationsPage() {
                                       <h3 className="text-white font-bold text-base">طلب سحب جهاز: {device.terminalId}</h3>
                                       <p className="text-xs text-slate-400 mt-1">الرقم التسلسلي: {device.serialNumber}</p>
                                       <p className="text-xs text-slate-500 mt-1">
-                                        الفني: {technicianNameById.get(device.technicianId) || `فني #${device.technicianId.slice(0, 8)}`}
+                                        المندوب: {technicianNameById.get(device.technicianId) || `مندوب #${device.technicianId.slice(0, 8)}`}
                                       </p>
                                       <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                                         <Clock3 className="h-3.5 w-3.5" />
@@ -1293,7 +1293,7 @@ export default function NotificationsPage() {
           <div className="py-4 space-y-4">
             {selectedRequest && (
               <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-                <p className="text-sm text-gray-400 mb-1">الفني:</p>
+                <p className="text-sm text-gray-400 mb-1">المندوب:</p>
                 <p className="text-white font-bold">{selectedRequest.technicianName}</p>
               </div>
             )}
@@ -1592,3 +1592,4 @@ export default function NotificationsPage() {
     </>
   );
 }
+

@@ -346,7 +346,7 @@ export default function WithdrawFromTechnicianModal({
 
       toast({
         title: "تم السحب بنجاح",
-        description: "تم تحويل المخزون من الفني إلى المستودع",
+        description: "تم تحويل المخزون من المندوب إلى المستودع",
       });
 
       onOpenChange(false);
@@ -420,14 +420,14 @@ export default function WithdrawFromTechnicianModal({
           <form onSubmit={form.handleSubmit(onSubmit)} className="max-h-[85vh] flex flex-col">
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">الفني المستلم</label>
+                <label className="block text-sm font-medium text-slate-300 mb-2">المندوب المستلم</label>
                 <div className="flex items-center gap-3 p-3 bg-[#102222]/70 border border-cyan-400/10 rounded-xl">
                   <div className="size-10 rounded-full border border-cyan-300/30 bg-slate-800 flex items-center justify-center text-cyan-200 font-bold shrink-0">
                     {(technicianName || "ف").slice(0, 1)}
                   </div>
                   <div>
                     <span className="text-slate-100 font-bold block">{technicianName}</span>
-                    <span className="text-cyan-300/70 text-xs">فني صيانة وتمديد</span>
+                    <span className="text-cyan-300/70 text-xs">مندوب صيانة وتمديد</span>
                   </div>
                 </div>
               </div>
@@ -736,3 +736,4 @@ export default function WithdrawFromTechnicianModal({
     </Dialog>
   );
 }
+

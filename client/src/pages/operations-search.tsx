@@ -311,7 +311,7 @@ export default function OperationsSearchPage() {
           markerClass: "bg-cyan-400",
           tags: [
             `المدينة: ${device.city || "غير محدد"}`,
-            `الفني: ${device.technicianName || "غير محدد"}`,
+            `المندوب: ${device.technicianName || "غير محدد"}`,
           ],
         },
       ];
@@ -366,11 +366,11 @@ export default function OperationsSearchPage() {
         {
           id: `rc-create-${device.id}`,
           title: "استلام الجهاز في النظام",
-          description: `تم استلام الجهاز ${device.serialNumber} من الفني وإدخاله للمراجعة.`,
+          description: `تم استلام الجهاز ${device.serialNumber} من المندوب وإدخاله للمراجعة.`,
           timestamp: device.createdAt,
           markerClass: "bg-cyan-400",
           tags: [
-            `الفني: ${device.technicianId}`,
+            `المندوب: ${device.technicianId}`,
             `نوع المنتج: ${itemTypeLabel}`,
           ],
         },
@@ -453,12 +453,12 @@ export default function OperationsSearchPage() {
         {
           id: `op-create-${group.groupId}`,
           title: "إنشاء عملية التحويل",
-          description: `تم إنشاء العملية من ${base.warehouseName || "المستودع"} إلى الفني ${base.technicianName || "غير محدد"}.`,
+          description: `تم إنشاء العملية من ${base.warehouseName || "المستودع"} إلى المندوب ${base.technicianName || "غير محدد"}.`,
           timestamp: base.createdAt,
           markerClass: "bg-cyan-400",
           tags: [
             `المستودع: ${base.warehouseName || "غير محدد"}`,
-            `الفني: ${base.technicianName || "غير محدد"}`,
+            `المندوب: ${base.technicianName || "غير محدد"}`,
           ],
         },
       ];

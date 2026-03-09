@@ -100,7 +100,7 @@ describe('WithdrawTechnicianInventoryToWarehouseUseCase', () => {
     });
 
     expect(repository.logSystemActivity).toHaveBeenCalledTimes(1);
-    expect(repository.logSystemActivity.mock.calls[0][0].description).toContain('تم سحب 5 من مخزون الفني Tech One إلى المستودع WH-1');
+    expect(repository.logSystemActivity.mock.calls[0][0].description).toContain('تم سحب 5 من مخزون المندوب Tech One إلى المستودع WH-1');
   });
 
   it('throws NotFoundError when technician does not exist', async () => {
@@ -200,3 +200,4 @@ describe('WithdrawTechnicianInventoryToWarehouseUseCase', () => {
     expect(repository.logSystemActivity).not.toHaveBeenCalled();
   });
 });
+

@@ -93,7 +93,7 @@ export function WarehouseTransfersSection({
           <Table>
             <TableHeader>
               <TableRow className="border-white/10 hover:bg-transparent">
-                <TableHead className="text-right text-white/50">الفني</TableHead>
+                <TableHead className="text-right text-white/50">المندوب</TableHead>
                 <TableHead className="text-right text-white/50">الأصناف</TableHead>
                 <TableHead className="text-right text-white/50">الحالة</TableHead>
                 <TableHead className="text-right text-white/50">التاريخ</TableHead>
@@ -138,3 +138,4 @@ export function WarehouseTransfersSection({
     </div>
   );
 }
+

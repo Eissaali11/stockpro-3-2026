@@ -126,7 +126,7 @@ export class WithdrawTechnicianInventoryToWarehouseUseCase {
       }
 
       if (technician.regionId !== input.actor.regionId) {
-        throw new WithdrawToWarehouseUseCaseError(403, "لا يمكنك السحب من فني خارج منطقتك");
+        throw new WithdrawToWarehouseUseCaseError(403, "لا يمكنك السحب من مندوب خارج منطقتك");
       }
 
       if (warehouse.regionId !== input.actor.regionId) {
@@ -276,7 +276,7 @@ export class WithdrawTechnicianInventoryToWarehouseUseCase {
       entityType: "warehouse",
       entityId: input.warehouseId,
       entityName: warehouse.name,
-      description: `تم سحب ${totalQuantity} من مخزون الفني ${technician.fullName} إلى المستودع ${warehouse.name}`,
+      description: `تم سحب ${totalQuantity} من مخزون المندوب ${technician.fullName} إلى المستودع ${warehouse.name}`,
       details: JSON.stringify({
         technicianId: input.technicianId,
         technicianName: technician.fullName,
@@ -297,3 +297,4 @@ export class WithdrawTechnicianInventoryToWarehouseUseCase {
     };
   }
 }
+

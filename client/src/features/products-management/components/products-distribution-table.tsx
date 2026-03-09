@@ -35,7 +35,7 @@ export function ProductsDistributionTable({ rows, isLoading = false, onViewDetai
       <div className="grid grid-cols-12 gap-4 px-6 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-700/80 mb-2">
         <div className="col-span-3">المنتج</div>
         <div className="col-span-2 text-center">المستودعات الرئيسية</div>
-        <div className="col-span-2 text-center">بعهد الفنيين</div>
+        <div className="col-span-2 text-center">بعهد المندوبين</div>
         <div className="col-span-2 text-center">الإجمالي الكلي</div>
         <div className="col-span-2 text-center">الحركة (7 أيام)</div>
         <div className="col-span-1 text-center">إجراءات</div>
@@ -143,11 +143,11 @@ export function ProductsDistributionTable({ rows, isLoading = false, onViewDetai
                   <div>
                     <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                       <UserCog className="h-4 w-4 text-orange-400" />
-                      أعلى الفنيين عهدة ({row.technicianQuantity.toLocaleString("en-US")})
+                      أعلى المندوبين عهدة ({row.technicianQuantity.toLocaleString("en-US")})
                     </h5>
                     <div className="space-y-2">
                       {technicians.length === 0 ? (
-                        <div className="text-xs text-slate-500 bg-black/30 px-3 py-2 rounded">لا توجد عهدة فنيين لهذا المنتج.</div>
+                        <div className="text-xs text-slate-500 bg-black/30 px-3 py-2 rounded">لا توجد عهدة مندوبين لهذا المنتج.</div>
                       ) : (
                         technicians
                           .slice()
@@ -176,3 +176,4 @@ export function ProductsDistributionTable({ rows, isLoading = false, onViewDetai
     </section>
   );
 }
+

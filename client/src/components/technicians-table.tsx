@@ -37,7 +37,7 @@ export default function TechniciansTable() {
       queryClient.invalidateQueries({ queryKey: ["/api/technicians"] });
       toast({
         title: "تم الحذف بنجاح",
-        description: "تم حذف بيانات الفني",
+        description: "تم حذف بيانات المندوب",
       });
     },
     onError: () => {
@@ -61,7 +61,7 @@ export default function TechniciansTable() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm("هل أنت متأكد من حذف بيانات هذا الفني؟")) {
+    if (confirm("هل أنت متأكد من حذف بيانات هذا المندوب؟")) {
       deleteMutation.mutate(id);
     }
   };
@@ -77,7 +77,7 @@ export default function TechniciansTable() {
     }
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('تقرير الفنيين');
+    const worksheet = workbook.addWorksheet('تقرير المندوبين');
     
     const currentDate = new Date().toLocaleDateString('ar-EG', {
       weekday: 'long',
@@ -102,7 +102,7 @@ export default function TechniciansTable() {
     // Add title row
     worksheet.mergeCells('A1:M1');
     const titleCell = worksheet.getCell('A1');
-    titleCell.value = 'نظام إدارة مخزون الفنيين';
+    titleCell.value = 'نظام إدارة مخزون المندوبين';
     titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
     titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -119,7 +119,7 @@ export default function TechniciansTable() {
     
     // Add header row
     const headerRow = worksheet.getRow(4);
-    headerRow.values = ['#', 'اسم الفني', 'المدينة', 'أجهزة N950', 'أجهزة I9000s', 'أجهزة I9100', 'أوراق رول', 'ملصقات مداى', 'بطاريات جديدة', 'شرائح موبايلي', 'شرائح STC', 'شرائح زين', 'ملاحظات'];
+    headerRow.values = ['#', 'اسم المندوب', 'المدينة', 'أجهزة N950', 'أجهزة I9000s', 'أجهزة I9100', 'أوراق رول', 'ملصقات مداى', 'بطاريات جديدة', 'شرائح موبايلي', 'شرائح STC', 'شرائح زين', 'ملاحظات'];
     headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
     headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF475569' } };
     headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -191,7 +191,7 @@ export default function TechniciansTable() {
     
     // Stats data
     const statsData = [
-      ['عدد الفنيين', filteredTechnicians.length, 'أجهزة N950', totalN950, 'أجهزة I9000s', totalI9000s],
+      ['عدد المندوبين', filteredTechnicians.length, 'أجهزة N950', totalN950, 'أجهزة I9000s', totalI9000s],
       ['أجهزة I9100', totalI9100, 'أوراق رول', totalRoll, 'ملصقات مداى', totalStickers],
       ['بطاريات جديدة', totalNewBatteries, 'شرائح موبايلي', totalMobily, 'شرائح STC', totalSTC],
       ['شرائح زين', totalZain, '', '', '', '']
@@ -233,7 +233,7 @@ export default function TechniciansTable() {
     // Set column widths
     worksheet.columns = [
       { width: 6 },   // #
-      { width: 25 },  // اسم الفني
+      { width: 25 },  // اسم المندوب
       { width: 18 },  // المدينة
       { width: 14 },  // N950
       { width: 14 },  // I9000s
@@ -253,7 +253,7 @@ export default function TechniciansTable() {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `تقرير_الفنيين_${new Date().toISOString().split('T')[0]}.xlsx`;
+    link.download = `تقرير_المندوبين_${new Date().toISOString().split('T')[0]}.xlsx`;
     link.click();
     window.URL.revokeObjectURL(url);
     
@@ -272,7 +272,7 @@ export default function TechniciansTable() {
       <Card className="shadow-lg">
         <CardHeader className="border-b">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-xl md:text-2xl font-bold text-foreground">بيانات الفنيين</h2>
+            <h2 className="text-xl md:text-2xl font-bold text-foreground">بيانات المندوبين</h2>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
               <div className="relative flex-1 sm:flex-initial">
                 <Input
@@ -428,7 +428,7 @@ export default function TechniciansTable() {
                   <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900">
                       <tr>
-                        <th className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3 text-right text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">الفني</th>
+                        <th className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3 text-right text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">المندوب</th>
                         <th className="hidden md:table-cell whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3 text-right text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">المدينة</th>
                         <th className="whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">N950</th>
                         <th className="whitespace-nowrap px-1 py-2 sm:px-4 sm:py-3 text-center text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">I9000s</th>
@@ -518,7 +518,7 @@ export default function TechniciansTable() {
           {filteredTechnicians && filteredTechnicians.length > 0 && (
             <div className="mt-4 pt-4 border-t border-border">
               <p className="text-sm text-muted-foreground text-center">
-                إجمالي الفنيين: <span className="font-semibold text-foreground">{filteredTechnicians.length}</span>
+                إجمالي المندوبين: <span className="font-semibold text-foreground">{filteredTechnicians.length}</span>
               </p>
             </div>
           )}
@@ -534,3 +534,4 @@ export default function TechniciansTable() {
     </>
   );
 }
+

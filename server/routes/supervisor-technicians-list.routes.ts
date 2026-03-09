@@ -4,10 +4,10 @@ import { techniciansContainer } from "../composition/technicians.container";
 import { usersContainer } from "../composition/users.container";
 
 /**
- * Supervisor Technicians List - عرض قوائم الفنيين (<100 سطر)
+ * Supervisor Technicians List - عرض قوائم المندوبين (<100 سطر)
  */
 export function registerSupervisorTechniciansListRoutes(app: Express): void {
-  // عرض مخزون جميع الفنيين في المنطقة
+  // عرض مخزون جميع المندوبين في المنطقة
   app.get("/api/supervisor/technicians-inventory", requireAuth, requireSupervisor, async (req, res) => {
     try {
       const user = (req as any).user;
@@ -29,7 +29,7 @@ export function registerSupervisorTechniciansListRoutes(app: Express): void {
     }
   });
 
-  // عرض قائمة الفنيين في المنطقة
+  // عرض قائمة المندوبين في المنطقة
   app.get("/api/supervisor/technicians", requireAuth, requireSupervisor, async (req, res) => {
     try {
       const supervisor = (req as any).user;
@@ -52,3 +52,4 @@ export function registerSupervisorTechniciansListRoutes(app: Express): void {
     }
   });
 }
+

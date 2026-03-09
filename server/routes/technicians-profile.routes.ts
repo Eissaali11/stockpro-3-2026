@@ -3,7 +3,7 @@ import { techniciansController } from "../controllers/technicians.controller";
 import { requireAuth, requireSupervisor } from "../middleware/auth";
 
 /**
- * Technicians Profile Routes - معلومات الفنيين وملفاتهم (<100 سطر)
+ * Technicians Profile Routes - معلومات المندوبين وملفاتهم (<100 سطر)
  */
 export function registerTechniciansProfileRoutes(app: Express): void {
   // Get all technicians
@@ -20,3 +20,4 @@ export function registerTechniciansProfileRoutes(app: Express): void {
   // Get single technician
   app.get("/api/technicians/:id", requireAuth, techniciansController.getById);
 }
+

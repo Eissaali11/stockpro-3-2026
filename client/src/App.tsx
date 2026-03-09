@@ -39,6 +39,7 @@ import SystemLogsPage from "@/pages/system-logs";
 import BackupManagementPage from "@/pages/backup-management";
 import ItemTypesManagement from "@/pages/item-types-management";
 import ItemTypeDetailsPage from "@/pages/item-type-details";
+import AccountingDashboardPage from "@/pages/accounting-dashboard";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import { NeoShellLayout } from "@/components/layout/neo-shell-layout";
@@ -88,7 +89,7 @@ function AuthenticatedRouter() {
       <Route path="/products-management/:id/details" component={withShell(ProductDetailsPage, "تفاصيل المنتج")} />
       <Route path="/products-management/:id/smart-add" component={withShell(ProductSmartAddPage, "مركز المسح والتحقق الذكي")} />
       <Route path="/profile" component={withShell(ProfilePage, "الملف الشخصي")} />
-      <Route path="/technician-details/:id" component={withShell(TechnicianDetailsPage, "تفاصيل عهدة الفني")} />
+      <Route path="/technician-details/:id" component={withShell(TechnicianDetailsPage, "تفاصيل عهدة المندوب")} />
       <Route path="/technician-details/:technicianId/item/:itemTypeId" component={withShell(TechnicianItemDetailsPage, "تفاصيل المنتج")} />
       <Route path="/employee-detailed-profile-template" component={withShell(EmployeeDetailedProfileTemplatePage, "الملف التفصيلي للموظف")} />
       <Route path="/employee-edit-profile-template" component={withShell(EmployeeEditProfileTemplatePage, "تعديل بيانات الموظف")} />
@@ -101,7 +102,7 @@ function AuthenticatedRouter() {
       )}
       {hasRoleOrAbove(user?.role || '', ROLES.SUPERVISOR) && (
         <>
-          <Route path="/admin-inventory-overview" component={withShell(AdminInventoryOverview, "لوحة مخزون الفنيين")} />
+          <Route path="/admin-inventory-overview" component={withShell(AdminInventoryOverview, "لوحة مخزون المندوبين")} />
           <Route path="/warehouses" component={withShell(WarehousesPage, "إدارة المستودعات")} />
           <Route path="/warehouses/:id" component={withShell(WarehouseDetailsPage, "تفاصيل المستودع")} />
           <Route path="/transfer-details/:id" component={withShell(TransferDetailsPage, "تفاصيل التحويل")} />
@@ -109,11 +110,12 @@ function AuthenticatedRouter() {
           <Route path="/operation-details/:groupId" component={withShell(OperationDetailsPage, "تفاصيل العملية")} />
         </>
       )}
+      <Route path="/accounting" component={withShell(AccountingDashboardPage, "قسم المحاسبة")} />
       {user?.role === "admin" && (
         <>
           <Route path="/admin" component={withShell(AdminPage, "إدارة المستخدمين والمناطق")} />
           <Route path="/users" component={withShell(UsersPage, "إدارة المستخدمين")} />
-          <Route path="/fixed-inventory" component={withShell(FixedInventoryDashboard, "المخزون الثابت للفنيين")} />
+          <Route path="/fixed-inventory" component={withShell(FixedInventoryDashboard, "المخزون الثابت للمندوبين")} />
           <Route path="/backup" component={withShell(BackupManagementPage, "إدارة النسخ الاحتياطية")} />
           <Route path="/item-types" component={withShell(ItemTypesManagement, "إدارة الأصناف")} />
           <Route path="/item-types/:id/details" component={withShell(ItemTypeDetailsPage, "تفاصيل الصنف")} />
@@ -168,3 +170,4 @@ function App() {
 }
 
 export default App;
+

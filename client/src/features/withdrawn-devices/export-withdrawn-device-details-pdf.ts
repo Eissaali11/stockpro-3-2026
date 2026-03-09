@@ -100,9 +100,9 @@ export async function exportWithdrawnDeviceDetailsToPDF({
           </div>
 
           <div style="flex: 1; background: #f8fafc; border-radius: 12px; border-right: 4px solid #18B2B0; padding: 16px;">
-            <h3 style="margin: 0 0 10px 0; color: #0f766e; font-size: 17px;">بيانات الفني</h3>
+            <h3 style="margin: 0 0 10px 0; color: #0f766e; font-size: 17px;">بيانات المندوب</h3>
             <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-              <tr><td style="padding: 5px 0; color: #64748b; width: 105px;">اسم الفني:</td><td style="padding: 5px 0; color: #0f172a; font-weight: 600;">${escapeHtml(device.technicianName)}</td></tr>
+              <tr><td style="padding: 5px 0; color: #64748b; width: 105px;">اسم المندوب:</td><td style="padding: 5px 0; color: #0f172a; font-weight: 600;">${escapeHtml(device.technicianName)}</td></tr>
               <tr><td style="padding: 5px 0; color: #64748b;">المدينة:</td><td style="padding: 5px 0; color: #0f172a;">${escapeHtml(device.city)}</td></tr>
               <tr><td style="padding: 5px 0; color: #64748b;">نوع الشريحة:</td><td style="padding: 5px 0; color: #0f172a;">${escapeHtml(device.simCardType || "لا يوجد")}</td></tr>
             </table>
@@ -150,7 +150,7 @@ export async function exportWithdrawnDeviceDetailsToPDF({
         </div>
 
         <div style="background: #f8fafc; border-radius: 12px; border-right: 4px solid #18B2B0; padding: 16px; margin-bottom: 20px;">
-          <h3 style="margin: 0 0 10px 0; color: #0f766e; font-size: 17px;">ملاحظات الفني</h3>
+          <h3 style="margin: 0 0 10px 0; color: #0f766e; font-size: 17px;">ملاحظات المندوب</h3>
           <p style="margin: 0; color: #0f172a; line-height: 1.7; font-size: 13px;">${escapeHtml(device.notes || "لا توجد ملاحظات إضافية")}</p>
         </div>
 
@@ -234,3 +234,4 @@ export async function exportWithdrawnDeviceDetailsToPDF({
     document.body.removeChild(container);
   }
 }
+

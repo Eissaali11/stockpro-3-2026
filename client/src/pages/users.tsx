@@ -360,7 +360,7 @@ export default function UsersPage() {
                         ${user.role === 'admin' 
                           ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white' 
                           : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white'}`}>
-                        {user.role === 'admin' ? '👑 مدير النظام' : '👨‍💼 فني'}
+                        {user.role === 'admin' ? '👑 مدير النظام' : '👨‍💼 مندوب'}
                       </motion.span>
                       <motion.span 
                         whileHover={{ scale: 1.05 }}
@@ -423,3 +423,4 @@ export default function UsersPage() {
     </div>
   );
 }
+

@@ -69,9 +69,9 @@ const lifecycleStyleByCategory: Record<
     locationBuilder: (row) => row.warehouseName || `مستودع المنطقة${row.regionId ? ` (${row.regionId})` : ""}`,
   },
   "technician-stock": {
-    label: "في مخزون الفني",
+    label: "في مخزون المندوب",
     className: "bg-orange-700/60 text-white border border-slate-600",
-    locationBuilder: (row) => `عهدة الفني (${row.technicianName || row.technicianId || "غير محدد"})`,
+    locationBuilder: (row) => `عهدة المندوب (${row.technicianName || row.technicianId || "غير محدد"})`,
   },
   delivered: {
     label: "تم التسليم للعميل",
@@ -114,3 +114,4 @@ export const formatArabicDateTime = (value: string): string => {
 
   return `${datePart} | ${timePart}`;
 };
+

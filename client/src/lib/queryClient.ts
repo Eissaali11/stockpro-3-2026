@@ -80,6 +80,14 @@ export const getQueryFn: <T>(options: {
         return null;
       }
 
+      const contentType = res.headers.get("content-type") || "";
+      const trimmed = responseText.trim();
+      const looksLikeJson = trimmed.startsWith("{") || trimmed.startsWith("[");
+
+      if (!contentType.includes("application/json") && !looksLikeJson) {
+        throw new Error("تم استلام HTML بدل JSON من السيرفر. تحقق من مسارات API أو إعادة تشغيل الخادم.");
+      }
+
       return JSON.parse(responseText);
     } catch (error: any) {
       // If it's a network error (Failed to fetch), provide a more helpful message
@@ -104,3 +112,4 @@ export const queryClient = new QueryClient({
     },
   },
 });
+

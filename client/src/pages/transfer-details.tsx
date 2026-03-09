@@ -196,7 +196,7 @@ export default function TransferDetailsPage() {
     });
 
     const infoSection = [
-      ['المستودع:', transferDetail.warehouseName, 'الفني:', transferDetail.technicianName],
+      ['المستودع:', transferDetail.warehouseName, 'المندوب:', transferDetail.technicianName],
       ['المنفذ:', transferDetail.performedByName, 'الحالة:', transferDetail.status === 'accepted' ? 'مقبول' : transferDetail.status === 'rejected' ? 'مرفوض' : 'قيد الانتظار'],
       ['تاريخ العملية:', `${arabicOperationDate} - ${operationTime}`, '', ''],
     ];
@@ -477,7 +477,7 @@ export default function TransferDetailsPage() {
                   <User className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500 font-semibold">الفني</p>
+                  <p className="text-sm text-gray-500 font-semibold">المندوب</p>
                   <h3 className="text-xl font-bold text-gray-800">{transferDetail.technicianName}</h3>
                 </div>
               </div>
@@ -599,3 +599,4 @@ export default function TransferDetailsPage() {
     </div>
   );
 }
+

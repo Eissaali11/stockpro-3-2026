@@ -114,13 +114,13 @@ const translations: Record<Language, Record<string, string>> = {
     'dashboard.fixed_inventory': 'المخزون الثابت',
     'dashboard.moving_inventory': 'المخزون المتحرك',
     'dashboard.warehouses': 'المخازن',
-    'dashboard.technicians': 'الفنيين',
+    'dashboard.technicians': 'المندوبين',
     
     // Navigation
     'nav.home': 'الصفحة الرئيسية',
     'nav.admin_operations': 'إدارة العمليات',
     'nav.operations': 'العمليات',
-    'nav.technician_inventory': 'لوحة مخزون الفنيين',
+    'nav.technician_inventory': 'لوحة مخزون المندوبين',
     'nav.moving_inventory': 'المخزون المتحرك',
     'nav.fixed_inventory': 'المخزون الثابت',
     'nav.devices': 'الأجهزة',
@@ -149,7 +149,7 @@ const translations: Record<Language, Record<string, string>> = {
     // Users
     'users.title': 'المستخدمين',
     'users.add': 'إضافة مستخدم',
-    'users.technician': 'فني',
+    'users.technician': 'مندوب',
     'users.supervisor': 'مشرف',
     'users.admin': 'مدير',
     'users.role': 'الدور',
@@ -222,9 +222,9 @@ const translations: Record<Language, Record<string, string>> = {
     'dashboard.warehouse_management': 'إدارة المستودعات',
     'dashboard.no_warehouses_found': 'لا توجد مستودعات مطابقة للبحث',
     'dashboard.try_other_search': 'جرب كلمات بحث أخرى',
-    'dashboard.technicians_panel': 'لوحة الفنيين',
-    'dashboard.technicians_overview': 'نظرة شاملة على مخزون جميع الفنيين',
-    'dashboard.no_technicians_found': 'لا يوجد فنيين مطابقين للبحث',
+    'dashboard.technicians_panel': 'لوحة المندوبين',
+    'dashboard.technicians_overview': 'نظرة شاملة على مخزون جميع المندوبين',
+    'dashboard.no_technicians_found': 'لا يوجد مندوبين مطابقين للبحث',
     'dashboard.report_date': 'تاريخ التقرير: ',
     'dashboard.report_filename': 'تقرير_المخزون_',
     
@@ -250,7 +250,7 @@ const translations: Record<Language, Record<string, string>> = {
     'landing.feature.dual_inventory.description': 'نظام فريد يجمع بين المخزون الثابت والمتحرك في منصة واحدة، مع آليات تتبع دقيقة لكل عملية وحركة في الوقت الفعلي',
     
     'landing.feature.roles.title': 'تحكم هرمي متطور',
-    'landing.feature.roles.description': 'هيكلية صلاحيات ثلاثية المستويات توفر أمان محكم ومرونة كاملة، من المدير إلى المشرف وصولاً للفني',
+    'landing.feature.roles.description': 'هيكلية صلاحيات ثلاثية المستويات توفر أمان محكم ومرونة كاملة، من المدير إلى المشرف وصولاً للمندوب',
     
     'landing.feature.warehouses.title': 'منظومة مستودعات ذكية',
     'landing.feature.warehouses.description': 'نظام شامل لتتبع وإدارة المستودعات مزود بآلية موافقات ذكية تضمن سلاسة عمليات النقل والتحويل',
@@ -272,7 +272,7 @@ const translations: Record<Language, Record<string, string>> = {
     
     'landing.stats.warehouses': 'مستودعات',
     'landing.stats.products': 'منتجات',
-    'landing.stats.technicians': 'فنيين',
+    'landing.stats.technicians': 'مندوبين',
     'landing.stats.cities': 'مدن',
     
     'landing.cta.title': 'ابدأ في إدارة مخزونك اليوم',
@@ -493,3 +493,4 @@ const translations: Record<Language, Record<string, string>> = {
     'landing.footer.rights': 'All Rights Reserved',
   }
 };
+

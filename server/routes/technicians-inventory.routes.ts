@@ -22,7 +22,7 @@ const inventoryEntrySchema = z.object({
 });
 
 /**
- * Technicians Inventory Routes - نقاط نهاية المخزون للفنيين (<100 سطر)
+ * Technicians Inventory Routes - نقاط نهاية المخزون للمندوبين (<100 سطر)
  */
 export function registerTechniciansInventoryRoutes(app: Express): void {
   // Get my fixed inventory

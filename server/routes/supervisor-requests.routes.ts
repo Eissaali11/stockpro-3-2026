@@ -6,7 +6,7 @@ import { eq, and } from "drizzle-orm";
 
 /**
  * Supervisor Requests Routes - طلبات المخزون (< 100 lines)
- * مجال المسؤولية: إدارة طلبات المخزون للفنيين في المنطقة فقط
+ * مجال المسؤولية: إدارة طلبات المخزون للمندوبين في المنطقة فقط
  */
 export function registerSupervisorRequestsRoutes(app: Express): void {
 

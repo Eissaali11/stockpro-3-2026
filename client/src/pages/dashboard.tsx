@@ -277,8 +277,8 @@ export default function Dashboard() {
 
             <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
-                { title: "مخزون الفنيين الثابت", value: totals.fixed, color: "cyan" },
-                { title: "مخزون الفنيين المتحرك", value: totals.moving, color: "orange" },
+                { title: "مخزون المندوبين الثابت", value: totals.fixed, color: "cyan" },
+                { title: "مخزون المندوبين المتحرك", value: totals.moving, color: "orange" },
                 { title: "مخزون المستودعات المركزي", value: totals.central, color: "purple" },
               ].map((card) => {
                 const colorClass =
@@ -416,7 +416,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-8">
             <div className="rounded-2xl bg-slate-900/40 border border-slate-700 p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold">نظرة سريعة: الفنيين</h3>
+                <h3 className="text-lg font-semibold">نظرة سريعة: المندوبين</h3>
                 <Link className="text-sm text-cyan-300 hover:underline" href={canSeeGlobalData ? "/admin-inventory-overview" : "/my-moving-inventory"}>عرض الكل</Link>
               </div>
 

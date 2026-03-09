@@ -214,7 +214,7 @@ export default function OperationDetailsPage() {
     });
 
     const infoSection = [
-      ["المستودع:", operationGroup.warehouseName, "الفني:", operationGroup.technicianName],
+      ["المستودع:", operationGroup.warehouseName, "المندوب:", operationGroup.technicianName],
       ["الحالة:", operationGroup.status === "accepted" ? "مقبول" : operationGroup.status === "rejected" ? "مرفوض" : "قيد الانتظار", "", ""],
       ["تاريخ الطلب:", `${createdDateStr} - ${createdTimeStr}`, "", ""],
     ];
@@ -389,7 +389,7 @@ export default function OperationDetailsPage() {
             <div>
               <p style="margin:0;color:#94a3b8;font-size:13px;">العمليات / تفاصيل العملية</p>
               <h1 style="margin:6px 0 0 0;font-size:28px;color:#ffffff;font-weight:700;">${operationCodePdf}</h1>
-              <p style="margin:6px 0 0 0;color:#94a3b8;font-size:12px;">${escapeHtml(operationGroup.warehouseName || "المستودع")} ➜ ${escapeHtml(operationGroup.technicianName || "الفني")}</p>
+              <p style="margin:6px 0 0 0;color:#94a3b8;font-size:12px;">${escapeHtml(operationGroup.warehouseName || "المستودع")} ➜ ${escapeHtml(operationGroup.technicianName || "المندوب")}</p>
             </div>
             <div style="text-align:left;">
               <span style="display:inline-block;background:${statusColor}20;color:${statusColor};padding:6px 12px;border-radius:999px;font-weight:700;border:1px solid ${statusColor}66;font-size:12px;">${statusText}</span>
@@ -679,7 +679,7 @@ export default function OperationDetailsPage() {
                 </Badge>
               </div>
               <p className="text-slate-500 text-sm font-light">
-                نقل مخزون داخلي - {operationGroup.warehouseName || "المستودع"} إلى {operationGroup.technicianName || "الفني"}
+                نقل مخزون داخلي - {operationGroup.warehouseName || "المستودع"} إلى {operationGroup.technicianName || "المندوب"}
               </p>
             </div>
           </div>
@@ -692,7 +692,7 @@ export default function OperationDetailsPage() {
               <div className="w-full">
                 <p className="text-[11px] font-bold text-slate-500 tracking-wider uppercase mb-3">المسؤول عن العملية</p>
                 <p className="text-sm font-bold text-white">{operationGroup.performedByName || "غير محدد"}</p>
-                <p className="text-xs text-slate-400 mt-1">{operationGroup.technicianName || "فني"}</p>
+                <p className="text-xs text-slate-400 mt-1">{operationGroup.technicianName || "مندوب"}</p>
               </div>
             </div>
 

@@ -28,7 +28,7 @@ export function registerSupervisorUsersRoutes(app: Express): void {
     }
   });
 
-  // عرض المخزون الثابت للفني
+  // عرض المخزون الثابت للمندوب
   app.get("/api/supervisor/users/:userId/fixed-inventory", requireAuth, requireSupervisor, async (req, res) => {
     try {
       const user = (req as any).user;
@@ -48,7 +48,7 @@ export function registerSupervisorUsersRoutes(app: Express): void {
     }
   });
 
-  // عرض المخزون المتنقل للفني
+  // عرض المخزون المتنقل للمندوب
   app.get("/api/supervisor/users/:userId/moving-inventory", requireAuth, requireSupervisor, async (req, res) => {
     try {
       const user = (req as any).user;

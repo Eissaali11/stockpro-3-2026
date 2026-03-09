@@ -699,9 +699,16 @@ export class AccountingService {
   async listSalesInvoices(): Promise<any[]> {
     await this.ensureSchema();
     const result = await pool.query(
-      `SELECT si.*, c.name AS customer_name
+      `SELECT si.*, c.name AS customer_name,
+              COALESCE(line_preview.items_summary, '-') AS items_summary
        FROM sales_invoices si
        LEFT JOIN customers c ON c.id = si.customer_id
+       LEFT JOIN LATERAL (
+         SELECT string_agg(COALESCE(NULLIF(TRIM(sil.description), ''), it.name_ar, 'بند'), ' | ' ORDER BY sil.id) AS items_summary
+         FROM sales_invoice_lines sil
+         LEFT JOIN item_types it ON it.id = sil.item_type_id
+         WHERE sil.invoice_id = si.id
+       ) line_preview ON true
        ORDER BY si.issue_datetime DESC`
     );
     return result.rows;
@@ -1143,9 +1150,16 @@ export class AccountingService {
   async listPurchaseBills(): Promise<any[]> {
     await this.ensureSchema();
     const result = await pool.query(
-      `SELECT pb.*, s.name AS supplier_name
+      `SELECT pb.*, s.name AS supplier_name,
+              COALESCE(line_preview.items_summary, '-') AS items_summary
        FROM purchase_bills pb
        LEFT JOIN suppliers s ON s.id = pb.supplier_id
+       LEFT JOIN LATERAL (
+         SELECT string_agg(COALESCE(NULLIF(TRIM(pbl.description), ''), it.name_ar, 'بند'), ' | ' ORDER BY pbl.id) AS items_summary
+         FROM purchase_bill_lines pbl
+         LEFT JOIN item_types it ON it.id = pbl.item_type_id
+         WHERE pbl.bill_id = pb.id
+       ) line_preview ON true
        ORDER BY pb.issue_date DESC, pb.created_at DESC`
     );
     return result.rows;
@@ -1599,6 +1613,38 @@ export class AccountingService {
     return allocationResult.rows[0];
   }
 
+  async listPayments(): Promise<any[]> {
+    await this.ensureSchema();
+
+    const result = await pool.query(
+      `SELECT *
+       FROM payments
+       ORDER BY payment_date DESC, created_at DESC
+       LIMIT 200`
+    );
+
+    return result.rows;
+  }
+
+  async listPaymentAllocations(paymentId: string): Promise<any[]> {
+    await this.ensureSchema();
+
+    const paymentResult = await pool.query("SELECT id FROM payments WHERE id = $1 LIMIT 1", [paymentId]);
+    if (!paymentResult.rows[0]) {
+      throw new NotFoundError("سند الدفع/التحصيل غير موجود");
+    }
+
+    const result = await pool.query(
+      `SELECT *
+       FROM payment_allocations
+       WHERE payment_id = $1
+       ORDER BY created_at DESC`,
+      [paymentId]
+    );
+
+    return result.rows;
+  }
+
   async getVatSummary(from?: string, to?: string): Promise<any> {
     await this.ensureSchema();
 
@@ -1721,6 +1767,36 @@ export class AccountingService {
     }
 
     return this.submitEinvoice(id);
+  }
+
+  async listEinvoices(filters?: { sourceType?: string; sourceId?: string; limit?: number }): Promise<any[]> {
+    await this.ensureSchema();
+
+    const whereParts: string[] = ["1=1"];
+    const values: any[] = [];
+
+    if (filters?.sourceType) {
+      values.push(filters.sourceType);
+      whereParts.push(`source_type = $${values.length}`);
+    }
+
+    if (filters?.sourceId) {
+      values.push(filters.sourceId);
+      whereParts.push(`source_id = $${values.length}`);
+    }
+
+    const limit = Math.max(1, Math.min(Number(filters?.limit ?? 100), 500));
+
+    const result = await pool.query(
+      `SELECT *
+       FROM einvoice_documents
+       WHERE ${whereParts.join(" AND ")}
+       ORDER BY created_at DESC
+       LIMIT ${limit}`,
+      values
+    );
+
+    return result.rows;
   }
 
   async getTechniciansPerformance(filters: {

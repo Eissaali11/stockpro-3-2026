@@ -291,7 +291,7 @@ export default function WarehouseDetailsPage() {
               data-testid="button-transfer-to-technician"
             >
               <Send className="h-4 w-4 ml-2" />
-              نقل إلى فني
+              نقل إلى مندوب
             </Button>
             <Button
               variant="destructive"
@@ -341,3 +341,4 @@ export default function WarehouseDetailsPage() {
     </>
   );
 }
+

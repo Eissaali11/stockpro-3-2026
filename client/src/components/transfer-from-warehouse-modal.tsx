@@ -39,7 +39,7 @@ import { useActiveItemTypes, getItemTypeVisuals, type ItemType, type InventoryEn
 import { Loader2, Search, XCircle, Plus, Minus, AlertTriangle } from "lucide-react";
 
 const formSchema = z.object({
-  technicianId: z.string().min(1, "يجب اختيار فني"),
+  technicianId: z.string().min(1, "يجب اختيار مندوب"),
   notes: z.string().optional(),
 });
 
@@ -202,7 +202,7 @@ export default function TransferFromWarehouseModal({
       queryClient.invalidateQueries({ queryKey: ["/api/warehouse-transfers"] });
       toast({
         title: "تم النقل بنجاح",
-        description: "تم نقل الأصناف إلى الفني المحدد",
+        description: "تم نقل الأصناف إلى المندوب المحدد",
       });
       onOpenChange(false);
     },
@@ -305,9 +305,9 @@ export default function TransferFromWarehouseModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>نقل من المستودع إلى فني</DialogTitle>
+          <DialogTitle>نقل من المستودع إلى مندوب</DialogTitle>
           <DialogDescription>
-            نقل أصناف من {warehouseName} إلى فني
+            نقل أصناف من {warehouseName} إلى مندوب
           </DialogDescription>
         </DialogHeader>
         
@@ -323,13 +323,13 @@ export default function TransferFromWarehouseModal({
                 name="technicianId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>اختر الفني</FormLabel>
+                    <FormLabel>اختر المندوب</FormLabel>
                     <div className="relative mb-2">
                       <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         value={technicianSearchQuery}
                         onChange={(event) => setTechnicianSearchQuery(event.target.value)}
-                        placeholder="ابحث عن فني بالاسم أو المدينة"
+                        placeholder="ابحث عن مندوب بالاسم أو المدينة"
                         className="pr-10 pl-10"
                       />
                       {technicianSearchQuery.trim().length > 0 && (
@@ -347,7 +347,7 @@ export default function TransferFromWarehouseModal({
                     <Select onValueChange={field.onChange} value={field.value} disabled={employees.length === 0}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder={employees.length === 0 ? "لا يوجد فنيون متاحون" : "اختر الفني"} />
+                          <SelectValue placeholder={employees.length === 0 ? "لا يوجد مندوبون متاحون" : "اختر المندوب"} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -363,7 +363,7 @@ export default function TransferFromWarehouseModal({
                     </Select>
                     {selectedTechnician && (
                       <div className="mt-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
-                        الفني المختار: <span className="font-semibold">{selectedTechnician.fullName}</span>
+                        المندوب المختار: <span className="font-semibold">{selectedTechnician.fullName}</span>
                         {selectedTechnician.city ? <span className="text-muted-foreground"> - {selectedTechnician.city}</span> : null}
                       </div>
                     )}
@@ -576,3 +576,4 @@ export default function TransferFromWarehouseModal({
     </Dialog>
   );
 }
+

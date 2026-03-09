@@ -169,7 +169,7 @@ export default function ProductsManagementPage() {
         technicians: [
           {
             technicianId: user.id,
-            technicianName: user.fullName || user.username || "الفني الحالي",
+            technicianName: user.fullName || user.username || "المندوب الحالي",
             fixedInventory,
             movingInventory,
           },
@@ -253,7 +253,7 @@ export default function ProductsManagementPage() {
       }
 
       const technicianName =
-        String(technician?.technicianName ?? technician?.fullName ?? technician?.name ?? "").trim() || "فني";
+        String(technician?.technicianName ?? technician?.fullName ?? technician?.name ?? "").trim() || "مندوب";
 
       const fixedInventory = technician?.fixedInventory ?? null;
       const movingInventory = technician?.movingInventory ?? null;
@@ -297,7 +297,7 @@ export default function ProductsManagementPage() {
       technicianRecords
         .map((record) => ({
           id: String(record?.technicianId ?? record?.id ?? ""),
-          fullName: String(record?.technicianName ?? record?.fullName ?? record?.name ?? "فني"),
+          fullName: String(record?.technicianName ?? record?.fullName ?? record?.name ?? "مندوب"),
         }))
         .filter((record) => record.id.length > 0),
     [technicianRecords]
@@ -395,7 +395,7 @@ export default function ProductsManagementPage() {
         return;
       }
       if (!transferTechnicianId) {
-        setReceiveMessage("يرجى اختيار الفني قبل تنفيذ التحويل.");
+        setReceiveMessage("يرجى اختيار المندوب قبل تنفيذ التحويل.");
         return;
       }
     } else if (!storageId) {
@@ -442,7 +442,7 @@ export default function ProductsManagementPage() {
       await receiveMutation.mutateAsync(payload);
 
       const selectedWarehouse = warehouseOptions.find((option) => option.id === transferWarehouseId)?.label ?? "مستودع";
-      const selectedTechnician = technicianOptions.find((option) => option.id === transferTechnicianId)?.label ?? "فني";
+      const selectedTechnician = technicianOptions.find((option) => option.id === transferTechnicianId)?.label ?? "مندوب";
       const options = storageType === "warehouse" ? warehouseOptions : technicianOptions;
       const directStorageName = options.find((option) => option.id === storageId)?.label ?? "موقع تخزين";
       const storageName =
@@ -503,7 +503,7 @@ export default function ProductsManagementPage() {
 
   const handleExportExcel = () => {
     const lines = [
-      ["المنتج", "SKU", "المستودعات", "الفنيون", "الإجمالي"].join(","),
+      ["المنتج", "SKU", "المستودعات", "المندوبون", "الإجمالي"].join(","),
       ...filteredRows.map((row) =>
         [row.itemNameAr, row.itemCode, row.warehouseQuantity, row.technicianQuantity, row.totalQuantity].join(",")
       ),
@@ -565,3 +565,4 @@ export default function ProductsManagementPage() {
     </div>
   );
 }
+

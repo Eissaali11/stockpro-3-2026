@@ -70,7 +70,7 @@ export async function exportWarehouseTransferToPDF({
             </div>
 
             <div style="flex: 1; background: #f8f9fa; border-radius: 12px; padding: 20px; border-right: 4px solid #18B2B0;">
-              <h3 style="color: #18B2B0; margin: 0 0 15px 0; font-size: 18px;">معلومات الفني</h3>
+              <h3 style="color: #18B2B0; margin: 0 0 15px 0; font-size: 18px;">معلومات المندوب</h3>
               <table style="width: 100%; border-collapse: collapse;">
                 <tr>
                   <td style="padding: 8px 0; color: #666; width: 80px;">الاسم:</td>
@@ -180,3 +180,4 @@ export async function exportWarehouseTransferToPDF({
     document.body.removeChild(container);
   }
 }
+

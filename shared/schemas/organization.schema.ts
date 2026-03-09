@@ -33,7 +33,7 @@ export const warehouses = pgTable("warehouses", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Supervisor-Technician Assignments - ربط المشرف بالفنيين
+// Supervisor-Technician Assignments - ربط المشرف بالمندوبين
 export const supervisorTechnicians = pgTable("supervisor_technicians", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   supervisorId: varchar("supervisor_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -90,7 +90,7 @@ export const warehouseInventoryEntries = pgTable("warehouse_inventory_entries", 
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Inventory Requests - طلبات المخزون من الفنيين
+// Inventory Requests - طلبات المخزون من المندوبين
 export const inventoryRequests = pgTable("inventory_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   technicianId: varchar("technician_id").notNull().references(() => users.id),
@@ -123,7 +123,7 @@ export const inventoryRequests = pgTable("inventory_requests", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Warehouse Transfers - سجل نقل البضائع من المستودع إلى الفني
+// Warehouse Transfers - سجل نقل البضائع من المستودع إلى المندوب
 export const warehouseTransfers = pgTable("warehouse_transfers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   requestId: varchar("request_id").references(() => inventoryRequests.id),
@@ -205,3 +205,4 @@ export type WarehouseTransfer = typeof warehouseTransfers.$inferSelect;
 export type InsertWarehouseTransfer = z.infer<typeof insertWarehouseTransferSchema>;
 export type InventoryRequest = typeof inventoryRequests.$inferSelect;
 export type InsertInventoryRequest = z.infer<typeof insertInventoryRequestSchema>;
+

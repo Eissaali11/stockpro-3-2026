@@ -518,7 +518,7 @@ export default function TechnicianDetailsPage() {
 
       toast({
         title: "تم التصدير بنجاح",
-        description: "تم إنشاء ملف Excel لبيانات الفني",
+        description: "تم إنشاء ملف Excel لبيانات المندوب",
       });
     } catch (error) {
       toast({
@@ -549,7 +549,7 @@ export default function TechnicianDetailsPage() {
       <div className="rounded-2xl border border-red-500/30 bg-white/5 p-12 text-center">
         <XCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
         <h2 className="text-2xl font-bold text-white mb-2">لم يتم العثور على البيانات</h2>
-        <p className="text-slate-400 mb-6">لا توجد بيانات متاحة لهذا الفني</p>
+        <p className="text-slate-400 mb-6">لا توجد بيانات متاحة لهذا المندوب</p>
         <Link href="/home">
           <Button className="bg-cyan-500 hover:bg-cyan-600 text-slate-950">
             <ArrowLeft className="ml-2 h-4 w-4" />
@@ -566,7 +566,7 @@ export default function TechnicianDetailsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-100">لوحة إدارة المخزون</h1>
           <p className="text-slate-400 mt-1">
-            ملف الفني: <span className="text-cyan-300 font-semibold">{technicianName}</span> · {city}
+            ملف المندوب: <span className="text-cyan-300 font-semibold">{technicianName}</span> · {city}
           </p>
         </div>
 
@@ -848,3 +848,4 @@ export default function TechnicianDetailsPage() {
     </div>
   );
 }
+

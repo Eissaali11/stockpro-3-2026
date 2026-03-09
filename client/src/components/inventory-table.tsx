@@ -208,7 +208,7 @@ export default function InventoryTable({ inventory, isLoading }: InventoryTableP
                     <th className="text-right p-4 font-medium text-foreground">النوع</th>
                     <th className="text-right p-4 font-medium text-foreground">الكمية المتبقية</th>
                     <th className="text-right p-4 font-medium text-foreground">الوحدة</th>
-                    <th className="text-right p-4 font-medium text-foreground">اسم الفني</th>
+                    <th className="text-right p-4 font-medium text-foreground">اسم المندوب</th>
                     <th className="text-right p-4 font-medium text-foreground">المدينة</th>
                     <th className="text-right p-4 font-medium text-foreground">الحالة</th>
                     <th className="text-right p-4 font-medium text-foreground">الإجراءات</th>
@@ -348,3 +348,4 @@ export default function InventoryTable({ inventory, isLoading }: InventoryTableP
     </>
   );
 }
+

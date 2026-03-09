@@ -15,7 +15,7 @@
 - **UserRepository.ts** - تطبيق إدارة المستخدمين والمشرفين (95 خطوط)
 - **WarehouseRepository.ts** - تطبيق إدارة المستودعات (99 خطوط)
 - **WarehouseInventoryRepository.ts** - تطبيق مخزون المستودعات (70 خطوط)
-- **TechnicianInventoryRepository.ts** - تطبيق مخزون الفنيين (92 خطوط)
+- **TechnicianInventoryRepository.ts** - تطبيق مخزون المندوبين (92 خطوط)
 - **InventoryRequestsRepository.ts** - تطبيق طلبات المخزون (65 خطوط)
 - **TransferRepository.ts** - تطبيق عمليات النقل (98 خطوط)
 

@@ -230,7 +230,7 @@ export class DevicesController {
     const user = req.user!;
 
     if (user.role !== ROLES.TECHNICIAN) {
-      throw new AuthorizationError("هذه العملية متاحة للفني فقط");
+      throw new AuthorizationError("هذه العملية متاحة للمندوب فقط");
     }
 
     const schema = z
@@ -275,7 +275,7 @@ export class DevicesController {
       entityType: "device",
       entityId: device.id,
       entityName: device.serialNumber,
-      description: `تم رفع ملف تسليم الجهاز للعميل من تطبيق الفني: ${device.serialNumber}`,
+      description: `تم رفع ملف تسليم الجهاز للعميل من تطبيق المندوب: ${device.serialNumber}`,
       details: JSON.stringify({
         fileUrl: primaryFileUrl,
         fileName: primaryFileName || null,
@@ -381,3 +381,4 @@ export class DevicesController {
 }
 
 export const devicesController = new DevicesController();
+

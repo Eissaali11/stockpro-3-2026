@@ -69,7 +69,7 @@ export function ProductsScanReceiver({
         ? "إنقاص"
         : operationType === "TRANSFER_TO_TECHNICIAN"
           ? "تحويل للمخزون المتحرك"
-          : "سحب من مخزون الفني";
+          : "سحب من مخزون المندوب";
 
   return (
     <section className="bg-slate-900/60 border border-slate-700/60 rounded-xl p-5 mt-8">
@@ -107,8 +107,8 @@ export function ProductsScanReceiver({
           <SelectContent className="bg-slate-900 border-slate-700 text-white">
             <SelectItem value="ADD_STOCK">إضافة رصيد</SelectItem>
             <SelectItem value="DEDUCT_STOCK">إنقاص رصيد</SelectItem>
-            <SelectItem value="TRANSFER_TO_TECHNICIAN">تحويل من مستودع إلى فني</SelectItem>
-            <SelectItem value="WITHDRAW_FROM_TECHNICIAN">سحب من فني إلى مستودع</SelectItem>
+            <SelectItem value="TRANSFER_TO_TECHNICIAN">تحويل من مستودع إلى مندوب</SelectItem>
+            <SelectItem value="WITHDRAW_FROM_TECHNICIAN">سحب من مندوب إلى مستودع</SelectItem>
           </SelectContent>
         </Select>
 
@@ -139,7 +139,7 @@ export function ProductsScanReceiver({
 
             <Select value={transferTechnicianId} onValueChange={onTransferTechnicianIdChange}>
               <SelectTrigger className="bg-black/30 border-slate-700 text-white">
-                <SelectValue placeholder="اختر الفني" />
+                <SelectValue placeholder="اختر المندوب" />
               </SelectTrigger>
               <SelectContent className="bg-slate-900 border-slate-700 text-white">
                 {technicianOptions.map((option) => (
@@ -158,7 +158,7 @@ export function ProductsScanReceiver({
               </SelectTrigger>
               <SelectContent className="bg-slate-900 border-slate-700 text-white">
                 <SelectItem value="warehouse">المستودعات</SelectItem>
-                <SelectItem value="technician">عهدة الفنيين</SelectItem>
+                <SelectItem value="technician">عهدة المندوبين</SelectItem>
               </SelectContent>
             </Select>
 
@@ -216,3 +216,4 @@ export function ProductsScanReceiver({
     </section>
   );
 }
+

@@ -292,7 +292,7 @@ export default function TechnicianItemDetailsPage() {
   const urgentCount = effectiveTotalStock > 0 && effectiveTotalStock < 20 ? effectiveTotalStock : 0;
   const estimatedValue = effectiveTotalStock * 35;
 
-  const displayTechnicianName = technician?.fullName || (useMockData ? "فني تجريبي" : "-");
+  const displayTechnicianName = technician?.fullName || (useMockData ? "مندوب تجريبي" : "-");
   const displayItemName = itemType?.nameAr || (useMockData ? fallbackItemName : "غير معروف");
 
   const refreshData = async () => {
@@ -326,7 +326,7 @@ export default function TechnicianItemDetailsPage() {
         <div>
           <h2 className="text-3xl font-black text-slate-100 tracking-tight">عمليات المنتج</h2>
           <p className="text-slate-400 mt-1">عرض تفاصيل وحالة المنتج • {displayItemName}</p>
-          <p className="text-xs text-cyan-300 mt-1">الفني: {displayTechnicianName}</p>
+          <p className="text-xs text-cyan-300 mt-1">المندوب: {displayTechnicianName}</p>
         </div>
         <div className="flex gap-3 flex-wrap">
           <Button
@@ -516,7 +516,7 @@ export default function TechnicianItemDetailsPage() {
             <div className="p-2 rounded bg-cyan-400/10 text-cyan-300">
               <Boxes className="h-4 w-4" />
             </div>
-            <p className="text-xs text-slate-400">المنتج الحالي مرتبط بمخزون الفني والمستودع</p>
+            <p className="text-xs text-slate-400">المنتج الحالي مرتبط بمخزون المندوب والمستودع</p>
           </div>
           <button className="text-[10px] font-bold text-cyan-300 underline underline-offset-4">دليل الاستخدام</button>
         </div>
@@ -524,3 +524,4 @@ export default function TechnicianItemDetailsPage() {
     </div>
   );
 }
+

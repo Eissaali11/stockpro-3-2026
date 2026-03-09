@@ -147,7 +147,7 @@ const systemEntityLabels: Record<string, string> = {
   item: "صنف",
   inventory_request: "طلب مخزون",
   stock_transfer: "نقل مخزون",
-  technician_inventory: "مخزون فني",
+  technician_inventory: "مخزون مندوب",
   warehouse_inventory: "مخزون مستودع",
 };
 
@@ -155,7 +155,7 @@ const systemFilterLabels: Record<SystemOperationFilter, string> = {
   all: "الكل",
   "stock-request": "طلب مخزون",
   "stock-transfer": "نقل مخزون",
-  "stock-depletion-technician": "نفاذ مخزون فني",
+  "stock-depletion-technician": "نفاذ مخزون مندوب",
   "stock-depletion-warehouse": "نفاذ مخزون مستودع",
 };
 
@@ -208,7 +208,7 @@ function getSystemOperationCategory(group: GroupedOperation): SystemOperationFil
     return "stock-transfer";
   }
 
-  if (description.includes("نفاذ") && description.includes("فني")) {
+  if (description.includes("نفاذ") && description.includes("مندوب")) {
     return "stock-depletion-technician";
   }
 
@@ -538,11 +538,11 @@ export default function OperationsPage() {
         groupId: `depletion-tech-${technician.technicianId}`,
         sourceType: "system-event",
         warehouseId: `depletion-tech-${technician.technicianId}`,
-        warehouseName: "نفاذ مخزون فني",
+        warehouseName: "نفاذ مخزون مندوب",
         technicianName: technician.technicianName,
         technicianId: technician.technicianId,
         createdAt: new Date(),
-        notes: `نفاذ كمية المخزون للفني ${technician.technicianName}`,
+        notes: `نفاذ كمية المخزون للمندوب ${technician.technicianName}`,
         status: "rejected",
         performedBy: "system",
         items: [
@@ -558,7 +558,7 @@ export default function OperationsPage() {
           action: "depletion",
           entityType: "technician_inventory",
           entityName: technician.technicianName,
-          description: `نفاذ كمية المخزون من فني: ${technician.technicianName}`,
+          description: `نفاذ كمية المخزون من مندوب: ${technician.technicianName}`,
           success: false,
           severity: "warn",
           category: "stock-depletion-technician",
@@ -704,7 +704,7 @@ export default function OperationsPage() {
   const getSourceTypeLabel = (group: GroupedOperation) => {
     if (group.sourceType === "system-event") return "عملية نظام";
     if (group.sourceType === "warehouse-movement") return "نقل مخزون";
-    return "نقل فني";
+    return "نقل مندوب";
   };
 
   const formatOperationDate = (value?: Date | string) => {
@@ -748,7 +748,7 @@ export default function OperationsPage() {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(
       operationView === "technicians"
-        ? "عمليات نقل الفنيين"
+        ? "عمليات نقل المندوبين"
         : operationView === "warehouses"
           ? "حركات المخزون"
           : "عمليات النظام",
@@ -768,7 +768,7 @@ export default function OperationsPage() {
     worksheet.mergeCells("A1:H1");
     const titleCell = worksheet.getCell("A1");
     titleCell.value = operationView === "technicians"
-      ? "تقرير عمليات نقل الفنيين"
+      ? "تقرير عمليات نقل المندوبين"
       : operationView === "warehouses"
         ? "تقرير حركات المخزون الداخلية"
         : "تقرير عمليات النظام";
@@ -794,9 +794,9 @@ export default function OperationsPage() {
     worksheet.addRow([]);
 
     const headerRow = operationView === "technicians"
-      ? worksheet.addRow(["#", "المستودع", "الفني", "الصنف", "نوع التغليف", "الكمية", "الحالة", "التاريخ"])
+      ? worksheet.addRow(["#", "المستودع", "المندوب", "الصنف", "نوع التغليف", "الكمية", "الحالة", "التاريخ"])
       : operationView === "warehouses"
-        ? worksheet.addRow(["#", "الفني", "الصنف", "من", "إلى", "نوع التغليف", "الكمية", "التاريخ"])
+        ? worksheet.addRow(["#", "المندوب", "الصنف", "من", "إلى", "نوع التغليف", "الكمية", "التاريخ"])
         : worksheet.addRow(["#", "المنفذ", "الدور", "العملية", "الكيان", "الوصف", "النتيجة", "التاريخ"]);
     headerRow.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
     headerRow.alignment = { horizontal: "center", vertical: "middle" };
@@ -937,7 +937,7 @@ export default function OperationsPage() {
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     saveAs(
       blob,
-      `${operationView === "technicians" ? "عمليات_الفنيين" : operationView === "warehouses" ? "حركات_المخزون" : "عمليات_النظام"}_${new Date().toISOString().split("T")[0]}.xlsx`,
+      `${operationView === "technicians" ? "عمليات_المندوبين" : operationView === "warehouses" ? "حركات_المخزون" : "عمليات_النظام"}_${new Date().toISOString().split("T")[0]}.xlsx`,
     );
 
     toast({
@@ -1047,7 +1047,7 @@ export default function OperationsPage() {
                     : "px-4 py-1.5 rounded-full text-slate-400 text-xs font-bold"
                 }
               >
-                نقل الفنيين
+                نقل المندوبين
               </button>
               <button
                 type="button"
@@ -1137,7 +1137,7 @@ export default function OperationsPage() {
                 className="w-full bg-white/[0.02] border border-white/10 rounded-full py-2 pr-11 pl-4 text-sm text-white placeholder:text-slate-600 focus:ring-cyan-400 focus:border-cyan-400"
                 placeholder={
                   operationView === "technicians"
-                    ? "البحث في نقل الفنيين..."
+                    ? "البحث في نقل المندوبين..."
                     : operationView === "warehouses"
                       ? "البحث في نقل المستودعات..."
                       : "البحث في عمليات النظام..."
@@ -1154,7 +1154,7 @@ export default function OperationsPage() {
               data-testid="button-export-operations"
             >
               <FileDown className="h-4 w-4 ml-2" />
-              {operationView === "technicians" ? "تصدير نقل الفنيين" : operationView === "warehouses" ? "تصدير نقل المستودعات" : "تصدير عمليات النظام"}
+              {operationView === "technicians" ? "تصدير نقل المندوبين" : operationView === "warehouses" ? "تصدير نقل المستودعات" : "تصدير عمليات النظام"}
             </Button>
           </div>
 
@@ -1190,7 +1190,7 @@ export default function OperationsPage() {
               <div className="flex items-end justify-between px-2">
                 <h3 className="text-xl font-light text-white">سجل العمليات <span className="font-bold">الأخير</span></h3>
                 <div className="px-4 py-1.5 rounded-full bg-white/10 text-white text-xs font-medium border border-white/10">
-                  {operationView === "technicians" ? "نقل الفنيين" : operationView === "warehouses" ? "نقل المستودعات" : "عمليات النظام"}
+                  {operationView === "technicians" ? "نقل المندوبين" : operationView === "warehouses" ? "نقل المستودعات" : "عمليات النظام"}
                 </div>
               </div>
 
@@ -1198,7 +1198,7 @@ export default function OperationsPage() {
                 {recentOperations.length === 0 ? (
                   <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/10 rounded-3xl p-6 text-center text-slate-500">
                     {operationView === "technicians"
-                      ? "لا توجد عمليات نقل فنيين مطابقة للبحث."
+                      ? "لا توجد عمليات نقل مندوبين مطابقة للبحث."
                       : operationView === "warehouses"
                         ? "لا توجد نتائج لنقل المستودعات مطابقة للبحث."
                         : "لا توجد عمليات نظام مطابقة للبحث."}
@@ -1598,3 +1598,4 @@ export default function OperationsPage() {
     </>
   );
 }
+

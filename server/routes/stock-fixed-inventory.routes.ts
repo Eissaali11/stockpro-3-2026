@@ -5,12 +5,12 @@ import { insertTechnicianInventorySchema } from "@shared/schema";
 import { stockFixedInventoryContainer } from "../composition/stock-fixed-inventory.container";
 
 /**
- * Stock Fixed Inventory Routes - المخزون الثابت للفنيين (< 100 lines)
- * مجال المسؤولية: إدارة المخزون الثابت للفنيين (CRUD)
+ * Stock Fixed Inventory Routes - المخزون الثابت للمندوبين (< 100 lines)
+ * مجال المسؤولية: إدارة المخزون الثابت للمندوبين (CRUD)
  */
 export function registerStockFixedInventoryRoutes(app: Express): void {
 
-  // عرض المخزون الثابت للفني
+  // عرض المخزون الثابت للمندوب
   app.get("/api/technician-fixed-inventory/:technicianId", requireAuth, async (req, res) => {
     try {
       const inventory = await stockFixedInventoryContainer.stockFixedInventoryUseCase.getByTechnicianId(
@@ -23,7 +23,7 @@ export function registerStockFixedInventoryRoutes(app: Express): void {
     }
   });
 
-  // تحديث المخزون الثابت للفني
+  // تحديث المخزون الثابت للمندوب
   app.put("/api/technician-fixed-inventory/:technicianId", requireAuth, async (req, res) => {
     try {
       const user = (req as any).user;
@@ -50,7 +50,7 @@ export function registerStockFixedInventoryRoutes(app: Express): void {
         entityType: 'technician_fixed_inventory',
         entityId: req.params.technicianId,
         entityName: technician.fullName || technician.username,
-        description: `تحديث المخزون الثابت للفني: ${technician.fullName || technician.username}`,
+        description: `تحديث المخزون الثابت للمندوب: ${technician.fullName || technician.username}`,
         severity: 'info',
         success: true,
       });
@@ -68,7 +68,7 @@ export function registerStockFixedInventoryRoutes(app: Express): void {
     }
   });
 
-  // حذف المخزون الثابت للفني
+  // حذف المخزون الثابت للمندوب
   app.delete("/api/technician-fixed-inventory/:technicianId", requireAuth, async (req, res) => {
     try {
       const user = (req as any).user;
@@ -94,7 +94,7 @@ export function registerStockFixedInventoryRoutes(app: Express): void {
         entityType: 'technician_fixed_inventory',
         entityId: req.params.technicianId,
         entityName: technician.fullName || technician.username,
-        description: `حذف المخزون الثابت للفني: ${technician.fullName || technician.username}`,
+        description: `حذف المخزون الثابت للمندوب: ${technician.fullName || technician.username}`,
         severity: 'warn',
         success: true,
       });

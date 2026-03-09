@@ -96,8 +96,8 @@ export default function AddTechnicianModal({ open, onOpenChange }: AddTechnician
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/technicians"] });
       toast({
-        title: "تم إضافة بيانات الفني بنجاح",
-        description: "تم إضافة البيانات الجديدة للفني",
+        title: "تم إضافة بيانات المندوب بنجاح",
+        description: "تم إضافة البيانات الجديدة للمندوب",
       });
       form.reset();
       onOpenChange(false);
@@ -119,19 +119,19 @@ export default function AddTechnicianModal({ open, onOpenChange }: AddTechnician
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle className="text-lg sm:text-xl">إضافة بيانات فني</DialogTitle>
+          <DialogTitle className="text-lg sm:text-xl">إضافة بيانات مندوب</DialogTitle>
           <DialogDescription className="text-sm">
-            أدخل بيانات الفني الجديد وتجهيزاته
+            أدخل بيانات المندوب الجديد وتجهيزاته
           </DialogDescription>
         </DialogHeader>
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 sm:space-y-4">
-            {/* عرض معلومات الفني المسجل */}
+            {/* عرض معلومات المندوب المسجل */}
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950 rounded-lg p-4 border-2 border-blue-200 dark:border-blue-800">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-blue-600 dark:text-blue-400 font-bold">اسم الفني:</span>
+                  <span className="text-blue-600 dark:text-blue-400 font-bold">اسم المندوب:</span>
                   <span className="text-lg font-bold text-slate-800 dark:text-white">{user?.fullName || "غير محدد"}</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -609,3 +609,4 @@ export default function AddTechnicianModal({ open, onOpenChange }: AddTechnician
     </Dialog>
   );
 }
+

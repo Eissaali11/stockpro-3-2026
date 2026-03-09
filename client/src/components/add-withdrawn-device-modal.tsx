@@ -33,7 +33,7 @@ import { insertWithdrawnDeviceSchema } from "@shared/schema";
 
 const formSchema = insertWithdrawnDeviceSchema.extend({
   city: z.string().min(1, "المدينة مطلوبة"),
-  technicianName: z.string().min(1, "اسم الفني مطلوب"),
+  technicianName: z.string().min(1, "اسم المندوب مطلوب"),
   terminalId: z.string().min(1, "رقم الجهاز مطلوب"),
   serialNumber: z.string().min(1, "الرقم التسلسلي مطلوب"),
   battery: z.string().min(1, "حالة البطارية مطلوبة"),
@@ -133,10 +133,10 @@ export default function AddWithdrawnDeviceModal({ open, onOpenChange }: AddWithd
                 name="technicianName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>اسم الفني</FormLabel>
+                    <FormLabel>اسم المندوب</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="أدخل اسم الفني"
+                        placeholder="أدخل اسم المندوب"
                         {...field}
                         data-testid="input-technician-name"
                       />
@@ -368,3 +368,4 @@ export default function AddWithdrawnDeviceModal({ open, onOpenChange }: AddWithd
     </Dialog>
   );
 }
+

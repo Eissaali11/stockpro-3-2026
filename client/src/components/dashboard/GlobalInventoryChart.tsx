@@ -202,7 +202,7 @@ export const GlobalInventoryChart = ({ technicians, warehouses }: GlobalInventor
             </motion.div>
             <div>
               <h2 className="text-3xl font-bold text-white">إجمالي المخزون في النظام</h2>
-              <p className="text-gray-400 text-sm">عرض شامل للمخزون في الفنيين والمستودعات</p>
+              <p className="text-gray-400 text-sm">عرض شامل للمخزون في المندوبين والمستودعات</p>
             </div>
           </div>
           <div className="bg-[#18B2B0]/20 backdrop-blur-sm border border-[#18B2B0]/30 rounded-2xl px-6 py-4">
@@ -245,8 +245,8 @@ export const GlobalInventoryChart = ({ technicians, warehouses }: GlobalInventor
                 wrapperStyle={{ paddingTop: '20px' }}
                 formatter={(value) => {
                   const labels: Record<string, string> = {
-                    techniciansFixed: 'مخزون الفنيين الثابت',
-                    techniciansMoving: 'مخزون الفنيين المتحرك',
+                    techniciansFixed: 'مخزون المندوبين الثابت',
+                    techniciansMoving: 'مخزون المندوبين المتحرك',
                     warehouses: 'مخزون المستودعات'
                   };
                   return <span className="text-gray-300">{labels[value] || value}</span>;
@@ -293,7 +293,7 @@ export const GlobalInventoryChart = ({ technicians, warehouses }: GlobalInventor
                 <Package className="h-5 w-5 text-purple-400" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">مخزون الفنيين الثابت</p>
+                <p className="text-gray-400 text-sm">مخزون المندوبين الثابت</p>
                 <p className="text-2xl font-bold text-white">
                   {data.reduce((sum, item) => sum + item.techniciansFixed, 0).toLocaleString()}
                 </p>
@@ -310,7 +310,7 @@ export const GlobalInventoryChart = ({ technicians, warehouses }: GlobalInventor
                 <TruckIcon className="h-5 w-5 text-emerald-400" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">مخزون الفنيين المتحرك</p>
+                <p className="text-gray-400 text-sm">مخزون المندوبين المتحرك</p>
                 <p className="text-2xl font-bold text-white">
                   {data.reduce((sum, item) => sum + item.techniciansMoving, 0).toLocaleString()}
                 </p>
@@ -339,3 +339,4 @@ export const GlobalInventoryChart = ({ technicians, warehouses }: GlobalInventor
     </motion.div>
   );
 };
+

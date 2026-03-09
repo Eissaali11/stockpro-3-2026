@@ -494,7 +494,7 @@ export default function AdminInventoryOverview() {
         <div className="h-full flex items-center justify-center">
           <div className="text-center space-y-3">
             <div className="mx-auto size-12 rounded-full border-2 border-cyan-400/50 border-t-transparent animate-spin" />
-            <p className="text-slate-200 text-sm">جاري تحميل بيانات الفنيين...</p>
+            <p className="text-slate-200 text-sm">جاري تحميل بيانات المندوبين...</p>
           </div>
         </div>
     );
@@ -510,7 +510,7 @@ export default function AdminInventoryOverview() {
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-slate-100">لوحة مخزون الفنيين</h1>
+            <h1 className="text-xl md:text-2xl font-bold text-slate-100">لوحة مخزون المندوبين</h1>
             <p className="text-sm text-slate-400">عرض شامل لحالة العهدة الثابتة والمتحركة</p>
           </div>
           <div className="flex items-center gap-2 text-cyan-300 text-sm">
@@ -522,7 +522,7 @@ export default function AdminInventoryOverview() {
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="rounded-2xl border border-cyan-400/15 bg-slate-900/40 p-5 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-cyan-400" />
-            <p className="text-xs text-slate-400 mb-2">إجمالي عهد الفنيين</p>
+            <p className="text-xs text-slate-400 mb-2">إجمالي عهد المندوبين</p>
             <p className="text-3xl font-bold text-slate-100">{totalTechniciansInventory.toLocaleString("ar-SA")}</p>
           </div>
           <div className="rounded-2xl border border-emerald-400/15 bg-slate-900/40 p-5 relative overflow-hidden">
@@ -537,7 +537,7 @@ export default function AdminInventoryOverview() {
           </div>
           <div className="rounded-2xl border border-sky-400/15 bg-slate-900/40 p-5 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-sky-400" />
-            <p className="text-xs text-slate-400 mb-2">فنيين قيد العمل</p>
+            <p className="text-xs text-slate-400 mb-2">مندوبين قيد العمل</p>
             <p className="text-3xl font-bold text-sky-300">{technicians.length.toLocaleString("ar-SA")}</p>
           </div>
         </div>
@@ -547,7 +547,7 @@ export default function AdminInventoryOverview() {
             <Search className="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 text-cyan-300/70" />
             <input
               type="text"
-              placeholder="بحث عن اسم الفني أو الرقم الوظيفي..."
+              placeholder="بحث عن اسم المندوب أو الرقم الوظيفي..."
               value={searchName}
               onChange={(event) => setSearchName(event.target.value)}
               data-testid="input-search-name"
@@ -609,7 +609,7 @@ export default function AdminInventoryOverview() {
                   <div className="flex items-center gap-3">
                     <div className="text-right min-w-0">
                       <h3 className="text-lg font-bold text-slate-100 truncate">{technician.technicianName}</h3>
-                      <p className="text-xs text-cyan-300 truncate">فني اتصالات - {technician.city}</p>
+                      <p className="text-xs text-cyan-300 truncate">مندوب اتصالات - {technician.city}</p>
                       <p className="text-[11px] text-slate-500">ID: #{technician.technicianId.slice(0, 8).toUpperCase()}</p>
                     </div>
                     <div className="size-14 rounded-2xl bg-slate-800 border border-cyan-300/25 flex items-center justify-center text-cyan-200 font-bold">
@@ -679,3 +679,4 @@ function RingMetric({ label, percent, value, color }: { label: string; percent: 
     </div>
   );
 }
+

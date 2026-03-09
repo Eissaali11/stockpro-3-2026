@@ -5,7 +5,7 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { AuthorizationError } from "../utils/errors";
 import { accountingService } from "../services/accounting.service";
 
-const financeReadRoles = new Set(["admin", "accountant", "finance_manager", "auditor"]);
+const financeReadRoles = new Set(["admin", "supervisor", "accountant", "finance_manager", "auditor"]);
 const financeWriteRoles = new Set(["admin", "accountant", "finance_manager"]);
 
 function requireFinanceRead(req: Request, _res: Response, next: NextFunction): void {
@@ -114,6 +114,16 @@ const paymentAllocationSchema = z.object({
 const rangeFilterSchema = z.object({
   from: z.string().trim().optional(),
   to: z.string().trim().optional(),
+});
+
+const listPaymentsFilterSchema = z.object({
+  paymentType: z.enum(["receipt", "disbursement"]).optional(),
+});
+
+const listEinvoiceFilterSchema = z.object({
+  sourceType: z.string().trim().optional(),
+  sourceId: z.string().trim().optional(),
+  limit: z.coerce.number().int().positive().max(500).optional(),
 });
 
 const technicianPerformanceFilterSchema = rangeFilterSchema.extend({
@@ -377,6 +387,28 @@ export function registerAccountingRoutes(app: Express): void {
   );
 
   app.get(
+    "/api/payments",
+    requireAuth,
+    requireFinanceRead,
+    asyncHandler(async (req: Request, res: Response) => {
+      const filters = listPaymentsFilterSchema.parse(req.query);
+      const rows = await accountingService.listPayments();
+      const data = filters.paymentType ? rows.filter((row) => row.payment_type === filters.paymentType) : rows;
+      res.json(data);
+    })
+  );
+
+  app.get(
+    "/api/payments/:id/allocations",
+    requireAuth,
+    requireFinanceRead,
+    asyncHandler(async (req: Request, res: Response) => {
+      const data = await accountingService.listPaymentAllocations(req.params.id);
+      res.json(data);
+    })
+  );
+
+  app.get(
     "/api/tax/vat-summary",
     requireAuth,
     requireFinanceRead,
@@ -435,6 +467,17 @@ export function registerAccountingRoutes(app: Express): void {
     requireFinanceWrite,
     asyncHandler(async (req: Request, res: Response) => {
       const data = await accountingService.retryEinvoice(req.params.id);
+      res.json(data);
+    })
+  );
+
+  app.get(
+    "/api/einvoice",
+    requireAuth,
+    requireFinanceRead,
+    asyncHandler(async (req: Request, res: Response) => {
+      const filters = listEinvoiceFilterSchema.parse(req.query);
+      const data = await accountingService.listEinvoices(filters);
       res.json(data);
     })
   );

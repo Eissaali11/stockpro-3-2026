@@ -16,7 +16,7 @@ server/services/
 ├── inventory.service.ts     (205 سطر) - إدارة المخزون
 ├── user.service.ts         (290 سطر) - إدارة المستخدمين
 ├── warehouse.service.ts    (350 سطر) - إدارة المستودعات
-├── technician.service.ts   (430 سطر) - إدارة الفنيين
+├── technician.service.ts   (430 سطر) - إدارة المندوبين
 ├── analytics.service.ts    (270 سطر) - التحليلات والإحصائيات
 ├── devices.service.ts      (320 سطر) - إدارة الأجهزة
 ├── regions.service.ts      (180 سطر) - إدارة المناطق
@@ -91,7 +91,7 @@ const items = await storage.inventory.getInventoryItems();
 - `getUsers()` - جلب المستخدمين
 - `authenticateUser()` - المصادقة
 - `getUsersByRole()` - المستخدمين حسب الدور
-- `assignTechnicianToSupervisor()` - تعيين الفنيين
+- `assignTechnicianToSupervisor()` - تعيين المندوبين
 
 ### WarehouseService
 - `getWarehouses()` - جلب المستودعات
@@ -100,7 +100,7 @@ const items = await storage.inventory.getInventoryItems();
 - `getWarehouseInventoryEntries()` - مدخلات المخزون
 
 ### TechnicianService
-- `getAllTechniciansWithFixedInventory()` - فنيين مع المخزون الثابت
+- `getAllTechniciansWithFixedInventory()` - مندوبين مع المخزون الثابت
 - `getTechnicianMovingInventoryEntries()` - المخزون المتحرك
 - `getStockMovements()` - حركات المخزون
 

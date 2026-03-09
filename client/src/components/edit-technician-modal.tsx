@@ -92,7 +92,7 @@ export default function EditTechnicianModal({ open, onOpenChange, technician }: 
       queryClient.invalidateQueries({ queryKey: ["/api/technicians"] });
       toast({
         title: "تم التعديل بنجاح",
-        description: "تم تحديث بيانات الفني",
+        description: "تم تحديث بيانات المندوب",
       });
       onOpenChange(false);
     },
@@ -113,9 +113,9 @@ export default function EditTechnicianModal({ open, onOpenChange, technician }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle className="text-lg sm:text-xl">تعديل بيانات فني</DialogTitle>
+          <DialogTitle className="text-lg sm:text-xl">تعديل بيانات مندوب</DialogTitle>
           <DialogDescription className="text-sm">
-            قم بتعديل بيانات الفني وتجهيزاته
+            قم بتعديل بيانات المندوب وتجهيزاته
           </DialogDescription>
         </DialogHeader>
         
@@ -127,10 +127,10 @@ export default function EditTechnicianModal({ open, onOpenChange, technician }: 
                 name="technicianName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>اسم الفني</FormLabel>
+                    <FormLabel>اسم المندوب</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="أدخل اسم الفني"
+                        placeholder="أدخل اسم المندوب"
                         {...field}
                         data-testid="input-technician-name"
                       />
@@ -356,3 +356,4 @@ export default function EditTechnicianModal({ open, onOpenChange, technician }: 
     </Dialog>
   );
 }
+

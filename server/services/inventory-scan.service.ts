@@ -182,13 +182,13 @@ export class InventoryScanService {
 
     if (singleOwnerOps.includes(input.operationType)) {
       if (!input.ownerType || !input.ownerId) {
-        throw new InventoryScanError(400, "يجب تحديد جهة الهدف (مستودع أو فني) لهذه العملية");
+        throw new InventoryScanError(400, "يجب تحديد جهة الهدف (مستودع أو مندوب) لهذه العملية");
       }
       return;
     }
 
     if (!input.warehouseId || !input.technicianId) {
-      throw new InventoryScanError(400, "يجب تحديد المستودع والفني لعمليات التحويل/السحب");
+      throw new InventoryScanError(400, "يجب تحديد المستودع والمندوب لعمليات التحويل/السحب");
     }
   }
 
@@ -199,13 +199,13 @@ export class InventoryScanService {
 
     if (input.operationType === "ADD_STOCK" || input.operationType === "DEDUCT_STOCK") {
       if (input.ownerType !== "technician" || input.ownerId !== actor.id) {
-        throw new InventoryScanError(403, "الفني يمكنه التعديل على مخزونه فقط");
+        throw new InventoryScanError(403, "المندوب يمكنه التعديل على مخزونه فقط");
       }
       return;
     }
 
     if (input.technicianId !== actor.id) {
-      throw new InventoryScanError(403, "الفني يمكنه تنفيذ العمليات على عهدته فقط");
+      throw new InventoryScanError(403, "المندوب يمكنه تنفيذ العمليات على عهدته فقط");
     }
   }
 
@@ -449,7 +449,7 @@ export class InventoryScanService {
     const after = before + args.delta;
 
     if (after < 0) {
-      throw new InventoryScanError(400, `الرصيد غير كافٍ في مخزون الفني. المتاح: ${before}`);
+      throw new InventoryScanError(400, `الرصيد غير كافٍ في مخزون المندوب. المتاح: ${before}`);
     }
 
     const nextBoxes = args.packagingType === "box" ? after : Number(entry?.boxes || 0);
@@ -650,7 +650,7 @@ export class InventoryScanService {
       .limit(1);
 
     if (!technician) {
-      throw new InventoryScanError(404, "الفني غير موجود");
+      throw new InventoryScanError(404, "المندوب غير موجود");
     }
   }
 
@@ -707,3 +707,4 @@ export class InventoryScanService {
 }
 
 export const inventoryScanService = new InventoryScanService();
+

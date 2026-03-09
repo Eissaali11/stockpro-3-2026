@@ -50,7 +50,7 @@ export class BootstrapDefaultsUseCase {
         username: 'tech1',
         email: 'tech1@company.com',
         password: techPassword,
-        fullName: 'فني تجريبي',
+        fullName: 'مندوب تجريبي',
         city: 'جدة',
         role: 'technician',
         regionId: defaultRegionId,
@@ -77,3 +77,4 @@ export class BootstrapDefaultsUseCase {
     };
   }
 }
+
