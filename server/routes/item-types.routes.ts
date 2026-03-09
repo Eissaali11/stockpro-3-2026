@@ -102,11 +102,4 @@ export function registerItemTypesRoutes(app: Express): void {
     itemTypesController.delete
   );
 
-  // Seed default item types
-  app.post(
-    "/api/item-types/seed",
-    requireAuth,
-    requireAdmin,
-    itemTypesController.seed
-  );
 }

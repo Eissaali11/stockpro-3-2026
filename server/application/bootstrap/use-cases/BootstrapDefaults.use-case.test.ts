@@ -22,24 +22,22 @@ describe('BootstrapDefaultsUseCase', () => {
     vi.mocked(repository.getRegions).mockResolvedValue([]);
     vi.mocked(repository.createRegion).mockResolvedValue({ id: 'region-1' } as any);
     vi.mocked(repository.createUser).mockResolvedValue({ id: 'user-1' } as any);
-    vi.mocked(repository.seedDefaultItemTypes).mockResolvedValue();
 
     const result = await useCase.execute(hashPassword);
 
     expect(repository.createRegion).toHaveBeenCalledOnce();
     expect(repository.createUser).toHaveBeenCalledTimes(3);
     expect(hashPassword).toHaveBeenCalledTimes(3);
-    expect(repository.seedDefaultItemTypes).toHaveBeenCalledOnce();
+    expect(repository.seedDefaultItemTypes).not.toHaveBeenCalled();
     expect(result).toEqual({ createdUsers: true, createdRegion: true });
   });
 
-  it('skips default users creation when users already exist and still seeds item types', async () => {
+  it('skips default users creation when users already exist', async () => {
     const repository = createRepositoryMock();
     const useCase = new BootstrapDefaultsUseCase(repository);
     const hashPassword = vi.fn(async (value: string) => `hashed-${value}`);
 
     vi.mocked(repository.getUsers).mockResolvedValue([{ id: 'user-existing' } as any]);
-    vi.mocked(repository.seedDefaultItemTypes).mockResolvedValue();
 
     const result = await useCase.execute(hashPassword);
 
@@ -47,7 +45,7 @@ describe('BootstrapDefaultsUseCase', () => {
     expect(repository.createRegion).not.toHaveBeenCalled();
     expect(repository.createUser).not.toHaveBeenCalled();
     expect(hashPassword).not.toHaveBeenCalled();
-    expect(repository.seedDefaultItemTypes).toHaveBeenCalledOnce();
+    expect(repository.seedDefaultItemTypes).not.toHaveBeenCalled();
     expect(result).toEqual({ createdUsers: false, createdRegion: false });
   });
 });

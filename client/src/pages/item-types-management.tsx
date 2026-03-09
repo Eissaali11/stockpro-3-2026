@@ -45,7 +45,6 @@ import {
   Battery,
   Save,
   X,
-  RefreshCw,
   Search,
   Filter,
   Download,
@@ -53,7 +52,7 @@ import {
   AlertTriangle,
   Ban,
   ScrollText,
-  ArrowUpLeft,
+  ArrowUpLeft
 } from "lucide-react";
 import type { ItemType as SchemaItemType } from "@shared/schema";
 
@@ -83,7 +82,7 @@ export default function ItemTypesManagement() {
     color: '',
   });
 
-  const { data: itemTypes = [], isLoading, refetch } = useQuery<ItemType[]>({
+  const { data: itemTypes = [], isLoading } = useQuery<ItemType[]>({
     queryKey: ['/api/item-types'],
   });
 
@@ -174,23 +173,6 @@ export default function ItemTypesManagement() {
         predicate: (query) =>
           typeof query.queryKey[0] === 'string' &&
           query.queryKey[0].startsWith('/api/item-types'),
-      });
-    },
-  });
-
-  const seedMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest('POST', '/api/item-types/seed');
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        predicate: (query) =>
-          typeof query.queryKey[0] === 'string' &&
-          query.queryKey[0].startsWith('/api/item-types'),
-      });
-      toast({
-        title: "تم بنجاح",
-        description: "تم إضافة الأصناف الافتراضية",
       });
     },
   });
@@ -376,17 +358,6 @@ export default function ItemTypesManagement() {
                 سجل النظام
               </Link>
             </Button>
-
-            {itemTypes.length === 0 && (
-              <Button
-                onClick={() => seedMutation.mutate()}
-                disabled={seedMutation.isPending}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                <RefreshCw className={`h-4 w-4 ml-2 ${seedMutation.isPending ? "animate-spin" : ""}`} />
-                تحميل الأصناف الافتراضية
-              </Button>
-            )}
 
             <Button
               onClick={() => {

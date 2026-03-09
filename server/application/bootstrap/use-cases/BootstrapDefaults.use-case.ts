@@ -69,8 +69,6 @@ export class BootstrapDefaultsUseCase {
       });
     }
 
-    await this.repository.seedDefaultItemTypes();
-
     return {
       createdUsers,
       createdRegion,
