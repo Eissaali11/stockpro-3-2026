@@ -192,13 +192,15 @@ export class DevicesController {
    */
   createReceivedDevice = asyncHandler(async (req: Request, res: Response) => {
     const user = req.user!;
-    const validatedData = insertReceivedDeviceSchema.parse(req.body);
+    const validatedData = insertReceivedDeviceSchema.parse({
+      ...req.body,
+      technicianId: req.body.technicianId || user.id,
+      regionId: req.body.regionId || user.regionId,
+    });
 
     const device = await devicesService.createReceivedDevice({
       ...validatedData,
-      technicianId: validatedData.technicianId || user.id,
       supervisorId: user.role === "supervisor" ? user.id : null,
-      regionId: user.regionId,
     });
 
     // Log the activity

@@ -8,7 +8,6 @@ import { requireAuth, requireAdmin, requireSupervisor, requireSupervisorOnly } f
 import { validateBody } from "../middleware/validation";
 import {
   insertWithdrawnDeviceSchema,
-  insertReceivedDeviceSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -102,7 +101,6 @@ export function registerDevicesRoutes(app: Express): void {
   app.post(
     "/api/received-devices",
     requireAuth,
-    validateBody(insertReceivedDeviceSchema),
     devicesController.createReceivedDevice
   );
 
