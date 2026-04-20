@@ -4,10 +4,11 @@ import {
   inventoryRequests,
   InventoryRequest,
   InsertInventoryRequest,
+  users,
 } from "../schemas";
 
 export interface IInventoryRequestsRepository {
-  getInventoryRequests(warehouseId?: string, technicianId?: string, status?: string): Promise<InventoryRequest[]>;
+  getInventoryRequests(warehouseId?: string, technicianId?: string, status?: string): Promise<(InventoryRequest & { technicianName: string })[]>;
   createInventoryRequest(request: InsertInventoryRequest): Promise<InventoryRequest>;
   updateInventoryRequest(id: string, updates: Partial<InsertInventoryRequest>): Promise<InventoryRequest>;
   deleteInventoryRequest(id: string): Promise<boolean>;
@@ -22,10 +23,14 @@ export class InventoryRequestsRepository implements IInventoryRequestsRepository
     return getDatabase();
   }
 
-  async getInventoryRequests(warehouseId?: string, technicianId?: string, status?: string): Promise<InventoryRequest[]> {
+  async getInventoryRequests(warehouseId?: string, technicianId?: string, status?: string) {
     let query = this.db
-      .select()
+      .select({
+        request: inventoryRequests,
+        technicianName: users.fullName,
+      })
       .from(inventoryRequests)
+      .leftJoin(users, eq(inventoryRequests.technicianId, users.id))
       .orderBy(desc(inventoryRequests.createdAt));
 
     const conditions = [];
@@ -43,7 +48,11 @@ export class InventoryRequestsRepository implements IInventoryRequestsRepository
       query = query.where(and(...conditions)) as any;
     }
 
-    return await query;
+    const rows = await query;
+    return rows.map((row: any) => ({
+      ...row.request,
+      technicianName: row.technicianName || 'غير معروف',
+    }));
   }
 
   async createInventoryRequest(request: InsertInventoryRequest): Promise<InventoryRequest> {
