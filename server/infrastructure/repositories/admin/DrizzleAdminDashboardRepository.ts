@@ -59,33 +59,22 @@ export class DrizzleAdminDashboardRepository implements IAdminDashboardRepositor
   }
 
   async getAllTechniciansWithBothInventories(): Promise<TechnicianWithBothInventories[]> {
-    const technicians = await this.db
-      .select({
-        technicianId: users.id,
-        technicianName: users.fullName,
-        city: users.city,
-        regionId: users.regionId,
-      })
-      .from(users)
-      .where(sql`${users.role} = 'technician'`);
+    // Use TechnicianService which reads from the entry-based tables (not legacy)
+    const technicians = await this.technicianService.getAllTechniciansWithBothInventories();
 
-    const result: TechnicianWithBothInventories[] = [];
-    for (const technician of technicians) {
-      const fixedInventory = await this.fixedInventoryRepository.getTechnicianFixedInventory(technician.technicianId);
-      const movingInventory = await repositories.technicianInventory.getTechnicianInventory(technician.technicianId);
-
-      result.push({
-        technicianId: technician.technicianId,
-        technicianName: technician.technicianName,
-        city: technician.city || 'غير محدد',
-        regionId: technician.regionId,
-        fixedInventory: fixedInventory || null,
-        movingInventory: movingInventory || null,
-        alertLevel: 'good',
-      });
-    }
-
-    return result;
+    return technicians.map((tech) => ({
+      technicianId: tech.technicianId,
+      technicianName: tech.fullName,
+      city: tech.city || 'غير محدد',
+      regionId: tech.regionId,
+      fixedInventory: tech.fixedInventory?.length
+        ? { entries: tech.fixedInventory }
+        : null,
+      movingInventory: tech.movingInventory?.length
+        ? { entries: tech.movingInventory }
+        : null,
+      alertLevel: 'good' as const,
+    }));
   }
 
   async getInventoryRequests(): Promise<InventoryRequest[]> {

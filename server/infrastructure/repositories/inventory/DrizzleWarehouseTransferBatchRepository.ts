@@ -160,7 +160,12 @@ export class DrizzleWarehouseTransferBatchRepository {
 
     const legacyFields = legacyWarehouseFieldMap[itemTypeId];
     if (!legacyFields) {
-      throw new Error(`Unknown item type: ${itemTypeId}`);
+      // New item type not in legacy system - return zero balance
+      return {
+        boxes: 0,
+        units: 0,
+        source: 'entries',
+      };
     }
 
     return {
@@ -205,7 +210,14 @@ export class DrizzleWarehouseTransferBatchRepository {
 
     const legacyFields = legacyWarehouseFieldMap[itemTypeId];
     if (!legacyFields) {
-      throw new Error(`Unknown item type: ${itemTypeId}`);
+      // New item type - store in entries table instead
+      await this.executor.insert(warehouseInventoryEntries).values({
+        warehouseId,
+        itemTypeId,
+        boxes: balance.boxes,
+        units: balance.units,
+      });
+      return;
     }
 
     await this.executor

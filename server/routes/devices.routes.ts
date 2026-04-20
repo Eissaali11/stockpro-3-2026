@@ -88,7 +88,6 @@ export function registerDevicesRoutes(app: Express): void {
   app.get(
     "/api/received-devices/pending/count",
     requireAuth,
-    requireSupervisorOnly,
     devicesController.getPendingReceivedDevicesCount
   );
 

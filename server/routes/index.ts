@@ -30,6 +30,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/health", healthHandler);
   app.get("/health", healthHandler);
 
+  // Config endpoint for Flutter app dynamic base URL
+  app.get("/api/config", (_req, res) => {
+    res.json({
+      baseUrl: `${_req.protocol}://${_req.get("host")}`,
+    });
+  });
+
   // Register new route modules
   registerAuthRoutes(app);
   

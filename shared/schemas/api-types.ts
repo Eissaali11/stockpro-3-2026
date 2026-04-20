@@ -62,8 +62,8 @@ export type TechnicianWithBothInventories = {
   technicianName: string;
   city: string;
   regionId?: string | null;
-  fixedInventory: TechnicianFixedInventory | null;
-  movingInventory: TechnicianInventory | null;
+  fixedInventory: (TechnicianFixedInventory & { entries?: any[] }) | { entries: any[] } | null;
+  movingInventory: (TechnicianInventory & { entries?: any[] }) | { entries: any[] } | null;
   alertLevel: "good" | "warning" | "critical";
 };
 

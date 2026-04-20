@@ -165,9 +165,6 @@ export class DevicesController {
   getPendingReceivedDevicesCount = asyncHandler(
     async (req: Request, res: Response) => {
       const user = req.user!;
-      if (user.role !== ROLES.SUPERVISOR) {
-        throw new AuthorizationError("هذه العملية متاحة للمشرف فقط");
-      }
 
       const count = await devicesService.getPendingReceivedDevicesCount(
         user.id,

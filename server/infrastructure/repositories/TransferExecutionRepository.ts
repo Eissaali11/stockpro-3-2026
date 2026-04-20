@@ -100,7 +100,8 @@ export class TransferExecutionRepository implements ITransferExecutionRepository
         throw new Error(`Insufficient stock in warehouse. Available: ${currentStock}, Requested: ${data.quantity}`);
       }
     } else {
-      throw new Error(`Unknown item type: ${data.itemType}`);
+      // New item type not in legacy system - no stock available
+      throw new Error(`Insufficient stock in warehouse. Available: 0, Requested: ${data.quantity}`);
     }
   }
 
