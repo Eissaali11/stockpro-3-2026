@@ -210,7 +210,7 @@ export default function NotificationsPage() {
 
   const { data: receivedDevices = [], isLoading: receivedDevicesLoading } = useQuery<ReceivedDeviceRequest[]>({
     queryKey: ["/api/received-devices"],
-    enabled: isSupervisor,
+    enabled: isAdminOrSupervisor,
   });
 
   const { data: directoryUsers = [] } = useQuery<DirectoryUser[]>({
@@ -676,10 +676,10 @@ export default function NotificationsPage() {
   };
 
   const handleDeviceActionClick = (device: ReceivedDeviceRequest, action: "approve" | "reject") => {
-    if (!isSupervisor) {
+    if (!isAdminOrSupervisor) {
       toast({
         title: "غير مسموح",
-        description: "مراجعة طلبات الأجهزة متاحة للمشرف فقط",
+        description: "مراجعة طلبات الأجهزة متاحة للمشرف أو المدير فقط",
         variant: "destructive",
       });
       return;
@@ -919,7 +919,7 @@ export default function NotificationsPage() {
                       </Card>
                     )}
 
-                    {isSupervisor && notificationSettings.daily && (
+                    {isAdminOrSupervisor && notificationSettings.daily && (
                       <Card className="bg-slate-900/45 border-slate-700/60 overflow-hidden">
                         <div className="p-4 border-b border-slate-700/60 flex items-center justify-between">
                           <div className="flex items-center gap-2 text-white font-semibold">

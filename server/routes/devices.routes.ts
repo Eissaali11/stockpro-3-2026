@@ -4,7 +4,7 @@
 
 import type { Express } from "express";
 import { devicesController } from "../controllers/devices.controller";
-import { requireAuth, requireAdmin, requireSupervisor, requireSupervisorOnly } from "../middleware/auth";
+import { requireAuth, requireAdmin, requireSupervisor } from "../middleware/auth";
 import { validateBody } from "../middleware/validation";
 import {
   insertWithdrawnDeviceSchema,
@@ -116,7 +116,7 @@ export function registerDevicesRoutes(app: Express): void {
   app.patch(
     "/api/received-devices/:id/status",
     requireAuth,
-    requireSupervisorOnly,
+    requireSupervisor,
     validateBody(updateDeviceStatusSchema),
     devicesController.updateReceivedDeviceStatus
   );
