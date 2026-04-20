@@ -30,3 +30,13 @@ vite.config.ts.*
 # Backups
 *.sql
 *.backup
+# Mobile apps (separate repos)
+mobile/
+technician-app/
+
+# VS Code local history
+.history/
+
+# Expo
+app.json
+eas.json

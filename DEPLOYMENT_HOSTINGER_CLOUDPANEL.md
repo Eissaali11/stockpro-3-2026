@@ -1,4 +1,4 @@
-# 🚀 خطة نشر التطبيق على Hostinger Cloud Panel
+ssh root@153.92.211.46# 🚀 خطة نشر التطبيق على Hostinger Cloud Panel
 
 ## 📋 المتطلبات الأساسية
 
