@@ -26,7 +26,7 @@ export function registerInventoryRequestsCreateRoutes(app: Express): void {
   app.post("/api/inventory-requests", requireAuth, async (req, res) => {
     try {
       const user = (req as any).user;
-      const data = insertInventoryRequestSchema.parse(req.body);
+      const data = insertInventoryRequestSchema.parse({ ...req.body, technicianId: user.id });
       const request = await inventoryRequestsCreateContainer.inventoryRequestsCreateUseCase.createForTechnician({
         technicianId: user.id,
         data,
