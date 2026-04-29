@@ -85,7 +85,7 @@ export default function WarehousesPage() {
   const handleExportWarehouses = async () => {
     if (warehouses && warehouses.length > 0) {
       try {
-        await exportWarehousesToExcel({ warehouses });
+        await exportWarehousesToExcel({ warehouses, itemTypes });
         toast({ 
           title: "تم تصدير التقرير بنجاح", 
           description: "تم حفظ ملف Excel في جهازك" 

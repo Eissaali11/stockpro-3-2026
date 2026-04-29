@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { itemTypes, regions } from "./catalog.schema";
@@ -88,7 +88,9 @@ export const warehouseInventoryEntries = pgTable("warehouse_inventory_entries", 
   boxes: integer("boxes").notNull().default(0),
   units: integer("units").notNull().default(0),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (t) => ({
+  warehouseItemUnique: unique("warehouse_inventory_entries_warehouse_item_unique").on(t.warehouseId, t.itemTypeId),
+}));
 
 // Inventory Requests - طلبات المخزون من المندوبين
 export const inventoryRequests = pgTable("inventory_requests", {

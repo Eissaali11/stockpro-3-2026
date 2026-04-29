@@ -59,6 +59,12 @@ export class WarehouseRepository {
         .from(warehouseInventory)
         .where(eq(warehouseInventory.warehouseId, warehouse.id));
 
+      // Fetch dynamic entries (per item type) so the UI/export can show updated quantities
+      const entries = await this.db
+        .select()
+        .from(warehouseInventoryEntries)
+        .where(eq(warehouseInventoryEntries.warehouseId, warehouse.id));
+
       let totalItems = 0;
       let lowStockItemsCount = 0;
       
@@ -84,9 +90,14 @@ export class WarehouseRepository {
         }
       }
 
+      // Attach entries onto inventory so frontend can prefer dynamic values over legacy
+      const inventoryWithEntries = inventory
+        ? { ...inventory, entries }
+        : (entries.length > 0 ? ({ entries } as any) : null);
+
       result.push({
         ...warehouse,
-        inventory: inventory || null,
+        inventory: inventoryWithEntries,
         totalItems,
         lowStockItemsCount,
         creatorName: warehouse.creatorName || undefined,

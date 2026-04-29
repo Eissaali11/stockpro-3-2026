@@ -62,18 +62,16 @@ export class WarehouseInventoryRepository implements IWarehouseInventoryReposito
   }
 
   async upsertWarehouseInventoryEntry(warehouseId: string, itemTypeId: string, boxes: number, units: number): Promise<WarehouseInventoryEntry> {
-    const [existing] = await this.db
-      .select()
-      .from(warehouseInventoryEntries)
-      .where(and(
-        eq(warehouseInventoryEntries.warehouseId, warehouseId),
-        eq(warehouseInventoryEntries.itemTypeId, itemTypeId)
-      ));
-
-    if (existing) {
-      return await this.updateWarehouseInventoryEntry(existing.id, { boxes, units });
-    } else {
-      return await this.createWarehouseInventoryEntry({ warehouseId, itemTypeId, boxes, units });
-    }
+    // Atomic upsert relying on UNIQUE(warehouse_id, item_type_id) constraint.
+    // Prevents the race condition that previously created duplicate rows.
+    const [result] = await this.db
+      .insert(warehouseInventoryEntries)
+      .values({ warehouseId, itemTypeId, boxes, units })
+      .onConflictDoUpdate({
+        target: [warehouseInventoryEntries.warehouseId, warehouseInventoryEntries.itemTypeId],
+        set: { boxes, units, updatedAt: new Date() },
+      })
+      .returning();
+    return result;
   }
 }

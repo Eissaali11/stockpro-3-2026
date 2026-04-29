@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -54,7 +54,10 @@ export const warehouseInventoryEntries = pgTable("warehouse_inventory_entries", 
   boxes: integer("boxes").notNull().default(0),
   units: integer("units").notNull().default(0),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (t) => ({
+  // Prevent duplicate entries for the same (warehouse, item type)
+  warehouseItemUnique: unique("warehouse_inventory_entries_warehouse_item_unique").on(t.warehouseId, t.itemTypeId),
+}));
 
 // Warehouse Transfers
 export const warehouseTransfers = pgTable("warehouse_transfers", {

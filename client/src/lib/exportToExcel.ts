@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { InventoryItemWithStatus, SystemLog } from '@shared/schema';
-import { legacyFieldMapping } from '@/hooks/use-item-types';
+import { legacyFieldMapping, getInventoryValueForItemType, type ItemType, type InventoryEntry } from '@/hooks/use-item-types';
 
 interface ExportData {
   inventory: InventoryItemWithStatus[];
@@ -32,6 +32,7 @@ interface WarehouseInventory {
   zainSimUnits: number;
   lebaraBoxes: number;
   lebaraUnits: number;
+  entries?: InventoryEntry[];
 }
 
 interface WarehouseData {
@@ -172,11 +173,224 @@ export const exportInventoryToExcel = async ({
   saveAs(blob, fileName);
 };
 
+/**
+ * Dynamic warehouse export — uses itemTypes + entries (matches warehouse details page).
+ * This is the primary path; the legacy hardcoded export below is kept as a fallback only.
+ */
+const exportWarehousesToExcelDynamic = async ({
+  warehouses,
+  itemTypes,
+  companyName,
+  reportTitle,
+}: {
+  warehouses: WarehouseData[];
+  itemTypes: ItemType[];
+  companyName: string;
+  reportTitle: string;
+}) => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('تقرير المستودعات');
+  worksheet.views = [{ rightToLeft: true }];
+
+  const currentDate = new Date();
+  const arabicDate = currentDate.toLocaleDateString('ar-SA', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const time = currentDate.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+
+  // Active + visible item types, sorted (same logic as warehouse details page)
+  const visibleItemTypes = itemTypes
+    .filter((t) => t.isActive && (t as any).isVisible !== false)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  // 4 fixed cols (#, name, location, status) + 2 cols per item type (boxes/units) + 1 total
+  const totalCols = 4 + visibleItemTypes.length * 2 + 1;
+  const lastColLetter = (n: number): string => {
+    let s = '';
+    while (n > 0) {
+      const m = (n - 1) % 26;
+      s = String.fromCharCode(65 + m) + s;
+      n = Math.floor((n - 1) / 26);
+    }
+    return s;
+  };
+  const lastCol = lastColLetter(totalCols);
+
+  // Title
+  worksheet.mergeCells(`A1:${lastCol}1`);
+  const titleCell = worksheet.getCell('A1');
+  titleCell.value = companyName;
+  titleCell.font = { size: 20, bold: true, color: { argb: 'FFFFFFFF' } };
+  titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF18B2B0' } };
+  worksheet.getRow(1).height = 35;
+
+  worksheet.mergeCells(`A2:${lastCol}2`);
+  const subtitleCell = worksheet.getCell('A2');
+  subtitleCell.value = reportTitle;
+  subtitleCell.font = { size: 16, bold: true, color: { argb: 'FF18B2B0' } };
+  subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  subtitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F7F6' } };
+  worksheet.getRow(2).height = 28;
+
+  worksheet.mergeCells(`A3:${lastCol}3`);
+  const dateCell = worksheet.getCell('A3');
+  dateCell.value = `تاريخ التقرير: ${arabicDate} - الساعة: ${time}`;
+  dateCell.font = { size: 12, bold: true };
+  dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  dateCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F9FF' } };
+  worksheet.getRow(3).height = 25;
+
+  worksheet.addRow([]);
+
+  // Header row
+  const headers: string[] = ['#', 'اسم المستودع', 'الموقع', 'الحالة'];
+  for (const it of visibleItemTypes) {
+    headers.push(`${it.nameAr} (صناديق)`);
+    headers.push(`${it.nameAr} (قطع)`);
+  }
+  headers.push('إجمالي الأصناف');
+
+  const headerRow = worksheet.addRow(headers);
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+  headerRow.height = 30;
+  headerRow.eachCell((cell) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4A5568' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'FF000000' } },
+      left: { style: 'thin', color: { argb: 'FF000000' } },
+      bottom: { style: 'thin', color: { argb: 'FF000000' } },
+      right: { style: 'thin', color: { argb: 'FF000000' } },
+    };
+  });
+
+  // Totals per item type
+  const totalsBoxes: Record<string, number> = {};
+  const totalsUnits: Record<string, number> = {};
+  for (const it of visibleItemTypes) {
+    totalsBoxes[it.id] = 0;
+    totalsUnits[it.id] = 0;
+  }
+  let totalActive = 0;
+  let totalInactive = 0;
+  let grandTotalItems = 0;
+
+  // Data rows
+  warehouses.forEach((warehouse, index) => {
+    const inv = warehouse.inventory;
+    if (warehouse.isActive) totalActive++;
+    else totalInactive++;
+
+    const row: (string | number)[] = [
+      index + 1,
+      warehouse.name,
+      warehouse.location,
+      warehouse.isActive ? 'نشط' : 'غير نشط',
+    ];
+
+    let warehouseTotal = 0;
+    for (const it of visibleItemTypes) {
+      const boxes = getInventoryValueForItemType(it.id, inv?.entries, inv as any, 'boxes');
+      const units = getInventoryValueForItemType(it.id, inv?.entries, inv as any, 'units');
+      row.push(boxes, units);
+      totalsBoxes[it.id] += boxes;
+      totalsUnits[it.id] += units;
+      warehouseTotal += boxes + units;
+    }
+    row.push(warehouseTotal);
+    grandTotalItems += warehouseTotal;
+
+    const dataRow = worksheet.addRow(row);
+    dataRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    dataRow.eachCell((cell) => {
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } },
+      };
+    });
+  });
+
+  // Grand totals row
+  const totalRowData: (string | number)[] = ['', 'الإجمالي', '', ''];
+  for (const it of visibleItemTypes) {
+    totalRowData.push(totalsBoxes[it.id], totalsUnits[it.id]);
+  }
+  totalRowData.push(grandTotalItems);
+  const totalRow = worksheet.addRow(totalRowData);
+  totalRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+  totalRow.alignment = { horizontal: 'center', vertical: 'middle' };
+  totalRow.height = 25;
+  totalRow.eachCell((cell) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF16A085' } };
+    cell.border = {
+      top: { style: 'medium', color: { argb: 'FF000000' } },
+      left: { style: 'thin', color: { argb: 'FF000000' } },
+      bottom: { style: 'medium', color: { argb: 'FF000000' } },
+      right: { style: 'thin', color: { argb: 'FF000000' } },
+    };
+  });
+
+  // Column widths
+  worksheet.columns = [
+    { width: 6 },
+    { width: 25 },
+    { width: 25 },
+    { width: 12 },
+    ...visibleItemTypes.flatMap(() => [{ width: 14 }, { width: 14 }]),
+    { width: 16 },
+  ];
+
+  // Stats section
+  worksheet.addRow([]);
+  const statsHeaderRow = worksheet.addRow(['الإحصائيات العامة']);
+  worksheet.mergeCells(statsHeaderRow.number, 1, statsHeaderRow.number, totalCols);
+  statsHeaderRow.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+  statsHeaderRow.alignment = { horizontal: 'center', vertical: 'middle' };
+  statsHeaderRow.height = 28;
+  statsHeaderRow.eachCell((cell) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF16A085' } };
+  });
+
+  const addStat = (label: string, value: string | number) => {
+    const r = worksheet.addRow([label, value]);
+    r.alignment = { horizontal: 'center', vertical: 'middle' };
+    r.getCell(1).font = { bold: true };
+    r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F7F6' } };
+  };
+
+  addStat('إجمالي المستودعات', warehouses.length);
+  addStat('المستودعات النشطة', totalActive);
+  addStat('المستودعات غير النشطة', totalInactive);
+  addStat('إجمالي عدد الأصناف', grandTotalItems);
+  for (const it of visibleItemTypes) {
+    addStat(`${it.nameAr} (إجمالي)`, totalsBoxes[it.id] + totalsUnits[it.id]);
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const fileName = `تقرير_المستودعات_${new Date().toISOString().split('T')[0]}.xlsx`;
+  saveAs(blob, fileName);
+};
+
 export const exportWarehousesToExcel = async ({
   warehouses,
+  itemTypes,
   companyName = 'نظام إدارة المخزون - RAS Saudi',
   reportTitle = 'تقرير المستودعات الشامل'
 }: WarehouseExportData) => {
+  // Use dynamic export when itemTypes are provided (matches warehouse details page)
+  if (itemTypes && itemTypes.length > 0) {
+    return exportWarehousesToExcelDynamic({ warehouses, itemTypes, companyName, reportTitle });
+  }
+
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('تقرير المستودعات');
 
